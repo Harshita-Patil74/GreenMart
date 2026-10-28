@@ -1,6 +1,7 @@
 const Product = require("../models/Product");
 const User = require("../models/User");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { uploadFile } = require("../services/cloudinaryUpload");
 
 async function listProducts(req, res, activeOnly) {
   const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12 } = req.query;
@@ -55,7 +56,7 @@ exports.create = asyncHandler(async (req,res) => {
     seasonalAvailability: req.body.seasonalAvailability,
     isOrganic: req.body.isOrganic,
     farmer: farmerId,
-    images: req.files ? req.files.map(f=>"/uploads/products/"+f.filename) : [],
+    images: req.files ? await Promise.all(req.files.map(f=>uploadFile(f.path, "greenmart/products"))) : [],
   };
   const p = await Product.create(data);
   res.status(201).json(p);
@@ -74,7 +75,7 @@ exports.update = asyncHandler(async (req,res) => {
   }
   const allowed = ["name","description","category","price","unit","stock","lowStockThreshold","harvestDate","seasonalAvailability","isOrganic","status"];
   for (const k of allowed) if (req.body[k] !== undefined) p[k] = req.body[k];
-  if (req.files && req.files.length) p.images = req.files.map(f=>"/uploads/products/"+f.filename);
+  if (req.files && req.files.length) p.images = await Promise.all(req.files.map(f=>uploadFile(f.path, "greenmart/products")));
   await p.save();
   res.json(p);
 });
@@ -85,3 +86,5 @@ exports.remove = asyncHandler(async (req,res) => {
   await p.deleteOne();
   res.json({ message: "Deleted" });
 });
+
+
