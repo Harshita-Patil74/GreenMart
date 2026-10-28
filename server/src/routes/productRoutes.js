@@ -1,0 +1,16 @@
+const express = require("express");
+const router = express.Router();
+const c = require("../controllers/productController");
+const { auth } = require("../middleware/auth");
+const { role } = require("../middleware/role");
+const { approvedFarmer } = require("../middleware/approvedFarmer");
+const { uploadProduct } = require("../middleware/upload");
+router.get("/mine", auth, role("farmer"), approvedFarmer, c.mine);
+router.get("/storefront", c.storefront);
+router.get("/storefront/:id", c.storefrontGet);
+router.get("/", c.list);
+router.get("/:id", c.get);
+router.post("/", auth, role("farmer","admin"), approvedFarmer, uploadProduct.array("images",5), c.create);
+router.put("/:id", auth, role("farmer","admin"), approvedFarmer, uploadProduct.array("images",5), c.update);
+router.delete("/:id", auth, role("farmer","admin"), approvedFarmer, c.remove);
+module.exports = router;

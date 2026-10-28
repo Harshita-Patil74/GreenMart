@@ -1,0 +1,21 @@
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const path = require("path");
+const env = require("./config/env");
+const getClientOrigins = require("./config/clientOrigins");
+const routes = require("./routes");
+const { notFound, errorHandler } = require("./middleware/errorHandler");
+
+const app = express();
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(cors({ origin: getClientOrigins(env.clientUrl, env.nodeEnv), credentials: true }));
+app.use(express.json());
+app.use(rateLimit({ windowMs: 15*60*1000, max: env.nodeEnv === "development" ? 3000 : 300 }));
+app.get("/", (req, res) => res.json({ status: "ok", service: "GreenMart API" }));
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+app.use("/api", routes);
+app.use(notFound);
+app.use(errorHandler);
+module.exports = app;

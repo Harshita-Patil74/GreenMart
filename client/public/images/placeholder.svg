@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#E8F5EC"/>
+  <g fill="none" stroke="#2E7D32" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M200 210 C 140 210 120 160 120 130 C 160 130 200 150 200 210 Z"/>
+    <path d="M200 210 C 260 210 280 160 280 130 C 240 130 200 150 200 210 Z"/>
+    <path d="M200 210 L200 90"/>
+    <path d="M200 120 C 185 100 160 95 145 100 C 155 120 180 128 200 120 Z"/>
+  </g>
+  <text x="200" y="255" font-family="Arial, sans-serif" font-size="20" fill="#2E7D32" text-anchor="middle">GreenMart</text>
+</svg>

@@ -1,0 +1,12 @@
+const express = require("express");
+const router = express.Router();
+const c = require("../controllers/farmerController");
+const { auth } = require("../middleware/auth");
+const { role } = require("../middleware/role");
+const { approvedFarmer } = require("../middleware/approvedFarmer");
+const { uploadFarm } = require("../middleware/upload");
+router.get("/", c.list);
+router.get("/:id", c.get);
+router.put("/me/location", auth, role("farmer"), approvedFarmer, c.updateLocation);
+router.put("/me", auth, role("farmer"), approvedFarmer, uploadFarm.single("photo"), c.updateMe);
+module.exports = router;

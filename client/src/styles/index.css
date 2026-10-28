@@ -1,0 +1,50 @@
+@import "leaflet/dist/leaflet.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: #16803C;
+    --primary-hover: #126B32;
+    --primary-light: #E8F5EC;
+    --primary-dark: #0F3D2E;
+    --dark-green: #0F3D2E;
+    --page-bg: #F3F7F4;
+    --card: #FFFFFF;
+    --border: #E5E7EB;
+    --text: #1F2937;
+    --text-light: #4B5563;
+    --muted: #6B7280;
+  }
+  html, body {
+    font-family: "Inter", sans-serif;
+    color: #1F2937;
+    background: #F3F7F4;
+    font-size: 18px;
+  }
+  h1,h2,h3,h4 { font-family: "Poppins", sans-serif; color: #0F3D2E; }
+}
+
+@layer components {
+  .gm-container {
+    @apply max-w-content mx-auto px-5 sm:px-6 lg:px-8;
+  }
+  .gm-card {
+    @apply bg-white rounded-[14px] border border-[#EEF1EF] shadow-card;
+  }
+  .gm-btn {
+    @apply inline-flex items-center justify-center h-10 px-6 rounded-[8px] bg-primary hover:bg-primary-hover text-white text-sm font-medium shadow-btn transition;
+  }
+  .gm-btn-outline {
+    @apply inline-flex items-center justify-center h-10 px-6 rounded-[8px] border border-white text-white text-sm font-medium hover:bg-white/10 transition;
+  }
+  .gm-input {
+    @apply w-full h-11 px-3.5 text-sm bg-[#F7F8F8] border border-border rounded-[8px] focus:outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/20 transition;
+  }
+}
+
+input[type="range"] {
+  accent-color: #16803C;
+  height: 4px;
+}

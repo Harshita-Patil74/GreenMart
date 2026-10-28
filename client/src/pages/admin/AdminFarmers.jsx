@@ -1,0 +1,25 @@
+import React, { useEffect, useMemo, useState } from "react";
+import adminApi from "../../api/adminApi";
+import farmerApi from "../../api/farmerApi";
+import BackButton from "../../components/common/BackButton.jsx";
+
+export default function AdminFarmers() {
+  const [farmers,setFarmers]=useState([]); const [tab,setTab]=useState("Pending");
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState("");
+  const [error,setError]=useState(null);
+  const load=async()=>{setLoading(true);setError(null);try{const {data}=await farmerApi.list();setFarmers(Array.isArray(data)?data:[]);}catch(e){setError(e?.message||"Couldn't load farmer profiles.");}finally{setLoading(false);}};
+  useEffect(()=>{load();},[]);
+  const isRejected=(f)=>Boolean(f.certification?.rejectedByAdmin);
+  const isVerified=(f)=>Boolean(f.certification?.verifiedByAdmin);
+  const filtered=useMemo(()=>farmers.filter(f=>tab==="All"||(tab==="Pending"?(!isVerified(f)&&!isRejected(f)):(tab==="Verified"?isVerified(f):isRejected(f)))),[farmers,tab]);
+  const verify=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;setSaving(String(id));setError(null);try{const {data}=await adminApi.verifyFarmer(id);setFarmers(list=>list.map(item=>String(item.user?._id||item.user)===String(id)?{...item,...data}:item));}catch(e){setError(e?.message||"Couldn't verify this farmer.");}finally{setSaving("");}};
+  const reject=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;if(!window.confirm("Reject this farmer application?"))return;const reason=window.prompt("Rejection reason (optional):")||"";setSaving(String(id));setError(null);try{const {data}=await adminApi.rejectFarmer(id,reason);setFarmers(list=>list.map(item=>String(item.user?._id||item.user)===String(id)?{...item,...data}:item));}catch(e){setError(e?.message||"Couldn't reject this farmer.");}finally{setSaving("");}};
+  if(error&&!farmers.length)return <ErrorState message={error} onRetry={load}/>;
+  return <div className="space-y-4 pb-10"><BackButton fallback="/admin/dashboard" /><header><h1 className="text-xl font-heading font-bold text-gray-900">Farmer Verification</h1><p className="mt-1 text-xs text-gray-500">Review farmer profiles and verify submitted certifications.</p></header>{error&&<p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+    <div className="flex gap-2">{["Pending","Verified","Rejected","All"].map(item=><button key={item} onClick={()=>setTab(item)} className={`rounded-lg px-3 py-2 text-xs ${tab===item?"bg-primary text-white":"border bg-white text-gray-600"}`}>{item} ({item==="Pending"?farmers.filter(f=>!isVerified(f)&&!isRejected(f)).length:item==="Verified"?farmers.filter(f=>isVerified(f)).length:item==="Rejected"?farmers.filter(f=>isRejected(f)).length:farmers.length})</button>)}</div>
+    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr className="bg-gray-50 text-[10px] uppercase text-gray-500"><th className="px-3 py-3">Farmer</th><th className="px-3 py-3">Farm Name</th><th className="px-3 py-3">Certification</th><th className="px-3 py-3">Submitted</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead><tbody className="divide-y divide-gray-100">
+      {loading?<tr><td colSpan="6" className="p-8 text-center text-gray-500">Loading farmer profiles...</td></tr>:filtered.map(f=><tr key={f._id}><td className="px-3 py-3 font-medium">{f.user?.name||"Farmer"}<div className="text-[10px] text-gray-400">{f.user?.email||""}</div></td><td className="px-3 py-3">{f.farmName}</td><td className="px-3 py-3">{f.certification?.body||"Not provided"}<div className="text-[10px] text-gray-400">{f.certification?.number||""}</div></td><td className="px-3 py-3 text-gray-500">{f.createdAt?new Date(f.createdAt).toLocaleDateString("en-IN"):"â€”"}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] ${isVerified(f)?"bg-emerald-50 text-emerald-700":isRejected(f)?"bg-red-50 text-red-700":"bg-amber-50 text-amber-700"}`}>{isVerified(f)?"Verified":isRejected(f)?"Rejected":"Pending"}</span></td><td className="px-3 py-3">{isVerified(f)||isRejected(f)?<span className="text-gray-400">{isVerified(f)?"Verified":"Rejected"}</span>:<div className="flex gap-2"><button disabled={saving===String(f.user?._id||f.user)} onClick={()=>verify(f)} className="rounded bg-primary px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{saving===String(f.user?._id||f.user)?"Saving...":"Verify"}</button><button disabled={saving===String(f.user?._id||f.user)} onClick={()=>reject(f)} className="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">Reject</button></div>}</td></tr>)}
+      {!loading&&!filtered.length&&<tr><td colSpan="6" className="p-8 text-center text-gray-500">No farmer profiles in this view.</td></tr>}</tbody></table></div></section>
+  </div>;
+}

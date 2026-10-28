@@ -1,0 +1,16 @@
+const express = require("express");
+const router = express.Router();
+const c = require("../controllers/adminController");
+const { auth } = require("../middleware/auth");
+const { role } = require("../middleware/role");
+router.get("/stats", auth, role("admin"), c.stats);
+router.get("/users", auth, role("admin"), c.users);
+router.get("/low-stock", auth, role("admin"), c.lowStock);
+router.get("/sales", auth, role("admin"), c.sales);
+router.get("/categories-share", auth, role("admin"), c.categoriesShare);
+router.get("/reports", auth, role("admin"), c.reports);
+router.get("/reports/pdf", auth, role("admin"), c.reportPdf);
+router.patch("/users/:id", auth, role("admin"), c.updateUser);
+router.patch("/farmers/:id/verify", auth, role("admin"), c.verifyFarmer);
+router.patch("/farmers/:id/reject", auth, role("admin"), c.rejectFarmer);
+module.exports = router;
