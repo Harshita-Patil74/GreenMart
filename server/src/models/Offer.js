@@ -33,6 +33,9 @@ const OfferSchema = new mongoose.Schema({
   rejectionReason: { type: String, default: "", maxlength: 500 },
   deactivatedAt: Date,
   deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  editedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  editedAt: Date,
   statusHistory: [{
     status: String,
     reason: String,

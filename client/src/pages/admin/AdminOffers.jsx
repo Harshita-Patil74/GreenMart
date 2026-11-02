@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  BadgePercent, Check, ChevronLeft, ChevronRight, Eye, Search, ShieldCheck, X,
+  BadgePercent, Check, ChevronLeft, ChevronRight, Eye, Plus, Search, ShieldCheck, X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import adminOffersApi from "../../api/adminOffersApi.js";
@@ -12,7 +12,13 @@ import { getImageUrl } from "../../utils/imageUrl.js";
 const PAGE_SIZE = 10;
 const INITIAL_FILTERS = { farmerId: "", productId: "", type: "", status: "", search: "" };
 const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "Bundle Offer"];
+const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
 const OFFER_STATUSES = ["Pending", "Active", "Rejected", "Expired", "Inactive", "Scheduled"];
+const EMPTY_DRAFT = {
+  title: "", description: "", type: OFFER_TYPES[0], farmer: "", product: "",
+  discountType: "Percentage", discountValue: "", startDate: "", endDate: "",
+  minimumQuantity: "1", minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
+};
 const actionSuccessMessages = {
   approve: "Offer approved.",
   reject: "Offer rejected.",
@@ -43,6 +49,12 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("en-IN");
 }
 
+function formDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
 function offerDiscount(offer) {
   const discount = offer.discountType === "Percentage"
     ? `${offer.discountValue}%`
@@ -55,6 +67,10 @@ function offerDiscount(offer) {
 function normalizeOfferStatus(status) {
   const normalized = String(status || "").trim().toLowerCase();
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : "";
+}
+
+function inputClass(hasError = false) {
+  return `mt-1 h-9 w-full rounded-md border bg-white px-2.5 text-xs text-[#263B34] outline-none focus:border-[#14905B] ${hasError ? "border-red-400" : "border-[#DDE6E2]"}`;
 }
 
 function OfferStatus({ status }) {
@@ -86,6 +102,15 @@ export default function AdminOffers() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [savingId, setSavingId] = useState("");
 
+  const [formFarmers, setFormFarmers] = useState([]);
+  const [formProducts, setFormProducts] = useState([]);
+  const [formDialog, setFormDialog] = useState(null);
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [formErrors, setFormErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState("");
+
   useEffect(() => {
     let active = true;
     setOptionsLoading(true);
@@ -104,6 +129,19 @@ export default function AdminOffers() {
       });
     return () => { active = false; };
   }, [retry]);
+
+  useEffect(() => {
+    let active = true;
+    adminOffersApi.farmers()
+      .then(({ data }) => {
+        if (!active) return;
+        setFormFarmers(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (active) setFormFarmers([]);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -132,6 +170,34 @@ export default function AdminOffers() {
     return () => { active = false; };
   }, [filters, page, refresh, retry]);
 
+  const loadFormProducts = async (farmerId) => {
+    if (!farmerId) {
+      setFormProducts([]);
+      setProductsLoading(false);
+      return;
+    }
+    setProductsLoading(true);
+    setProductsError("");
+    adminOffersApi.eligibleProducts(farmerId)
+      .then(({ data }) => {
+        if (!farmerId || farmerId !== draft.farmer) return;
+        setFormProducts(Array.isArray(data) ? data : []);
+      })
+      .catch((requestError) => {
+        if (farmerId === draft.farmer) {
+          setFormProducts([]);
+          setProductsError(requestError?.message || "Couldn't load products.");
+        }
+      })
+      .finally(() => {
+        if (farmerId === draft.farmer) setProductsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadFormProducts(draft.farmer);
+  }, [draft.farmer]);
+
   const applyFilters = (event) => {
     event.preventDefault();
     setPage(1);
@@ -145,6 +211,8 @@ export default function AdminOffers() {
   };
 
   const openDetails = async (offer) => {
+    setDialog(null);
+    setFormDialog(null);
     setSelectedOffer(offer);
     setDetailLoading(true);
     try {
@@ -154,6 +222,96 @@ export default function AdminOffers() {
       setError(requestError?.message || "Couldn't load offer details.");
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setDialog(null);
+    setSelectedOffer(null);
+    setDraft({ ...EMPTY_DRAFT, farmer: formFarmers[0] ? String(formFarmers[0]._id) : "", product: "" });
+    setFormErrors({});
+    setFormDialog({ mode: "create" });
+  };
+
+  const openEdit = (offer) => {
+    setDialog(null);
+    setSelectedOffer(null);
+    setDraft({
+      title: offer.title || "",
+      description: offer.description || "",
+      type: offer.type || OFFER_TYPES[0],
+      farmer: offer.farmer?._id || offer.farmer || "",
+      product: offer.product?._id || offer.product || "",
+      discountType: offer.discountType || "Percentage",
+      discountValue: String(offer.discountValue ?? ""),
+      startDate: formDate(offer.startDate),
+      endDate: formDate(offer.endDate),
+      minimumQuantity: String(offer.minimumQuantity ?? 1),
+      minimumAmount: String(offer.minimumAmount ?? 0),
+      maximumDiscount: offer.maximumDiscount == null ? "" : String(offer.maximumDiscount),
+      bundleConditions: offer.bundleConditions || "",
+    });
+    setFormErrors({});
+    setFormDialog({ mode: "edit", offer });
+  };
+
+  const selectedProduct = useMemo(
+    () => formProducts.find((product) => String(product._id) === String(draft.product)),
+    [formProducts, draft.product]
+  );
+
+  const validate = () => {
+    const errors = {};
+    if (!draft.title.trim()) errors.title = "Enter an offer title.";
+    if (!draft.description.trim()) errors.description = "Enter a description.";
+    if (!draft.farmer) errors.farmer = "Select a registered farmer.";
+    if (!draft.product) errors.product = "Select one of the farmer's available products.";
+    const value = Number(draft.discountValue);
+    if (!Number.isFinite(value) || value <= 0) errors.discountValue = "Enter a discount greater than zero.";
+    if (draft.discountType === "Percentage" && value > 100) errors.discountValue = "Percentage cannot exceed 100.";
+    if (draft.discountType === "Fixed Amount" && selectedProduct && value >= Number(selectedProduct.price)) errors.discountValue = "Discount must be lower than the product price.";
+    if (!draft.startDate || !draft.endDate || new Date(draft.endDate) <= new Date(draft.startDate)) errors.endDate = "End date must be after start date.";
+    const quantity = Number(draft.minimumQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || (selectedProduct && quantity > Number(selectedProduct.stock))) errors.minimumQuantity = "Enter a valid quantity within available stock.";
+    if (draft.type === "Bundle Offer" && quantity < 2) errors.minimumQuantity = "A bundle must require at least two units.";
+    if (!Number.isFinite(Number(draft.minimumAmount)) || Number(draft.minimumAmount) < 0) errors.minimumAmount = "Minimum amount cannot be negative.";
+    if (draft.maximumDiscount !== "" && (!Number.isFinite(Number(draft.maximumDiscount)) || Number(draft.maximumDiscount) < 0)) errors.maximumDiscount = "Maximum discount cannot be negative.";
+    if (draft.type === "Bundle Offer" && !draft.bundleConditions.trim()) errors.bundleConditions = "Describe the selected-product quantity condition.";
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const saveOffer = async (event) => {
+    event.preventDefault();
+    if (!validate()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        type: draft.type,
+        farmer: draft.farmer,
+        product: draft.product,
+        discountType: draft.discountType,
+        discountValue: Number(draft.discountValue),
+        startDate: draft.startDate,
+        endDate: draft.endDate,
+        minimumQuantity: Number(draft.minimumQuantity),
+        minimumAmount: Number(draft.minimumAmount),
+        maximumDiscount: draft.maximumDiscount === "" ? null : Number(draft.maximumDiscount),
+        bundleConditions: draft.bundleConditions.trim(),
+      };
+      if (formDialog.mode === "edit") await adminOffersApi.update(formDialog.offer._id, payload);
+      else await adminOffersApi.create(payload);
+      toast.success(formDialog.mode === "edit" ? "Offer updated and approved." : "Offer created and approved.");
+      setFormDialog(null);
+      setRefresh((value) => value + 1);
+    } catch (requestError) {
+      setError(requestError?.message || "Couldn't save this offer.");
+      toast.error(requestError?.message || "Couldn't save this offer.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -198,6 +356,9 @@ export default function AdminOffers() {
           <h1 className="font-heading text-xl font-bold text-gray-900">Offers Management</h1>
           <p className="mt-1 text-xs text-gray-500">Review, approve and manage all offers.</p>
         </div>
+        <button type="button" onClick={openCreate} className="inline-flex h-9 items-center gap-2 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white hover:bg-[#066B42] focus:outline-none focus:ring-2 focus:ring-[#07814E]/30">
+          <Plus size={14} /> Create Offer
+        </button>
       </header>
 
       {(error || optionsError) && (
@@ -362,6 +523,13 @@ export default function AdminOffers() {
                         )}
                         <button
                           type="button"
+                          onClick={() => openEdit(offer)}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-gray-200 px-2 text-[10px] font-semibold text-gray-700 hover:bg-gray-50"
+                        >
+                          <BadgePercent aria-hidden="true" className="h-3 w-3" /> Edit
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openDetails(offer)}
                           aria-label={`View ${offer.title}`}
                           className="inline-flex h-7 items-center gap-1 rounded-md border border-gray-200 px-2 text-[10px] font-semibold text-gray-700 hover:bg-gray-50"
@@ -423,6 +591,13 @@ export default function AdminOffers() {
                 </dl>
                 {selectedOffer.type === "Bundle Offer" && <Detail label="Bundle conditions" value={selectedOffer.bundleConditions} />}
                 {selectedOffer.rejectionReason && <Detail label="Rejection reason" value={selectedOffer.rejectionReason} />}
+                <button
+                  type="button"
+                  onClick={() => openEdit(selectedOffer)}
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 text-[10px] font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  <BadgePercent aria-hidden="true" className="h-3 w-3" /> Edit Offer
+                </button>
               </>
             )}
           </div>
@@ -472,6 +647,132 @@ export default function AdminOffers() {
               <button type="button" disabled={Boolean(savingId)} onClick={() => setDialog(null)} className="h-9 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 disabled:opacity-50">Cancel</button>
               <button type="submit" disabled={Boolean(savingId) || (dialog.action === "reject" && !rejectionReason.trim())} className="h-9 rounded-lg bg-[#08764B] px-4 text-xs font-semibold text-white disabled:opacity-50">
                 {savingId ? "Saving..." : dialog.action === "approve" ? "Confirm Approval" : dialog.action === "reject" ? "Confirm Rejection" : "Confirm Deactivation"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(formDialog)}
+        onClose={() => !saving && setFormDialog(null)}
+        title={formDialog ? (formDialog.mode === "edit" ? "Edit Offer" : "Create Offer") : null}
+      >
+        {formDialog && (
+          <form onSubmit={saveOffer} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-[11px] font-medium text-[#52645D] sm:col-span-2">Offer Title
+                <input aria-label="Offer title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className={inputClass(Boolean(formErrors.title))} maxLength={100} />
+                {formErrors.title && <span className="mt-1 block text-[10px] text-red-600">{formErrors.title}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D] sm:col-span-2">Description
+                <textarea aria-label="Offer description" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-[#DDE6E2] p-2 text-xs outline-none focus:border-[#14905B]" maxLength={1000} />
+                {formErrors.description && <span className="mt-1 block text-[10px] text-red-600">{formErrors.description}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Offer Type
+                <select aria-label="Offer type" value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} className={inputClass()}>{OFFER_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Farmer
+                <select
+                  aria-label="Offer farmer"
+                  value={draft.farmer}
+                  onChange={(event) => setDraft((current) => ({ ...current, farmer: event.target.value, product: "" }))}
+                  disabled={formFarmers.length === 0}
+                  className={inputClass(Boolean(formErrors.farmer))}
+                >
+                  <option value="">Select farmer</option>
+                  {formFarmers.map((farmer) => <option key={farmer._id} value={String(farmer._id)}>{farmer.name}</option>)}
+                </select>
+                {formErrors.farmer && <span className="mt-1 block text-[10px] text-red-600">{formErrors.farmer}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Product
+                <select
+                  aria-label="Offer product"
+                  value={draft.product}
+                  disabled={productsLoading || !draft.farmer || formProducts.length === 0}
+                  onChange={(event) => setDraft((current) => ({ ...current, product: event.target.value }))}
+                  className={inputClass(Boolean(formErrors.product))}
+                >
+                  <option value="">
+                    {!draft.farmer ? "Select a farmer first"
+                      : productsLoading ? "Loading eligible products…"
+                        : productsError ? "Products could not be loaded"
+                          : formProducts.length ? "Select product" : "No eligible products available"}
+                  </option>
+                  {formProducts.map((product) => (
+                    <option key={product._id} value={String(product._id)}>
+                      {product.name} · {formatCurrency(product.price)} · {product.stock} in stock
+                    </option>
+                  ))}
+                </select>
+                {formErrors.product && <span className="mt-1 block text-[10px] text-red-600">{formErrors.product}</span>}
+                {productsError && (
+                  <span role="alert" className="mt-1 flex flex-wrap items-center gap-x-1 text-[10px] text-red-600">
+                    {productsError}
+                    <button type="button" onClick={() => loadFormProducts(draft.farmer)} className="font-semibold underline">Retry</button>
+                  </span>
+                )}
+                {!productsLoading && !productsError && formProducts.length === 0 && draft.farmer && (
+                  <span role="status" className="mt-1 block text-[10px] text-[#71817D]">This farmer has no eligible products available.</span>
+                )}
+              </label>
+              {selectedProduct && <div aria-label="Selected product preview" className="flex min-w-0 items-center gap-3 rounded-lg border border-[#DDEBE1] bg-[#F5F9F6] p-3 sm:col-span-2">
+                <ImageWithFallback
+                  src={getImageUrl(selectedProduct.images?.[0])}
+                  alt={selectedProduct.name}
+                  className="h-14 w-14 shrink-0 rounded-md border border-[#E1EAE4] bg-white object-cover"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-[#344A41]">{selectedProduct.name}</p>
+                  <p className="mt-1 text-[10px] text-[#71817D]">
+                    {formatCurrency(selectedProduct.price)} / {selectedProduct.unit || "unit"} · {selectedProduct.stock} in stock
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => ({ ...current, product: "" }))}
+                  className="shrink-0 rounded-md border border-[#CFE0D4] bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[#176B3B] hover:bg-[#EAF6ED]"
+                >
+                  Change Product
+                </button>
+              </div>}
+              <label className="text-[11px] font-medium text-[#52645D]">Discount Type
+                <select aria-label="Discount type" value={draft.discountType} onChange={(event) => setDraft({ ...draft, discountType: event.target.value })} className={inputClass()}>{DISCOUNT_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Discount Value
+                <input aria-label="Discount value" type="number" min="0.01" step="0.01" value={draft.discountValue} onChange={(event) => setDraft({ ...draft, discountValue: event.target.value })} className={inputClass(Boolean(formErrors.discountValue))} />
+                {formErrors.discountValue && <span className="mt-1 block text-[10px] text-red-600">{formErrors.discountValue}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Start Date
+                <input aria-label="Offer start date" type="date" value={draft.startDate} onChange={(event) => setDraft({ ...draft, startDate: event.target.value })} className={inputClass()} />
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">End Date
+                <input aria-label="Offer end date" type="date" value={draft.endDate} onChange={(event) => setDraft({ ...draft, endDate: event.target.value })} className={inputClass(Boolean(formErrors.endDate))} />
+                {formErrors.endDate && <span className="mt-1 block text-[10px] text-red-600">{formErrors.endDate}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Minimum Quantity
+                <input aria-label="Minimum quantity" type="number" min="1" step="1" value={draft.minimumQuantity} onChange={(event) => setDraft({ ...draft, minimumQuantity: event.target.value })} className={inputClass(Boolean(formErrors.minimumQuantity))} />
+                {formErrors.minimumQuantity && <span className="mt-1 block text-[10px] text-red-600">{formErrors.minimumQuantity}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Minimum Order Amount
+                <input aria-label="Minimum order amount" type="number" min="0" step="0.01" value={draft.minimumAmount} onChange={(event) => setDraft({ ...draft, minimumAmount: event.target.value })} className={inputClass(Boolean(formErrors.minimumAmount))} />
+                <span className="mt-1 block text-[9px] font-normal text-[#82908B]">Based on the original cart subtotal before offer discounts.</span>
+                {formErrors.minimumAmount && <span className="mt-1 block text-[10px] text-red-600">{formErrors.minimumAmount}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D] sm:col-span-2">Maximum Discount (optional)
+                <input aria-label="Maximum discount" type="number" min="0" step="0.01" value={draft.maximumDiscount} onChange={(event) => setDraft({ ...draft, maximumDiscount: event.target.value })} className={inputClass(Boolean(formErrors.maximumDiscount))} />
+                {formErrors.maximumDiscount && <span className="mt-1 block text-[10px] text-red-600">{formErrors.maximumDiscount}</span>}
+              </label>
+              {draft.type === "Bundle Offer" && <label className="text-[11px] font-medium text-[#52645D] sm:col-span-2">Bundle Conditions
+                <textarea aria-label="Bundle conditions" value={draft.bundleConditions} onChange={(event) => setDraft({ ...draft, bundleConditions: event.target.value })} placeholder="Example: Buy at least 2 units of this product to receive the discount." className="mt-1 min-h-14 w-full rounded-md border border-[#DDE6E2] p-2 text-xs outline-none focus:border-[#14905B]" maxLength={500} />
+                {formErrors.bundleConditions && <span className="mt-1 block text-[10px] text-red-600">{formErrors.bundleConditions}</span>}
+              </label>}
+            </div>
+            <p className="rounded-md bg-amber-50 px-2.5 py-2 text-[10px] leading-4 text-amber-800">Admin-created and admin-edited offers are approved directly after backend validation and do not require a separate approval step.</p>
+            <div className="flex justify-end gap-2 border-t border-[#EDF1F0] pt-3">
+              <button type="button" onClick={() => setFormDialog(null)} disabled={saving} className="h-8 rounded-md border border-[#DDE6E2] px-3 text-xs text-[#52645D]">Cancel</button>
+              <button type="submit" disabled={saving || productsLoading || !draft.farmer || formProducts.length === 0} className="h-8 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white disabled:opacity-60">
+                {saving ? "Saving…" : formDialog.mode === "edit" ? "Save & Approve" : "Create & Approve"}
               </button>
             </div>
           </form>

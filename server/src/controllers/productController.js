@@ -2,9 +2,10 @@ const Product = require("../models/Product");
 const User = require("../models/User");
 const Offer = require("../models/Offer");
 const FarmerProfile = require("../models/FarmerProfile");
+const Wishlist = require("../models/Wishlist");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { uploadFile } = require("../services/cloudinaryUpload");
-const { createNotification } = require("../services/notificationService");
+const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 const { attachProductOffers, getEffectiveStatus, money } = require("../services/offerService");
 
 async function listProducts(req, res, activeOnly) {
@@ -224,7 +225,29 @@ exports.update = asyncHandler(async (req,res) => {
           message,
           resourceType: "Product",
           resourceId: updated._id,
+          eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}`,
         });
+      }
+    }
+    // Notify wishlist customers when a previously out-of-stock product is back in stock
+    if (Number(oldStock) === 0 && newStock > 0) {
+      const wishlists = await Wishlist.find({ products: updated._id }).populate("user", "_id name email");
+      for (const wishlist of wishlists) {
+        if (wishlist.user) {
+          await createNotification({
+            userId: wishlist.user._id,
+            type: "backInStock",
+            category: "inventory",
+            title: "Product back in stock",
+            message: `${updated.name} is back in stock.`,
+            resourceType: "Product",
+            resourceId: updated._id,
+            actionUrl: `/product/${updated._id}`,
+            icon: "PackageCheck",
+            priority: "normal",
+            eventKey: `${EVENT_KEY_PREFIXES.backInStock}:${updated._id}:${wishlist.user._id}`,
+          });
+        }
       }
     }
   }

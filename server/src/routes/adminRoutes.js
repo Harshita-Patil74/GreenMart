@@ -18,6 +18,8 @@ const createFarmerSchema = {
     farmAddress: z.string().optional(),
     farmCategory: z.string().optional(),
     about: z.string().optional(),
+    certificationName: z.string().trim().max(100, "Certification name is too long.").optional().default(""),
+    certificateNumber: z.string().trim().max(50, "Certificate number is too long.").optional().default(""),
   }),
 };
 

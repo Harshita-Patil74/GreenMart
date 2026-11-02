@@ -7,8 +7,12 @@ import adminOffersApi from "../../api/adminOffersApi.js";
 vi.mock("../../api/adminOffersApi.js", () => ({
   default: {
     options: vi.fn(),
+    farmers: vi.fn(),
+    eligibleProducts: vi.fn(),
     list: vi.fn(),
     get: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
     approve: vi.fn(),
     reject: vi.fn(),
     deactivate: vi.fn(),
@@ -58,8 +62,19 @@ describe("Admin offers management", () => {
         products: [{ _id: "product-1", name: "Organic Fig" }],
       },
     });
+    adminOffersApi.farmers.mockResolvedValue({
+      data: [
+        { _id: "farmer-1", name: "Green Valley Farm" },
+        { _id: "farmer-2", name: "Hillside Farm" },
+      ],
+    });
+    adminOffersApi.eligibleProducts.mockResolvedValue({
+      data: [{ _id: "product-1", name: "Organic Fig", price: 100, unit: "kg", stock: 20, images: [] }],
+    });
     adminOffersApi.list.mockResolvedValue({ data: { items: [offer], total: 1, page: 1, pages: 1 } });
     adminOffersApi.get.mockResolvedValue({ data: offer });
+    adminOffersApi.create.mockResolvedValue({ data: { _id: "offer-new", ...offer, status: "Active" } });
+    adminOffersApi.update.mockResolvedValue({ data: { _id: "offer-1", ...offer, status: "Active" } });
     adminOffersApi.approve.mockResolvedValue({ data: offer });
     adminOffersApi.reject.mockResolvedValue({ data: offer });
     adminOffersApi.deactivate.mockResolvedValue({ data: offer });
@@ -82,6 +97,106 @@ describe("Admin offers management", () => {
     expect(approveButton.closest("td")).toHaveClass("min-w-[255px]", "whitespace-nowrap");
     expect(approveButton.parentElement).toHaveClass("flex");
     expect(adminOffersApi.list).toHaveBeenCalledWith({ page: 1, limit: 10 });
+  });
+
+  it("shows a Create Offer button", async () => {
+    renderPage();
+    await screen.findByText("Offers Management");
+    expect(screen.getByRole("button", { name: "Create Offer" })).toBeInTheDocument();
+  });
+
+  it("opens the create form, loads the selected farmer's products and submits a new offer", async () => {
+    renderPage();
+    await screen.findByText("Offers Management");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Offer" }));
+    await screen.findByRole("textbox", { name: "Offer title" });
+
+    const farmerSelect = screen.getByRole("combobox", { name: "Offer farmer" });
+    expect(farmerSelect).toHaveValue("farmer-1");
+    expect(adminOffersApi.eligibleProducts).toHaveBeenCalledWith("farmer-1");
+    expect(await screen.findByRole("option", { name: "Organic Fig · ₹100.00 · 20 in stock" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Offer title" }), { target: { value: "Admin Fig Offer" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Offer description" }), { target: { value: "Admin created fig offer." } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Offer product" }), { target: { value: "product-1" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Discount value" }), { target: { value: "15" } });
+    fireEvent.change(screen.getByLabelText("Offer start date"), { target: { value: "2026-12-01" } });
+    fireEvent.change(screen.getByLabelText("Offer end date"), { target: { value: "2026-12-31" } });
+
+    expect(screen.getByLabelText("Selected product preview")).toHaveTextContent("Organic Fig");
+    expect(screen.getByText("₹100.00 / kg · 20 in stock")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create & Approve" }));
+
+    await waitFor(() => expect(adminOffersApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Admin Fig Offer",
+      farmer: "farmer-1",
+      product: "product-1",
+      discountValue: 15,
+    })));
+    await waitFor(() => expect(adminOffersApi.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("reloads the selected farmer's products when the farmer changes", async () => {
+    renderPage();
+    await screen.findByText("Offers Management");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Offer" }));
+    await waitFor(() => expect(adminOffersApi.eligibleProducts).toHaveBeenCalledWith("farmer-1"));
+
+    adminOffersApi.eligibleProducts.mockResolvedValueOnce({
+      data: [{ _id: "product-2", name: "Hillside Tomato", price: 60, unit: "kg", stock: 12, images: [] }],
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Offer farmer" }), { target: { value: "farmer-2" } });
+
+    await waitFor(() => expect(adminOffersApi.eligibleProducts).toHaveBeenLastCalledWith("farmer-2"));
+    expect(await screen.findByRole("option", { name: "Hillside Tomato · ₹60.00 · 12 in stock" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Organic Fig · ₹100.00 · 20 in stock" })).not.toBeInTheDocument();
+  });
+
+  it("opens the edit form from the offer list with the current farmer and product prefilled", async () => {
+    renderPage();
+    await screen.findByText("Fig harvest offer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await screen.findByRole("textbox", { name: "Offer title" });
+    await waitFor(() => expect(adminOffersApi.eligibleProducts).toHaveBeenCalledWith("farmer-1"));
+
+    expect(screen.getByRole("combobox", { name: "Offer farmer" })).toHaveValue("farmer-1");
+    expect(screen.getByRole("combobox", { name: "Offer product" })).toHaveValue("product-1");
+    expect(screen.getByRole("textbox", { name: "Offer title" })).toHaveValue("Fig harvest offer");
+    expect(screen.getByLabelText("Selected product preview")).toHaveTextContent("Organic Fig");
+  });
+
+  it("submits an edited offer for approval from the edit form", async () => {
+    renderPage();
+    await screen.findByText("Fig harvest offer");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Offer product" })).toHaveValue("product-1"));
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Offer title" }), { target: { value: "Updated Fig Offer" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Discount value" }), { target: { value: "20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save & Approve" }));
+
+    await waitFor(() => expect(adminOffersApi.update).toHaveBeenCalledWith("offer-1", expect.objectContaining({
+      title: "Updated Fig Offer",
+      discountValue: 20,
+    })));
+    await waitFor(() => expect(adminOffersApi.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("opens the edit form from the offer details modal", async () => {
+    renderPage();
+    await screen.findByText("Fig harvest offer");
+
+    fireEvent.click(screen.getByRole("button", { name: "View Fig harvest offer" }));
+    expect(await screen.findByText("Save on fresh figs from our farm.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Offer" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Offer title" })).toHaveValue("Fig harvest offer"));
+    expect(screen.getByRole("combobox", { name: "Offer farmer" })).toHaveValue("farmer-1");
   });
 
   it("applies all selected filters and search on the server when Search is submitted", async () => {

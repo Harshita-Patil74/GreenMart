@@ -1,6 +1,7 @@
 const { z } = require("zod");
 
 const offerFields = {
+  farmer: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   title: z.string().trim().min(1).max(100),
   description: z.string().trim().min(1).max(1000),
   product: z.string().regex(/^[a-f\d]{24}$/i),

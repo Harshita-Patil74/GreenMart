@@ -1,16 +1,23 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import notificationApi from "../../api/notificationApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction, markRead as markReadAction } from "../../features/notifications/notificationsSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
-import { Link } from "react-router-dom";
+import {
+  getNotificationIcon, getNotificationStyle, CUSTOMER_CATEGORIES, CATEGORY_LABELS, CATEGORY_ICONS,
+} from "../../config/notificationConfig.js";
+import { Bell } from "lucide-react";
 
 export default function Notifications() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { user } = useSelector((s) => s.auth || {});
   const { items, loading, error } = useSelector((s) => s.notifications || { items: [], loading: false, error: null });
+  const [category, setCategory] = useState("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const load = useCallback(() => {
     dispatch(fetchNotifications());
@@ -22,7 +29,7 @@ export default function Notifications() {
   const markRead = async (id) => {
     try {
       await notificationApi.markRead(id);
-      dispatch({ type: "notifications/markRead", payload: id });
+      dispatch(markReadAction(id));
       dispatch(fetchUnreadCount());
     } catch (e) {
       // handled by toast in component if needed
@@ -39,9 +46,20 @@ export default function Notifications() {
     }
   };
 
-  const goToOrder = (orderId) => {
-    if (orderId) navigate(`/orders/${orderId}`);
+  const goToNotification = (n) => {
+    if (n.orderId) navigate(`/orders/${n.orderId}`);
+    if (n.actionUrl) navigate(n.actionUrl);
+    if (!n.isRead) markRead(n._id);
   };
+
+  const filtered = items.filter((n) => {
+    if (category === "all") return true;
+    return String(n.category || "").toLowerCase() === category;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const unreadCount = items.filter((n) => !n.isRead).length;
 
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (loading) return (
@@ -49,8 +67,6 @@ export default function Notifications() {
       Loading notifications…
     </div>
   );
-
-  const unreadCount = items.filter((n) => !n.isRead).length;
 
   return (
     <div className="flex flex-col gap-2">
@@ -67,32 +83,60 @@ export default function Notifications() {
         )}
       </header>
 
+      <nav aria-label="Notification categories" className="flex min-w-0 gap-1.5 overflow-x-auto rounded-xl border border-[#E5ECE8] bg-white p-2 scrollbar-hide">
+        {CUSTOMER_CATEGORIES.map((cat) => {
+          const Icon = CATEGORY_ICONS[cat] || Bell;
+          const unread = cat === "all" ? unreadCount : filtered.filter((n) => !n.isRead && String(n.category || "").toLowerCase() === cat).length;
+          return (
+            <button
+              key={cat}
+              type="button"
+              aria-pressed={category === cat}
+              onClick={() => { setCategory(cat); setPage(1); }}
+              className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition ${
+                category === cat
+                  ? "border-[#087449] bg-[#087449] text-white"
+                  : "border-transparent text-[#475852] hover:border-[#D9E7DE] hover:bg-[#F6FAF8]"
+              }`}
+            >
+              {cat === "all" ? <Bell aria-hidden="true" className="h-3.5 w-3.5" /> : <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
+              <span>{CATEGORY_LABELS[cat]}</span>
+              {unread > 0 && <span className={`min-w-4 rounded-full px-1 text-center text-[9px] leading-4 ${category === cat ? "bg-white/20 text-white" : "bg-[#EAF6ED] text-[#087449]"}`}>{unread}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
-        {items.length ? (
+        {currentPageItems.length ? (
           <ul className="divide-y divide-[#EDF1F0]">
-            {items.map((notification) => (
-              <li key={notification._id}>
-                <div className={`flex items-start gap-3 px-4 py-3.5 ${notification.isRead ? "bg-white" : "bg-[#F6FAF8]"}`}>
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                    <span className="text-[15px]">📦</span>
-                  </div>
-                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => goToOrder(notification.orderId)}>
-                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                      <h2 className={`text-xs ${notification.isRead ? "font-medium text-[#475852]" : "font-semibold text-[#253933]"}`}>
-                        {notification.title || "Order update"}
-                      </h2>
-                      <time className="whitespace-nowrap text-[10px] text-[#8A9692]" dateTime={notification.createdAt}>
-                        {new Date(notification.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-                      </time>
+            {currentPageItems.map((notification) => {
+              const Icon = getNotificationIcon(notification.type);
+              const style = getNotificationStyle(notification.type);
+              return (
+                <li key={notification._id}>
+                  <div className={`flex items-start gap-3 px-4 py-3.5 ${notification.isRead ? "bg-white" : "bg-[#F6FAF8]"}`}>
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.background} ${style.color}`}>
+                      <Icon size={15} />
                     </div>
-                    <p className="mt-1 text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => goToNotification(notification)}>
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <h2 className={`text-xs ${notification.isRead ? "font-medium text-[#475852]" : "font-semibold text-[#253933]"}`}>
+                          {notification.title || "Order update"}
+                        </h2>
+                        <time className="whitespace-nowrap text-[10px] text-[#8A9692]" dateTime={notification.createdAt}>
+                          {new Date(notification.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                        </time>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                    </div>
+                    {!notification.isRead && (
+                      <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={(e) => { e.stopPropagation(); markRead(notification._id); }} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />
+                    )}
                   </div>
-                  {!notification.isRead && (
-                    <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={(e) => { e.stopPropagation(); markRead(notification._id); }} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />
-                  )}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="px-4 py-12 text-center">
@@ -102,6 +146,28 @@ export default function Notifications() {
           </div>
         )}
       </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-4 py-3 text-xs text-[#475852]">
+          <span>Page {page} of {totalPages}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="rounded-md border border-[#E5ECE8] px-2 py-1 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F6FAF8]"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="rounded-md border border-[#E5ECE8] px-2 py-1 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F6FAF8]"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

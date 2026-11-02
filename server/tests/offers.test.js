@@ -35,6 +35,7 @@ beforeAll(async () => {
     User.create({ name: "Offer Admin", email: "offers.admin@example.test", passwordHash, role: "admin" }),
   ]);
   farmerId = farmer._id;
+  otherFarmerId = otherFarmer._id;
   await FarmerProfile.create([
     { user: farmer._id, farmName: "Offer Farm", certification: { verifiedByAdmin: true } },
     { user: otherFarmer._id, farmName: "Other Offer Farm", certification: { verifiedByAdmin: true } },
@@ -688,5 +689,251 @@ describe("Farmer offers and server-priced order snapshots", () => {
     expect(otherFarmer.status).toBe(404);
     expect(owner.status).toBe(200);
     expect(owner.body.effectiveStatus).toBe("Inactive");
+  });
+
+  describe("Admin offer creation and editing", () => {
+    const adminId = () => User.findOne({ role: "admin" }).then((admin) => admin._id);
+
+    it("returns the list of eligible farmers for admin offer creation", async () => {
+      const response = await request(app)
+        .get("/api/admin/offers/farmers")
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.map((farmer) => String(farmer._id))).toEqual(
+        expect.arrayContaining([String(farmerId), String(otherFarmerId)])
+      );
+    });
+
+    it("returns only the selected farmer's eligible products for admin offer creation", async () => {
+      const [own, other] = await Promise.all([
+        request(app)
+          .get("/api/admin/offers/eligible-products")
+          .set("Authorization", `Bearer ${adminToken}`)
+          .query({ farmerId: String(farmerId) }),
+        request(app)
+          .get("/api/admin/offers/eligible-products")
+          .set("Authorization", `Bearer ${adminToken}`)
+          .query({ farmerId: String(otherFarmerId) }),
+      ]);
+      expect(own.status).toBe(200);
+      expect(own.body.map((product) => String(product._id))).toContain(String(productId));
+      expect(own.body.map((product) => String(product._id))).not.toContain(String(otherProductId));
+      expect(other.status).toBe(200);
+      expect(other.body.map((product) => String(product._id))).toContain(String(otherProductId));
+      expect(other.body.map((product) => String(product._id))).not.toContain(String(productId));
+      expect(own.body[0]).toMatchObject({ name: expect.any(String), price: expect.any(Number), stock: expect.any(Number) });
+    });
+
+    it("allows an admin to create an offer for Farmer A's eligible product", async () => {
+      const created = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), title: "Admin fig offer for farmer A" }) });
+
+      expect(created.status).toBe(201);
+      expect(created.body.status).toBe("Active");
+      expect(created.body.approvalStatus).toBe("Active");
+      expect(String(created.body.farmer?._id)).toBe(String(farmerId));
+      expect(String(created.body.product?._id)).toBe(String(productId));
+
+      const saved = await Offer.findById(created.body._id);
+      expect(String(saved.createdBy)).toBe((await adminId()).toString());
+      expect(String(saved.approvedBy)).toBe((await adminId()).toString());
+      expect(saved.approvedAt).toBeInstanceOf(Date);
+
+      const notification = await Notification.findOne({
+        user: farmerId, type: "offerCreatedByAdmin", resourceId: created.body._id,
+      });
+      expect(notification).toMatchObject({ category: "offers", title: "Admin created an offer for your product" });
+    });
+
+    it("allows an admin to create an offer for Farmer B's eligible product", async () => {
+      const created = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(otherFarmerId), product: String(otherProductId), title: "Admin fig offer for farmer B" }) });
+
+      expect(created.status).toBe(201);
+      expect(created.body.status).toBe("Active");
+      expect(String(created.body.farmer?._id)).toBe(String(otherFarmerId));
+      expect(String(created.body.product?._id)).toBe(String(otherProductId));
+
+      const saved = await Offer.findById(created.body._id);
+      expect(String(saved.createdBy)).toBe((await adminId()).toString());
+      expect(saved.approvedAt).toBeInstanceOf(Date);
+    });
+
+    it("saves admin-created offers as approved after successful backend validation", async () => {
+      const created = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), title: "Pre-approved fig offer" }) });
+
+      expect(created.status).toBe(201);
+      expect(created.body.effectiveStatus).toBe("Active");
+      const saved = await Offer.findById(created.body._id);
+      expect(saved.status).toBe("Active");
+      expect(saved.isActive).toBe(true);
+    });
+
+    it("does not let an admin create an offer for a product belonging to a different farmer", async () => {
+      const mismatched = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(otherProductId), title: "Cross farmer offer" }) });
+
+      expect(mismatched.status).toBe(400);
+
+      const missingFarmer = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ title: "No farmer offer" }) });
+      expect(missingFarmer.status).toBe(400);
+    });
+
+    it("lets an admin edit an offer created by any farmer", async () => {
+      const farmerOffer = await request(app)
+        .post("/api/farmers/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Farmer edit target" }));
+      expect(farmerOffer.body.status).toBe("Pending");
+
+      const edited = await request(app)
+        .patch(`/api/admin/offers/${farmerOffer.body._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(productId), title: "Admin edited offer" }) });
+
+      expect(edited.status).toBe(200);
+      expect(edited.body.status).toBe("Active");
+      expect(edited.body.approvalStatus).toBe("Active");
+      expect(String(edited.body.farmer?._id)).toBe(String(farmerId));
+
+      const saved = await Offer.findById(farmerOffer.body._id);
+      expect(String(saved.editedBy)).toBe((await adminId()).toString());
+      expect(saved.editedAt).toBeInstanceOf(Date);
+      expect(saved.rejectionReason).toBe("");
+    });
+
+    it("lets an admin change an offer's associated farmer and product when valid", async () => {
+      const farmerOffer = await request(app)
+        .post("/api/farmers/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Reparent target" }));
+
+      const changed = await request(app)
+        .patch(`/api/admin/offers/${farmerOffer.body._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(otherFarmerId), product: String(otherProductId), title: "Reparented offer" }) });
+
+      expect(changed.status).toBe(200);
+      expect(changed.body.status).toBe("Active");
+      expect(String(changed.body.farmer?._id)).toBe(String(otherFarmerId));
+      expect(String(changed.body.product?._id)).toBe(String(otherProductId));
+    });
+
+    it("approves an admin-edited offer after successful validation", async () => {
+      const farmerOffer = await request(app)
+        .post("/api/farmers/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Edit approval target" }));
+
+      const edited = await request(app)
+        .patch(`/api/admin/offers/${farmerOffer.body._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(productId), discountValue: 25, title: "Edited and approved" }) });
+
+      expect(edited.status).toBe(200);
+      expect(edited.body.status).toBe("Active");
+      expect(edited.body.effectiveStatus).toBe("Active");
+      const saved = await Offer.findById(farmerOffer.body._id);
+      expect(String(saved.approvedBy)).toBe((await adminId()).toString());
+    });
+
+    it("lets an admin edit and approve a previously rejected offer", async () => {
+      const rejected = await Offer.create({
+        ...offerDraft({ title: "Rejected edit target" }),
+        farmer: farmerId,
+        status: "Rejected",
+        isActive: false,
+        rejectedAt: new Date(),
+        rejectedBy: await adminId(),
+        rejectionReason: "Needs correction.",
+      });
+
+      const edited = await request(app)
+        .patch(`/api/admin/offers/${rejected._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(productId), title: "Corrected offer" }) });
+
+      expect(edited.status).toBe(200);
+      expect(edited.body.status).toBe("Active");
+
+      const saved = await Offer.findById(rejected._id);
+      expect(saved.status).toBe("Active");
+      expect(saved.isActive).toBe(true);
+      expect(saved.rejectionReason).toBe("");
+      expect(saved.rejectedBy).toBeUndefined();
+    });
+
+    it("rejects invalid admin-created and admin-edited offers", async () => {
+      const invalidCreate = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), discountValue: 0, title: "Invalid create" }) });
+      expect(invalidCreate.status).toBe(400);
+
+      const pending = await request(app)
+        .post("/api/farmers/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Invalid edit target" }));
+
+      const reversedDates = await request(app)
+        .patch(`/api/admin/offers/${pending.body._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(productId), endDate: dates.startDate, title: "Invalid edit" }) });
+      expect(reversedDates.status).toBe(400);
+
+      const foreignEdit = await request(app)
+        .patch(`/api/admin/offers/${pending.body._id}`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId), product: String(otherProductId), title: "Foreign product" }) });
+      expect(foreignEdit.status).toBe(400);
+    });
+
+    it("does not allow farmers to use admin create or edit permissions", async () => {
+      const farmerCreate = await request(app)
+        .post("/api/admin/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ ...offerDraft({ farmer: String(farmerId) }) });
+      expect(farmerCreate.status).toBe(403);
+
+      const farmerEdit = await request(app)
+        .patch(`/api/admin/offers/${offerId}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ ...offerDraft({ title: "Farmer admin edit" }) });
+      expect(farmerEdit.status).toBe(403);
+    });
+
+    it("keeps farmer-created and farmer-edited offers pending until an admin approves them", async () => {
+      const created = await request(app)
+        .post("/api/farmers/offers")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Farmer created pending" }));
+      expect(created.status).toBe(201);
+      expect(created.body.status).toBe("Pending");
+
+      const edited = await request(app)
+        .patch(`/api/farmers/offers/${created.body._id}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send(offerDraft({ title: "Farmer edited pending" }));
+      expect(edited.status).toBe(200);
+      expect(edited.body.status).toBe("Pending");
+
+      const approved = await request(app)
+        .patch(`/api/admin/offers/${created.body._id}/approve`)
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(approved.status).toBe(200);
+      expect(approved.body.status).toBe("Active");
+    });
   });
 });

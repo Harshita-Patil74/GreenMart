@@ -36,9 +36,12 @@ async function issueFarmerActivation(user) {
     } catch (emailError) {
       console.warn("Failed to send activation email:", emailError?.message);
     }
+    return link;
   }
 
-  return link;
+  if (env.nodeEnv === "development") return link;
+
+  return;
 }
 
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
@@ -151,7 +154,7 @@ exports.rejectFarmer = asyncHandler(async (req,res) => {
   res.json(fp);
 });
 exports.createFarmer = asyncHandler(async (req,res) => {
-  const { name, email, phone, farmName, farmAddress, farmCategory, about } = req.body;
+  const { name, email, phone, farmName, farmAddress, farmCategory, about, certificationName, certificateNumber } = req.body;
   const normalizedEmail = email.toLowerCase();
   const exists = await User.findOne({ email: normalizedEmail });
   if (exists) return res.status(400).json({ message: "Email is already registered." });
@@ -165,7 +168,18 @@ exports.createFarmer = asyncHandler(async (req,res) => {
     }
     throw error;
   }
-  await FarmerProfile.create({ user: user._id, farmName: farmName || name+" Farm", address: farmAddress, category: farmCategory, description: about });
+  await FarmerProfile.create({
+    user: user._id,
+    farmName: farmName || name+" Farm",
+    address: farmAddress,
+    category: farmCategory,
+    description: about,
+    certification: {
+      body: certificationName || undefined,
+      number: certificateNumber || undefined,
+      verifiedByAdmin: false,
+    },
+  });
   await recordAdminAction(req.user._id, "farmer.account.created", user._id);
   const activationLink = await issueFarmerActivation(user);
   const emailSent = env.emailEnabled && getSmtpStatus().configured;

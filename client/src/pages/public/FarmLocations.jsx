@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import MapView, { FarmMarker } from "../../components/map/MapView.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import { DEMO_FARMS } from "../../data/demoCatalog.js";
+import farmerApi from "../../api/farmerApi";
 
 const MAP =
   "https://images.unsplash.com/photo-1524661132064-c8c65e1d5d4c?auto=format&fit=crop&w=1400&q=60";

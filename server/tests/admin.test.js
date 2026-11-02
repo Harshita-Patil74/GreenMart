@@ -143,6 +143,35 @@ describe("Admin farmer verification", () => {
     expect(auditEntry.toObject()).not.toHaveProperty("password");
   });
 
+  it("saves admin-supplied certification fields without auto-verifying the farmer", async () => {
+    const response = await request(app)
+      .post("/api/admin/farmers")
+      .set("Authorization", authHeader(adminToken))
+      .send({
+        name: "Certified Farmer",
+        email: "certified.farmer@demo.greenmart.test",
+        phone: "+91 9123456789",
+        farmName: "Certified Farm",
+        certificationName: "Organic Farming Certificate",
+        certificateNumber: "OFC2026KA5724",
+      });
+
+    expect(response.status).toBe(201);
+    const createdUser = await User.findOne({ email: "certified.farmer@demo.greenmart.test" });
+    const profile = await FarmerProfile.findOne({ user: createdUser._id });
+    expect(profile.certification.body).toBe("Organic Farming Certificate");
+    expect(profile.certification.number).toBe("OFC2026KA5724");
+    expect(profile.certification.verifiedByAdmin).toBe(false);
+    expect(profile.certification.rejectedByAdmin).toBe(false);
+
+    const listed = await request(app)
+      .get("/api/admin/farmers")
+      .set("Authorization", authHeader(adminToken));
+    const listedProfile = listed.body.find((item) => String(item.user._id) === String(createdUser._id));
+    expect(listedProfile.certification.body).toBe("Organic Farming Certificate");
+    expect(listedProfile.certification.number).toBe("OFC2026KA5724");
+  });
+
   it("activates a farmer account with a single-use token and farmer-chosen password", async () => {
     const user = await User.findOne({ email: "admin.created.farmer@gmail.com" });
     const activationToken = "single-use-activation-token";

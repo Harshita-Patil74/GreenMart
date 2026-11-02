@@ -21,7 +21,7 @@ describe("Admin farmer management", () => {
         _id: "profile-1",
         user: { _id: "farmer-1", name: "Green Fields Farmer", email: "farmer@example.test", accountActivated: false },
         farmName: "Green Fields Farm",
-        certification: { body: "Organic", number: "CERT-123", verifiedByAdmin: false, rejectedByAdmin: false },
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
         createdAt: "2026-02-11T00:00:00.000Z",
       }],
     });
@@ -71,6 +71,8 @@ describe("Admin farmer management", () => {
       farmAddress: "",
       farmCategory: "",
       about: "",
+      certificationName: "",
+      certificateNumber: "",
     })));
     expect(await screen.findByRole("button", { name: "Add Farmer" })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Full Name")).not.toBeInTheDocument();
@@ -101,5 +103,50 @@ describe("Admin farmer management", () => {
     fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: ".farmer@example.com" } });
 
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+  });
+
+  it("enters certification fields when creating a farmer and does not auto-verify", async () => {
+    adminApi.createFarmer.mockResolvedValueOnce({ data: { message: "Farmer created" } });
+    renderWithStore(<AdminFarmers />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Farmer" }));
+    fireEvent.change(screen.getByPlaceholderText("Full Name"), { target: { value: "Certified Farmer" } });
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "certified@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Certification Name (e.g. Organic Farming Certificate)"), { target: { value: "Organic Farming Certificate" } });
+    fireEvent.change(screen.getByPlaceholderText("Certificate Number (e.g. OFC2026KA5724)"), { target: { value: "OFC2026KA5724" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.objectContaining({
+      certificationName: "Organic Farming Certificate",
+      certificateNumber: "OFC2026KA5724",
+    })));
+  });
+
+  it("displays saved certification name and certificate number, or Not provided when missing", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [
+        {
+          _id: "profile-cert",
+          user: { _id: "farmer-cert", name: "Certified Farmer", email: "cert@example.test", accountActivated: false },
+          farmName: "Certified Farm",
+          certification: { body: "Organic Farming Certificate", number: "OFC2026KA5724", verifiedByAdmin: false, rejectedByAdmin: false },
+          createdAt: "2026-02-11T00:00:00.000Z",
+        },
+        {
+          _id: "profile-none",
+          user: { _id: "farmer-none", name: "No Cert Farmer", email: "none@example.test", accountActivated: false },
+          farmName: "Plain Farm",
+          certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+          createdAt: "2026-02-11T00:00:00.000Z",
+        },
+      ],
+    });
+    renderWithStore(<AdminFarmers />);
+
+    expect(await screen.findByText("Organic Farming Certificate")).toBeInTheDocument();
+    expect(screen.getByText("OFC2026KA5724")).toBeInTheDocument();
+    expect(screen.getByText("Not provided")).toBeInTheDocument();
+    expect(screen.getAllByText("Pending")).toHaveLength(2);
   });
 });

@@ -40,6 +40,13 @@ async function getEligibleProduct(productId, farmerId) {
   return { product };
 }
 
+async function getEligibleFarmer(farmerId) {
+  if (!validId(farmerId)) return { error: "Select a valid farmer." };
+  const farmer = await User.findOne({ _id: farmerId, role: "farmer", status: "active" }).select("_id name email");
+  if (!farmer) return { error: "The selected farmer is not registered or eligible." };
+  return { farmer };
+}
+
 async function validateOfferData(body, farmerId, existing) {
   body = body && typeof body === "object" ? body : {};
   const productId = body.product ?? existing?.product?._id ?? existing?.product;
@@ -481,6 +488,98 @@ exports.adminDeactivate = asyncHandler(async (req, res) => {
     resourceId: offer._id,
   });
   res.json(serialize(await Offer.findById(updatedOffer._id).populate("product", PRODUCT_FIELDS)));
+});
+
+exports.adminFarmers = asyncHandler(async (req, res) => {
+  const farmers = await User.find({ role: "farmer", status: "active" }).select("name email").sort({ name: 1 });
+  res.json(farmers);
+});
+
+exports.adminEligibleProducts = asyncHandler(async (req, res) => {
+  if (!validId(req.query.farmerId)) return fail(res, 400, "Select a valid farmer.");
+  const products = await Product.find({
+    farmer: req.query.farmerId,
+    status: "Active",
+    stock: { $gt: 0 },
+    price: { $gt: 0 },
+  }).select("name images price unit stock status").sort({ name: 1 });
+  res.json(products);
+});
+
+exports.adminCreate = asyncHandler(async (req, res) => {
+  const { farmer, error: farmerError } = await getEligibleFarmer(req.body?.farmer);
+  if (farmerError) return fail(res, 400, farmerError);
+  const { data, error } = await validateOfferData(req.body, farmer._id);
+  if (error) return fail(res, 400, error);
+
+  const offer = await Offer.create({
+    ...data,
+    farmer: farmer._id,
+    status: "Active",
+    isActive: true,
+    submittedAt: new Date(),
+    approvedAt: new Date(),
+    approvedBy: req.user._id,
+    createdBy: req.user._id,
+    statusHistory: [{ status: "Active", changedBy: req.user._id }],
+  });
+  await createNotification({
+    userId: farmer._id,
+    type: "offerCreatedByAdmin",
+    category: "offers",
+    title: "Admin created an offer for your product",
+    message: `An administrator created the offer "${offer.title}" for your product. It is active during its validity period.`,
+    resourceType: "Offer",
+    resourceId: offer._id,
+  });
+  const populated = await Offer.findById(offer._id)
+    .populate("product", PRODUCT_FIELDS)
+    .populate("farmer", "name email");
+  res.status(201).json(serialize(populated));
+});
+
+exports.adminUpdate = asyncHandler(async (req, res) => {
+  if (!validId(req.params.offerId)) return fail(res, 404, "Offer not found.");
+  const offer = await Offer.findById(req.params.offerId);
+  if (!offer) return fail(res, 404, "Offer not found.");
+
+  const targetFarmerId = req.body?.farmer ? String(req.body.farmer) : String(offer.farmer);
+  const { farmer, error: farmerError } = await getEligibleFarmer(targetFarmerId);
+  if (farmerError) return fail(res, 400, farmerError);
+  const { data, error } = await validateOfferData(req.body, farmer._id, offer);
+  if (error) return fail(res, 400, error);
+
+  Object.assign(offer, data);
+  offer.farmer = farmer._id;
+  offer.status = "Active";
+  offer.isActive = true;
+  offer.approvedAt = new Date();
+  offer.approvedBy = req.user._id;
+  offer.rejectedAt = undefined;
+  offer.rejectedBy = undefined;
+  offer.rejectionReason = "";
+  offer.editedBy = req.user._id;
+  offer.editedAt = new Date();
+  recordStatusChange(offer, {
+    status: "Active",
+    reason: "Offer updated and approved by an administrator.",
+    changedBy: req.user._id,
+  });
+  await offer.save();
+
+  await createNotification({
+    userId: farmer._id,
+    type: "offerUpdatedByAdmin",
+    category: "offers",
+    title: "Admin updated your offer",
+    message: `An administrator updated the offer "${offer.title}". Review the changes before they apply at checkout.`,
+    resourceType: "Offer",
+    resourceId: offer._id,
+  });
+  const updated = await Offer.findById(offer._id)
+    .populate("product", PRODUCT_FIELDS)
+    .populate("farmer", "name email");
+  res.json(serialize(updated));
 });
 
 exports.salesByOffer = getSalesByOffer;

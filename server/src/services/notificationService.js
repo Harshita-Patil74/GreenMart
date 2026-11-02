@@ -3,6 +3,33 @@ const { emitToUser, emitToFarmer, emitToAdmins } = require("../sockets/emitters"
 const User = require("../models/User");
 const emailService = require("./emailService");
 
+// Stable event-key prefixes used for deduplication. A notification is only
+// created when no existing record matches the same recipient + eventKey.
+const EVENT_KEY_PREFIXES = {
+  orderPlaced: "order:placed",
+  orderStatus: "order:status",
+  newOrderFarmer: "order:new-farmer",
+  newOrderAdmin: "order:new-admin",
+  newOfferAdmin: "offer:new-admin",
+  offerApproved: "offer:approved",
+  offerRejected: "offer:rejected",
+  offerDeactivated: "offer:deactivated",
+  offerCreatedByAdmin: "offer:created-admin",
+  offerUpdatedByAdmin: "offer:updated-admin",
+  newProductAdmin: "product:new-admin",
+  productDeletedAdmin: "product:deleted-admin",
+  stockAlert: "product:stock-alert",
+  newReviewAdmin: "review:new-admin",
+  newMessage: "message:new",
+  newContactAdmin: "contact:new-admin",
+  newFarmerAdmin: "farmer:new-admin",
+  farmerStatusAdmin: "farmer:status-admin",
+  farmerVerifiedAdmin: "farmer:verified-admin",
+  farmerRejectedAdmin: "farmer:rejected-admin",
+  customerRegisteredAdmin: "customer:registered-admin",
+  backInStock: "product:back-in-stock",
+};
+
 async function createNotification({
   userId,
   type,
@@ -14,17 +41,19 @@ async function createNotification({
   resourceId,
   orderNumber,
   status,
+  icon,
+  priority = "normal",
+  actionUrl,
+  eventKey,
 }) {
   try {
     // Prevent duplicate notifications for the same event and recipient
-    const existing = await Notification.findOne({
-      user: userId,
-      type,
-      category,
-      title,
-      ...(orderId ? { orderId } : {}),
-      ...(resourceId ? { resourceId } : {}),
-    });
+    const dedupQuery = { user: userId, type, category };
+    if (eventKey) dedupQuery.eventKey = eventKey;
+    else if (orderId) dedupQuery.orderId = orderId;
+    else if (resourceId) dedupQuery.resourceId = resourceId;
+
+    const existing = await Notification.findOne(dedupQuery);
     if (existing) return existing;
 
     const n = await Notification.create({
@@ -33,9 +62,13 @@ async function createNotification({
       category,
       title,
       message,
+      icon,
+      priority,
       orderId,
       resourceType,
       resourceId,
+      actionUrl,
+      eventKey,
     });
     let user;
     try { user = await User.findById(userId); } catch (e) { user = null; }
@@ -67,4 +100,4 @@ async function createNotification({
   }
 }
 
-module.exports = { createNotification };
+module.exports = { createNotification, EVENT_KEY_PREFIXES };

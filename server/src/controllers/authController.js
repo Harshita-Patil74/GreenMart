@@ -5,6 +5,7 @@ const { signToken, randomToken, hashToken } = require("../utils/tokens");
 const { sendEmail } = require("../services/emailService");
 const env = require("../config/env");
 const { passwordValidationMessage } = require("../utils/authValidation");
+const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 
 async function authUserPayload(user) {
   const payload = { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar || "" };
@@ -43,6 +44,24 @@ exports.register = async (req,res) => {
   sendEmail("welcome", user.email, user).catch((error) => {
     console.warn("Welcome email was not delivered:", error?.code || "EMAIL_ERROR");
   });
+  // Notify all admins about new customer registration
+  if (role === "customer") {
+    try {
+      const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).select("_id");
+      await Promise.all(admins.map((admin) => createNotification({
+        userId: admin._id,
+        type: "customerRegisteredAdmin",
+        category: "farmers",
+        title: "New customer registered",
+        message: `A new customer has registered on GreenMart.`,
+        resourceType: "User",
+        resourceId: user._id,
+        eventKey: `${EVENT_KEY_PREFIXES.customerRegisteredAdmin}:${user._id}`,
+      })));
+    } catch (notifyError) {
+      console.warn("Customer registration notification failed:", notifyError?.message);
+    }
+  }
   res.json({ token, user: await authUserPayload(user) });
 };
 
