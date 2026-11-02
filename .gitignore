@@ -12,3 +12,19 @@ coverage/
 *.timestamp-*.mjs
 .DS_Store
 tools/
+
+## Local invoice PDF debugging scripts
+/server/render_c.js
+/server/render_exact.js
+/server/render_final.js
+/server/render_now.js
+/server/render_png.js
+/server/render_ref.js
+/server/test_ref.js
+
+## Local invoice and migration verification artifacts
+/server/invoice-verification/
+/server/scripts/image-migration-backup.json
+/server/scripts/migrateImagesToCloudinary.js
+/server/tests/mockcheck.test.js
+/AdminOrders_previous.jsx

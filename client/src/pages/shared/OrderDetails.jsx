@@ -6,23 +6,56 @@ import BackButton from "../../components/common/BackButton.jsx";
 import Button from "../../components/common/Button.jsx";
 import OrderStepper from "../../components/orders/OrderStepper.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
+import { Download } from "lucide-react";
+import toast from "react-hot-toast";
+import { useSelector } from "react-redux";
 
 export default function OrderDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
   const [order, setOrder] = useState(null);
   const [error, setError] = useState(null);
+  const [downloading, setDownloading] = useState(false);
   const load = () => { setError(null); orderApi.get(id).then((r) => setOrder(r.data)).catch((e) => setError(e?.message || "Failed")); };
   useEffect(load, [id]);
   useEffect(() => subscribeOrderStatus((updated) => {
     if (String(updated?._id) === String(id)) setOrder(updated);
   }), [id]);
+  const downloadInvoice = async () => {
+    if (!order) return;
+    setDownloading(true);
+    try {
+      const res = await orderApi.downloadInvoice(order._id || order.orderNumber || id);
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const disposition = res.headers?.["content-disposition"] || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1];
+      a.href = url;
+      a.download = filename || `GreenMart-Invoice-${order.invoiceNumber || order.orderNumber || order._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Invoice downloaded");
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to download invoice");
+    } finally {
+      setDownloading(false);
+    }
+  };
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!order) return <div>Loading...</div>;
   return (
     <div>
       <BackButton fallback="/customer/orders" />
-      <h2 className="text-2xl font-heading mb-2">Order {order.orderNumber}</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-heading">Order {order.orderNumber}</h2>
+        <div className="flex flex-wrap gap-2">
+          {(user?.role === "customer" || user?.role === "admin") && <Button onClick={downloadInvoice} disabled={downloading} className="flex items-center gap-1"><Download className="h-4 w-4" /> {downloading ? "Downloading..." : "Download Invoice"}</Button>}
+        </div>
+      </div>
       <OrderStepper history={order.statusHistory || []} status={order.status} />
       <div className="bg-card border border-border rounded-card p-4 mb-4">
         {order.items.map((it, i) => <div key={i} className="flex flex-wrap justify-between gap-2 border-b border-gray-100 py-2 text-sm">

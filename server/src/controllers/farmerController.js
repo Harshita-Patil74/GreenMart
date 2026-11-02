@@ -4,11 +4,15 @@ const { asyncHandler } = require("../utils/asyncHandler");
 const { haversine } = require("../utils/haversine");
 
 exports.list = asyncHandler(async (req,res) => {
-  const profiles = await FarmerProfile.find().populate("user","name email avatar role");
+  const profiles = await FarmerProfile.find()
+    .select("user farmName category description address photo")
+    .populate("user", "_id avatar");
   res.json(profiles);
 });
 exports.get = asyncHandler(async (req,res) => {
-  const p = await FarmerProfile.findOne({ user: req.params.id }).populate("user","name email avatar");
+  const p = await FarmerProfile.findOne({ user: req.params.id })
+    .select("user farmName address photo location certification.verifiedByAdmin")
+    .populate("user", "_id avatar");
   res.json(p);
 });
 exports.updateLocation = asyncHandler(async (req,res) => {
@@ -24,4 +28,31 @@ exports.updateMe = asyncHandler(async (req,res) => {
   const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, allowed, { new: true, upsert: true, runValidators: true });
   res.json(p);
 });
-module.exports = exports;
+exports.getProfile = asyncHandler(async (req,res) => {
+  const p = await FarmerProfile.findOne({ user: req.user._id }).populate("user","name email avatar");
+  if (!p) return res.status(404).json({ message: "Profile not found" });
+  res.json(p);
+});
+exports.updateProfile = asyncHandler(async (req,res) => {
+  const allowed = ["fullName","mobile","dateOfBirth","residentialAddress","village","district","state","pinCode","farmName","farmAddress","farmVillage","farmDistrict","farmState","farmPinCode","farmCategory","totalFarmArea","farmDescription","surveyNumber","landOwnershipType","totalLandArea","cultivatedArea","landAreaUnit","landVillage","landTaluk","landDistrict","landState","landPinCode","landDescription"];
+  const update = {};
+  for (const f of allowed) if (req.body[f] !== undefined) update[f] = req.body[f];
+  const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, update, { new: true, upsert: true, runValidators: true }).populate("user","name email avatar");
+  res.json(p);
+});
+
+exports.uploadLandDocument = async (req,res) => { if (!req.file) return res.status(400).json({ message: 'No file' }); const p = await FarmerProfile.findOne({ user: req.user._id }); if (!p) return res.status(404).json({ message: 'Profile not found' }); p.landDocument = { originalName: req.file.originalname, filename: req.file.filename, mimetype: req.file.mimetype, size: req.file.size, uploadedAt: new Date() }; await p.save(); res.json(p); };
+exports.removeLandDocument = async (req,res) => { const p = await FarmerProfile.findOne({ user: req.user._id }); if (!p) return res.status(404).json({ message: 'Profile not found' }); p.landDocument = undefined; await p.save(); res.json(p); };
+const path = require("path");
+const fs = require("fs");
+exports.downloadLandDocument = asyncHandler(async (req,res) => {
+  const p = await FarmerProfile.findOne({ user: req.user._id });
+  if (!p || !p.landDocument?.filename) return res.status(404).json({ message: "Document not found" });
+  const base = path.resolve(__dirname, "..", "..", "private", "uploads", "land");
+  const filePath = path.resolve(base, p.landDocument.filename);
+  if (!filePath.startsWith(base + path.sep)) return res.status(400).json({ message: "Invalid file" });
+  if (!fs.existsSync(filePath)) return res.status(404).json({ message: "Document not found" });
+  res.type(p.landDocument.mimetype || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename="${p.landDocument.originalName || p.landDocument.filename}"`);
+  res.sendFile(filePath);
+});

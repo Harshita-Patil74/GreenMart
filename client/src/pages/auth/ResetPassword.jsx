@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import BackButton from "../../components/common/BackButton.jsx";
 import Button from "../../components/common/Button.jsx";
+import Logo from "../../components/common/Logo.jsx";
 import PasswordInput from "../../components/common/PasswordInput.jsx";
 import authApi from "../../api/authApi";
 import { passwordValidationMessage } from "../../utils/authValidation.js";
@@ -10,7 +11,8 @@ import { passwordValidationMessage } from "../../utils/authValidation.js";
 export default function ResetPassword() {
   const { token: routeToken } = useParams();
   const [searchParams] = useSearchParams();
-  const token = routeToken || searchParams.get("token") || "";
+  const location = useLocation();
+  const token = routeToken || new URLSearchParams(location.hash.slice(1)).get("token") || searchParams.get("token") || "";
   const email = searchParams.get("email") || "";
   const navigate = useNavigate();
   const [password, setPassword] = useState("");

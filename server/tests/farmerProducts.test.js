@@ -1,3 +1,7 @@
+jest.mock("../src/services/cloudinaryUpload", () => ({ uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/1793626981530-0.2128969748416666.png") }));
+
+jest.resetModules();
+
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
@@ -63,9 +67,9 @@ beforeAll(async () => {
   ]);
   const customerId = customer._id;
   const products = await Product.create([
-    { name: "Farmer One crop", category: "Vegetables", price: 2, farmer: farmer._id },
-    { name: "Farmer Two crop", category: "Vegetables", price: 3, farmer: otherFarmer._id },
-    { name: "Unavailable crop", category: "Vegetables", price: 4, farmer: otherFarmer._id, status: "Inactive" },
+    { name: "Farmer One crop", description: "Fresh seasonal crop from Farmer One", category: "Vegetables", price: 2, farmer: farmer._id },
+    { name: "Farmer Two crop", description: "Fresh seasonal crop from Farmer Two", category: "Vegetables", price: 3, farmer: otherFarmer._id },
+    { name: "Unavailable crop", description: "Currently unavailable seasonal crop", category: "Vegetables", price: 4, farmer: otherFarmer._id, status: "Inactive" },
   ]);
   productId = products[0]._id;
   const order = await Order.create({
@@ -187,6 +191,7 @@ describe("Product availability and farmer data", () => {
       .set("Authorization", `Bearer ${farmerToken}`)
       .field("name", "Uploaded image crop")
       .field("category", "Vegetables")
+      .field("description", "A crop with an uploaded image")
       .field("price", "12")
       .field("unit", "kg")
       .field("stock", "5")
@@ -198,11 +203,10 @@ describe("Product availability and farmer data", () => {
     uploadedImagePath = response.body.images?.[0];
     expect(response.status).toBe(201);
     expect(response.body.images).toHaveLength(1);
-    expect(response.body.images[0]).toMatch(/^\/uploads\/products\//);
-
-    const servedImage = await request(app).get(uploadedImagePath);
-    expect(servedImage.status).toBe(200);
-    expect(servedImage.headers["content-type"]).toMatch(/^image\/png/);
+    expect(response.body.images[0]).toMatch(/^https:\/\/res\.cloudinary\.com\//);
+    const product = await Product.findById(response.body._id);
+    expect(product.images).toHaveLength(1);
+    expect(product.images[0]).toBe(response.body.images[0]);
   });
 
   it("rejects unsupported product image types with a client error", async () => {
@@ -211,6 +215,7 @@ describe("Product availability and farmer data", () => {
       .set("Authorization", `Bearer ${farmerToken}`)
       .field("name", "Invalid image crop")
       .field("category", "Vegetables")
+      .field("description", "A crop with an invalid image type")
       .field("price", "12")
       .attach("images", Buffer.from("<svg></svg>"), {
         filename: "uploaded-crop.svg",
@@ -276,5 +281,88 @@ describe("Product availability and farmer data", () => {
 
     expect(details.status).toBe(403);
     expect(update.status).toBe(403);
+  });
+
+  describe("Stock update regression tests", () => {
+    it("allows stock-only update on a legacy product with missing description", async () => {
+      const created = await Product.create({
+        name: "Legacy crop",
+        description: "temp",
+        category: "Vegetables",
+        price: 5,
+        farmer: farmerId,
+      });
+      // Simulate legacy data: null description already in DB (bypass Mongoose validation)
+      await Product.collection.updateOne({ _id: created._id }, { $set: { description: null } });
+      const hydrated = await Product.findById(created._id);
+      expect(hydrated.description).toBeNull();
+
+      const response = await request(app)
+        .put(`/api/products/${created._id}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .field("stock", "10");
+
+      expect(response.status).toBe(200);
+      expect(response.body.stock).toBe(10);
+    });
+
+    it("keeps product description unchanged during stock updates", async () => {
+      const desc = "Original fresh crop description.";
+      const p = await Product.create({
+        name: "Desc crop",
+        description: desc,
+        category: "Vegetables",
+        price: 5,
+        farmer: farmerId,
+      });
+
+      const response = await request(app)
+        .put(`/api/products/${p._id}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .field("stock", "20");
+
+      expect(response.status).toBe(200);
+      expect(response.body.description).toBe(desc);
+    });
+
+    it("rejects negative stock values", async () => {
+      const response = await request(app)
+        .put(`/api/products/${productId}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .field("stock", "-5");
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toMatch(/stock/i);
+    });
+
+    it("rejects non-numeric stock values", async () => {
+      const response = await request(app)
+        .put(`/api/products/${productId}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .field("stock", "not-a-number");
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toMatch(/stock/i);
+    });
+
+    it("prevents unauthorized user from updating stock", async () => {
+      const response = await request(app)
+        .put(`/api/products/${productId}`)
+        .set("Authorization", `Bearer ${outsiderFarmerToken}`)
+        .field("stock", "10");
+
+      expect(response.status).toBe(403);
+    });
+
+    it("requires description for normal product creation", async () => {
+      const response = await request(app)
+        .post("/api/products")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .field("name", "No desc crop")
+        .field("category", "Vegetables")
+        .field("price", "5");
+
+      expect(response.status).toBe(400);
+    });
   });
 });

@@ -80,7 +80,7 @@ export default function AdminDashboard() {
   if (loading && !stats) return <div className="text-sm text-gray-500">Loading admin dashboard...</div>;
 
   return (
-    <div className="space-y-4 pb-10">
+    <div className="space-y-4 pb-8">
       <header><h1 className="text-xl font-heading font-bold text-gray-900">Admin Dashboard</h1><p className="mt-1 text-xs text-gray-500">Overview of your platform’s performance and key metrics.</p></header>
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error} <button onClick={load} className="font-semibold underline">Retry</button></p>}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

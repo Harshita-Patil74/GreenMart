@@ -8,6 +8,7 @@ const { app } = require("./setup");
 const { connectDB, disconnectDB } = require("./db");
 const { createAdminAccount } = require("../src/seed/createAdmin");
 const env = require("../src/config/env");
+const { hashToken } = require("../src/utils/tokens");
 
 const BASE = "/api/auth";
 
@@ -108,7 +109,22 @@ describe("Auth workflow", () => {
   it("rejects duplicate email registration", async () => {
     const res = await request(app).post(`${BASE}/register`).send(customerPayload);
     expect(res.status).toBe(400);
-    expect(res.body.message).toBe("Email in use");
+    expect(res.body.message).toBe("Email is already registered.");
+  });
+
+  it("registers lowercase email addresses with valid non-Gmail domains", async () => {
+    const response = await request(app)
+      .post(`${BASE}/register`)
+      .send({
+        name: "Outlook Customer",
+        email: "outlook.customer@outlook.com",
+        password: "StrongPass1!",
+        role: "customer",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.user.email).toBe("outlook.customer@outlook.com");
+    expect(response.body.user.role).toBe("customer");
   });
 
   it("logs in the customer", async () => {
@@ -154,19 +170,59 @@ describe("Auth workflow", () => {
     expect(res.status).toBe(401);
   });
 
-  it("trims the email before registration and login", async () => {
+  it("uses a generic forgot-password response and a single-use hashed reset token", async () => {
+    const email = "reset.workflow@gmail.com";
+    await request(app).post(`${BASE}/register`).send({
+      name: "Reset Workflow",
+      email,
+      password: "ResetFlow1!",
+      role: "customer",
+    });
+
+    const forgot = await request(app).post(`${BASE}/forgot-password`).send({ email: email.toUpperCase() });
+    expect(forgot.status).toBe(200);
+    expect(forgot.body.message).toMatch(/if an account exists/i);
+    expect(forgot.body).not.toHaveProperty("token");
+
+    const User = require("../src/models/User");
+    const user = await User.findOne({ email });
+    expect(user.resetTokenHash).toBeTruthy();
+    expect(user.resetTokenHash).not.toBe("one-time-reset-token");
+    expect(user.resetTokenExpiry.getTime()).toBeGreaterThan(Date.now());
+
+    user.resetTokenHash = await hashToken("one-time-reset-token");
+    user.resetTokenExpiry = new Date(Date.now() + 60_000);
+    await user.save();
+    const reset = await request(app).post(`${BASE}/reset-password`).send({
+      email: email.toUpperCase(),
+      token: "one-time-reset-token",
+      password: "ResetAgain1!",
+    });
+    expect(reset.status).toBe(200);
+    expect(reset.body).not.toHaveProperty("passwordHash");
+    expect(reset.body).not.toHaveProperty("token");
+    expect((await User.findOne({ email })).resetTokenHash).toBeUndefined();
+
+    const replay = await request(app).post(`${BASE}/reset-password`).send({
+      email,
+      token: "one-time-reset-token",
+      password: "ResetAgain1!",
+    });
+    expect(replay.status).toBe(400);
+  });
+
+  it("rejects email whitespace during registration and login", async () => {
     const payload = {
       ...customerPayload,
-      email: "  trimmed.user@gmail.com  ",
+      email: " trimmed.user@gmail.com",
     };
     const created = await request(app).post(`${BASE}/register`).send(payload);
-    expect(created.status).toBe(200);
-    expect(created.body.user.email).toBe("trimmed.user@gmail.com");
+    expect(created.status).toBe(400);
 
     const loginResponse = await request(app)
       .post(`${BASE}/login`)
-      .send({ email: " trimmed.user@gmail.com ", password: payload.password });
-    expect(loginResponse.status).toBe(200);
+      .send({ email: " trimmed.user@gmail.com", password: payload.password });
+    expect(loginResponse.status).toBe(400);
   });
 
   it("preserves configured demo-account credentials", async () => {
@@ -182,19 +238,25 @@ describe("Auth workflow", () => {
 
     const response = await request(app)
       .post(`${BASE}/login`)
-      .send({ email: ` ${demoEmail} `, password: "demo-password" });
+      .send({ email: demoEmail, password: "demo-password" });
     expect(response.status).toBe(200);
     expect(response.body.user.email).toBe(demoEmail);
   });
 
   it.each([
+    [".roy@gmail.com", "StrongPass1!"],
+    ["roy.@gmail.com", "StrongPass1!"],
+    ["roy..sharma@gmail.com", "StrongPass1!"],
+    ["roy@gmail", "StrongPass1!"],
+    ["roy sharma@gmail.com", "StrongPass1!"],
     ["Uppercase@gmail.com", "StrongPass1!"],
-    ["valid@outlook.com", "StrongPass1!"],
     ["valid@gmail.com", "weakpass"],
     ["valid@gmail.com", "lowercase1!"],
     ["valid@gmail.com", "UPPERCASE1!"],
     ["valid@gmail.com", "NoNumber!!"],
     ["valid@gmail.com", "NoSpecial1"],
+    ["valid@gmail.com", "Green Mart@2026#"],
+    ["valid@gmail.com", "GreenMart?2026"],
   ])("rejects registration with invalid credentials (%s)", async (email, password) => {
     const response = await request(app)
       .post(`${BASE}/register`)
@@ -219,6 +281,12 @@ describe("Auth workflow", () => {
     const malformedEmail = await request(app)
       .post(`${BASE}/login`)
       .send({ email: "not-an-email", password: customerPayload.password });
+    const invalidLocalPart = await request(app)
+      .post(`${BASE}/login`)
+      .send({ email: "roy..sharma@gmail.com", password: customerPayload.password });
+    const passwordWithSpaces = await request(app)
+      .post(`${BASE}/login`)
+      .send({ email: customerPayload.email, password: "Strong Pass1!" });
     const weakPassword = await request(app)
       .post(`${BASE}/login`)
       .send({ email: customerPayload.email, password: "weakpass" });
@@ -226,6 +294,8 @@ describe("Auth workflow", () => {
     expect(validAdmin.body.user.role).toBe("admin");
     expect(uppercaseEmail.status).toBe(400);
     expect(malformedEmail.status).toBe(400);
+    expect(invalidLocalPart.status).toBe(400);
+    expect(passwordWithSpaces.status).toBe(400);
     expect(weakPassword.status).toBe(400);
   });
 
@@ -311,5 +381,46 @@ describe("Auth workflow", () => {
       .rejects.toThrow(/lowercase email/i);
     await expect(createAdminAccount("valid.admin@gmail.com", "weakpass"))
       .rejects.toThrow(/ADMIN_PASSWORD/i);
+  });
+
+  it("blocks protected API access until a farmer account is activated", async () => {
+    const User = require("../src/models/User");
+    const inactiveFarmer = await User.create({
+      name: "Inactive Farmer",
+      email: "inactive.farmer@gmail.com",
+      passwordHash: await bcrypt.hash("UnusableRandom1!", 10),
+      role: "farmer",
+      accountActivated: false,
+    });
+    const token = jwt.sign({ id: inactiveFarmer._id }, env.jwtSecret, { expiresIn: "1h" });
+    const response = await request(app)
+      .get(`${BASE}/me`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toMatch(/activation is required/i);
+  });
+
+  it("omits secret hashes from the authenticated user response", async () => {
+    const User = require("../src/models/User");
+    const user = await User.create({
+      name: "Secret Fields User",
+      email: "secret.fields@gmail.com",
+      passwordHash: await bcrypt.hash("SecurePassword1!", 10),
+      role: "customer",
+      activationTokenHash: "activation-hash",
+      activationTokenExpiry: new Date(Date.now() + 60_000),
+      resetTokenHash: "reset-hash",
+      resetTokenExpiry: new Date(Date.now() + 60_000),
+    });
+    const token = jwt.sign({ id: user._id }, env.jwtSecret, { expiresIn: "1h" });
+    const response = await request(app)
+      .get(`${BASE}/me`)
+      .set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).not.toHaveProperty("passwordHash");
+    expect(response.body).not.toHaveProperty("activationTokenHash");
+    expect(response.body).not.toHaveProperty("resetTokenHash");
   });
 });

@@ -1,0 +1,11 @@
+const express = require("express");
+const router = express.Router();
+const c = require("../controllers/cropController");
+const { auth } = require("../middleware/auth");
+const { role } = require("../middleware/role");
+router.post("/", auth, role("farmer"), c.create);
+router.get("/", auth, role("farmer"), c.list);
+router.get("/:cropId", auth, role("farmer"), c.getOne);
+router.put("/:cropId", auth, role("farmer"), c.update);
+router.delete("/:cropId", auth, role("farmer"), c.remove);
+module.exports = router;

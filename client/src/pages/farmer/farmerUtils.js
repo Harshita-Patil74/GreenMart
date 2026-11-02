@@ -8,7 +8,9 @@ export const getOwnedItems = (order, farmerId) =>
 
 export const getOrderAmount = (order, farmerId) =>
   getOwnedItems(order, farmerId).reduce(
-    (total, item) => total + Number(item.price || 0) * Number(item.quantity || 0),
+    (total, item) => total + Number(
+      item.offerSnapshot?.finalLineTotal ?? Number(item.price || 0) * Number(item.quantity || 0)
+    ),
     0
   );
 

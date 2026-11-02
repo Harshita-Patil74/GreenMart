@@ -4,10 +4,12 @@ import orderApi from "../../api/orderApi";
 import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, getStatusClasses, unwrapList } from "./farmerUtils";
 import { useSelector } from "react-redux";
 import { LoaderCircle, Search } from "lucide-react";
+import SearchBar from "../../components/common/SearchBar.jsx";
+
 const filters = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Delivery Failed", "Cancelled"];
 const nextActions = {
   "Order Placed": [{ status: "Packed", label: "Mark as Packed" }, { status: "Cancelled", label: "Cancel Order", confirm: "Cancel this order? This cannot be undone." }],
-  Packed: [{ status: "Out for Delivery", label: "Mark as Out for Delivery" }, { status: "Cancelled", label: "Cancel Order", confirm: "Cancel this order? This cannot be undone." }],
+  Packed: [{ status: "Out for Delivery", label: "Mark as Out for Delivery" }, { status: "Cancelled", label: "Cancel Order", confirm: "Cancel this order before delivery? This cannot be undone." }],
   "Out for Delivery": [
     { status: "Delivered", label: "Mark as Delivered", confirm: "Confirm that this order was successfully delivered." },
     { status: "Delivery Failed", label: "Mark as Delivery Failed" },
@@ -62,7 +64,7 @@ export default function FarmerOrders() {
     setLoading(true);
     setError("");
     try {
-      const response = await orderApi.farmer();
+      const response = await orderApi.farmer({ search });
       setOrders(unwrapList(response.data));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "We couldn't load your orders.");
@@ -71,7 +73,7 @@ export default function FarmerOrders() {
     }
   };
 
-  useEffect(() => { loadOrders(); }, []);
+  useEffect(() => { loadOrders(); }, [search]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const ownItems = getOwnedItems(order, farmerId);
@@ -106,10 +108,7 @@ export default function FarmerOrders() {
 
       <div className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
         <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F0] p-3">
-          <label className="relative min-w-[180px] flex-1">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#91A09B]" />
-            <input aria-label="Search orders" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search orders…" className="h-8 w-full rounded-md border border-[#DDE6E2] pl-8 pr-2 text-xs outline-none focus:border-[#179361]" />
-          </label>
+          <SearchBar value={search} onChange={(val) => setSearch(val)} placeholder="Search orders by ID, customer, product, or status" ariaLabel="Search orders" />
           <label className="flex items-center gap-1 text-[10px] text-[#74827E]">From <input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
           <label className="flex items-center gap-1 text-[10px] text-[#74827E]">To <input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
         </div>
@@ -157,6 +156,7 @@ export default function FarmerOrders() {
                           <ul className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-[#71817D]">
                             {items.map((item) => <li key={item._id || item.product}>
                               {item.name || item.product?.name || "Product"} · {item.quantity || 0} × {formatCurrency(item.price)}
+                              {item.offerSnapshot && <span className="ml-1 text-emerald-700">({item.offerSnapshot.offerTitle} · charged {formatCurrency(item.offerSnapshot.finalLineTotal)})</span>}
                               <span className="ml-2 font-semibold">{item.fulfillmentStatus || order.status}</span>
                               {item.deliveryFailureReason && <span className="ml-1 text-red-700">— {item.deliveryFailureReason}</span>}
                             </li>)}

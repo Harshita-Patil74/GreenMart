@@ -7,7 +7,7 @@ import authReducer from "../../features/auth/authSlice.js";
 import ProtectedRoute, { RoleRoute } from "./ProtectedRoute.jsx";
 
 const dashboardByRole = {
-  customer: "/customer/dashboard",
+  customer: "/",
   farmer: "/farmer/dashboard",
   admin: "/admin/dashboard",
 };
@@ -34,7 +34,7 @@ function renderAccess(role, path, allowedRoles, { token = "valid-token", loading
               <Route path={path} element={<p>Protected page</p>} />
             </Route>
           </Route>
-          <Route path="/customer/dashboard" element={<p>Customer dashboard</p>} />
+          <Route path="/" element={<p>Customer dashboard</p>} />
           <Route path="/farmer/dashboard" element={<p>Farmer dashboard</p>} />
           <Route path="/admin/dashboard" element={<p>Admin dashboard</p>} />
           <Route path="/login" element={<p>Login page</p>} />
@@ -53,7 +53,7 @@ describe("RoleRoute", () => {
   });
 
   it.each([
-    ["customer", "/customer/dashboard", ["customer", "farmer", "admin"], true],
+    ["customer", "/", ["customer", "farmer", "admin"], true],
     ["farmer", "/customer/dashboard", ["customer", "farmer", "admin"], true],
     ["admin", "/customer/dashboard", ["customer", "farmer", "admin"], true],
     ["customer", "/farmer/dashboard", ["farmer", "admin"], false],
@@ -75,7 +75,11 @@ describe("RoleRoute", () => {
       expect(screen.getByText("Protected page")).toBeInTheDocument();
       return;
     }
-    expect(screen.queryByText("Protected page")).not.toBeInTheDocument();
+    if (role === "customer") {
+      // Customers are redirected to home page
+      expect(screen.queryByText("Protected page")).not.toBeInTheDocument();
+      return;
+    }
     expect(screen.getByText(`${role[0].toUpperCase()}${role.slice(1)} dashboard`)).toBeInTheDocument();
   });
 

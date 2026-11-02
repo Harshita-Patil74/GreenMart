@@ -10,13 +10,15 @@ const UserSchema = new mongoose.Schema({
   avatar: String,
   emailNotifications: { type: Boolean, default: true },
   status: { type: String, default: "active" },
+  accountActivated: { type: Boolean, default: true },
+  activationTokenHash: String,
+  activationTokenExpiry: Date,
   resetTokenHash: String,
   resetTokenExpiry: Date,
   isDemo: { type: Boolean, default: false } }, { timestamps: true });
 
 UserSchema.methods.comparePassword = function (p) { return bcrypt.compare(p, this.passwordHash); };
 module.exports = mongoose.model("User", UserSchema);
-
 
 
 

@@ -22,13 +22,19 @@
     color: #1F2937;
     background: #F3F7F4;
     font-size: 18px;
+    max-width: 100%;
+  }
+  #root {
+    min-height: 100vh;
+    max-width: 100%;
   }
   h1,h2,h3,h4 { font-family: "Poppins", sans-serif; color: #0F3D2E; }
+  input, select, textarea, button { max-width: 100%; }
 }
 
 @layer components {
   .gm-container {
-    @apply max-w-content mx-auto px-5 sm:px-6 lg:px-8;
+    @apply mx-auto max-w-content px-3 sm:px-6 lg:px-8;
   }
   .gm-card {
     @apply bg-white rounded-[14px] border border-[#EEF1EF] shadow-card;

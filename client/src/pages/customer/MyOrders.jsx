@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Search } from "lucide-react";
 import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
+import SearchBar from "../../components/common/SearchBar.jsx";
+import ErrorState from "../../components/common/ErrorState.jsx";
 import { formatCurrency } from "../../utils/constants.js";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
+import toast from "react-hot-toast";
+import { Search, X, Download, ArrowRight } from "lucide-react";
 
 const statuses = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Cancelled"];
 const statusAliases = {
@@ -20,19 +23,44 @@ export default function MyOrders() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [downloading, setDownloading] = useState({});
+
+  const downloadInvoice = async (order) => {
+    const id = order._id || order.orderNumber;
+    setDownloading((d) => ({ ...d, [order._id]: true }));
+    try {
+      const res = await orderApi.downloadInvoice(id);
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const disposition = res.headers?.["content-disposition"] || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1];
+      a.href = url;
+      a.download = filename || `GreenMart-Invoice-${order.invoiceNumber || order.orderNumber || order._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Invoice downloaded");
+    } catch (e) {
+      toast.error(e?.response?.data?.message || "Failed to download invoice");
+    } finally {
+      setDownloading((d) => ({ ...d, [order._id]: false }));
+    }
+  };
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await orderApi.mine();
+      const { data } = await orderApi.mine({ search });
       setOrders(Array.isArray(data) ? data : []);
     } catch (requestError) {
       setError(requestError?.message || "Couldn't load your orders.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
   useEffect(() => subscribeOrderStatus((updated) => {
@@ -67,21 +95,43 @@ export default function MyOrders() {
         ))}
       </div>
       <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
-        <label className="relative min-w-[190px] flex-1">
-          <span className="sr-only">Search orders</span>
-          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search order or product" className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-3 text-xs focus:border-primary focus:outline-none" />
+        <label className="relative min-w-[180px] flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search orders"
+            placeholder="Search orders by ID, product, or status"
+            className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-3 text-xs focus:border-primary focus:outline-none"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full text-gray-400 hover:text-gray-600"
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </label>
         <label className="flex items-center gap-2 text-[10px] text-gray-500">From<input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
         <label className="flex items-center gap-2 text-[10px] text-gray-500">To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
       </div>
-
       <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-xs">
-            <thead><tr className="border-b border-gray-100 bg-gray-50 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-              <th className="px-4 py-3">Order ID</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Products</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actions</th>
-            </tr></thead>
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3">Order ID</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Products</th>
+                <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.map((order) => {
                 const items = order.items || [];
@@ -108,13 +158,25 @@ export default function MyOrders() {
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{formatCurrency(order.total || 0)}</td>
                     <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold ${badge}`}>{order.status}</span></td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <Link to={`/track-order/${order._id}`} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">Track <ArrowRight className="h-3 w-3" /></Link>
+                      <button onClick={() => downloadInvoice(order)} disabled={downloading[order._id]} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline disabled:opacity-50">
+                        <Download className="h-3 w-3" /> {downloading[order._id] ? "Downloading..." : "Download Invoice"}
+                      </button>
+                      <Link to={`/track-order/${order._id}`} className="ml-3 inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+                        <ArrowRight className="h-3 w-3" /> Track
+                      </Link>
                       <Link to={`/orders/${order._id}`} className="ml-3 font-medium text-gray-500 hover:text-primary">Details</Link>
                     </td>
                   </tr>
                 );
               })}
-              {filteredOrders.length === 0 && <tr><td colSpan="6" className="px-4 py-10 text-center text-xs text-gray-500">{orders.length ? "No orders match these filters." : "You haven't placed any orders yet."} {orders.length === 0 && <Link to="/shop" className="font-semibold text-primary">Browse products</Link>}</td></tr>}
+              {filteredOrders.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="px-4 py-10 text-center text-xs text-gray-500">
+                    {orders.length ? "No orders match these filters." : "You haven't placed any orders yet."}
+                    {orders.length === 0 && <Link to="/shop" className="font-semibold text-primary">Browse products</Link>}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -122,4 +184,3 @@ export default function MyOrders() {
     </div>
   );
 }
-

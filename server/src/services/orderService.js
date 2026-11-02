@@ -2,7 +2,9 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const generateOrderNumber = require("../utils/generateOrderNumber");
+const { generateInvoiceNumber } = require("../utils/invoiceNumbers");
 const { STATUS_FLOW, FARMER_TRANSITIONS } = require("../constants/orderStatus");
+const { getActiveOffers, calculateOffer, money } = require("./offerService");
 
 const DELIVERY_FAILED = "Delivery Failed";
 
@@ -22,7 +24,7 @@ function getOverallStatus(items, fallback) {
   );
 }
 
-async function createOrder(userId, { address, coordinates, paymentMethod }) {
+async function createOrder(userId, { address, coordinates, paymentMethod, paymentConfirmed }) {
   const cart = await Cart.findOne({ user: userId }).populate("items.product");
   if (!cart || !cart.items.length) throw new Error("Cart empty");
   for (const it of cart.items) {
@@ -30,25 +32,56 @@ async function createOrder(userId, { address, coordinates, paymentMethod }) {
     if (it.product.stock < it.quantity) throw new Error("Insufficient stock");
   }
   const placedAt = new Date();
-  const items = cart.items.map(it => ({
-    product: it.product._id,
-    name: it.product.name,
-    price: it.product.price,
-    quantity: it.quantity,
-    farmer: it.product.farmer,
-    fulfillmentStatus: "Order Placed",
-    fulfillmentHistory: [{ status: "Order Placed", at: placedAt }],
-  }));
+  const invoiceNumber = await generateInvoiceNumber(placedAt);
+  const activeOffers = await getActiveOffers(cart.items.map((item) => item.product._id), placedAt);
+  const cartSubtotal = cart.items.reduce((sum, item) =>
+    sum + Number(item.product.price) * Number(item.quantity), 0);
+  const items = cart.items.map((it) => {
+    const appliedOffer = calculateOffer(it.product, it.quantity, activeOffers, cartSubtotal);
+    return {
+      product: it.product._id,
+      name: it.product.name,
+      price: it.product.price,
+      quantity: it.quantity,
+      image: it.product.images?.[0],
+      farmer: it.product.farmer,
+      ...(appliedOffer ? {
+        offerSnapshot: {
+          offerId: appliedOffer.offer._id,
+          offerTitle: appliedOffer.offer.title,
+          offerType: appliedOffer.offer.type,
+          discountType: appliedOffer.offer.discountType,
+          discountValue: appliedOffer.offer.discountValue,
+          originalUnitPrice: Number(it.product.price),
+          appliedDiscount: appliedOffer.discount,
+          finalUnitPrice: appliedOffer.finalUnitPrice,
+          finalLineTotal: appliedOffer.finalLineTotal,
+        },
+      } : {}),
+      fulfillmentStatus: "Order Placed",
+      fulfillmentHistory: [{ status: "Order Placed", at: placedAt }],
+    };
+  });
   const subtotal = items.reduce((s,i)=>s+i.price*i.quantity,0);
+  const discount = money(items.reduce((sum, item) => sum + Number(item.offerSnapshot?.appliedDiscount || 0), 0));
   const setting = await require("../models/Setting").findOne();
   const deliveryCharge = setting ? setting.deliveryCharge : 30;
+  // Server-side payment status determination: never trust frontend-supplied paymentStatus
+  let paymentStatus = "Pending";
+  if (paymentMethod === "upi" || paymentMethod === "card") {
+    if (paymentConfirmed === true) paymentStatus = "Paid";
+  }
+  // COD always remains "Pending"
   const order = await Order.create({
     orderNumber: generateOrderNumber(),
+    invoiceNumber,
+    invoiceGeneratedAt: placedAt,
     user: userId,
-    items, address, coordinates, paymentMethod,
+    items, address, coordinates, paymentMethod, paymentStatus,
     status: "Order Placed",
     statusHistory: [{ status: "Order Placed", at: placedAt }],
-    subtotal, deliveryCharge, total: subtotal + deliveryCharge,
+    subtotal, discount, deliveryCharge,
+    total: discount > 0 ? money(subtotal - discount + deliveryCharge) : subtotal + deliveryCharge,
   });
   // reduce stock
   for (const it of cart.items) {

@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 const links = [
   { label: "Home", path: "/" },
   { label: "Shop", path: "/shop" },
+  { label: "Offers", path: "/shop?offers=true" },
+  { label: "About", path: "/about" },
   { label: "Farmers", path: "/farmers" },
   { label: "Contact", path: "/contact" },
 ];
@@ -13,9 +15,12 @@ export default function PublicNavigation({ onNavigate, className = "" }) {
   return (
     <nav aria-label="Main navigation" className={className}>
       {links.map(({ label, path }) => {
-        const active = path === "/"
-          ? location.pathname === path
-          : location.pathname === path || location.pathname.startsWith(`${path}/`);
+        const targetPath = path.split("?")[0];
+        const active = targetPath === "/shop" && path.includes("?")
+          ? location.pathname === "/shop" && new URLSearchParams(location.search).get("offers") === "true"
+          : targetPath === "/"
+          ? location.pathname === targetPath
+          : location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`);
         return (
           <Link
             key={path}

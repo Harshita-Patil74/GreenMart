@@ -1,22 +1,21 @@
-const GMAIL_EMAIL_PATTERN = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@gmail\.com$/;
-const DEMO_EMAIL_PATTERN = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@demo\.greenmart\.test$/;
-const LOGIN_EMAIL_PATTERN = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const EMAIL_PATTERN = /^[a-z](?:[a-z0-9]|\.(?=[a-z0-9]))*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const DEMO_EMAIL_PATTERN = /^[a-z](?:[a-z0-9]|\.(?=[a-z0-9]))*@demo\.greenmart\.test$/;
+const LOGIN_EMAIL_PATTERN = /^[a-z](?:[a-z0-9]|\.(?=[a-z0-9]))*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
 export function normalizeEmail(email) {
-  return email.trim();
+  return email.toLowerCase();
 }
 
 export function isRegistrationEmailValid(email) {
-  return GMAIL_EMAIL_PATTERN.test(normalizeEmail(email));
+  return EMAIL_PATTERN.test(email);
 }
 
 export function isLoginEmailValid(email) {
-  const normalized = normalizeEmail(email);
-  return LOGIN_EMAIL_PATTERN.test(normalized);
+  return EMAIL_PATTERN.test(email);
 }
 
 export function isLegacyDemoEmail(email) {
-  return DEMO_EMAIL_PATTERN.test(normalizeEmail(email));
+  return DEMO_EMAIL_PATTERN.test(email);
 }
 
 export function passwordRequirements(password) {
@@ -25,7 +24,8 @@ export function passwordRequirements(password) {
     { label: "One lowercase letter", valid: /[a-z]/.test(password) },
     { label: "One uppercase letter", valid: /[A-Z]/.test(password) },
     { label: "One number", valid: /\d/.test(password) },
-    { label: "One special character", valid: /[^A-Za-z0-9]/.test(password) },
+    { label: "One special character (@ # $ ! % & *)", valid: /[@#$!%&*]/.test(password) },
+    { label: "No spaces", valid: !/\s/.test(password) },
   ];
 }
 

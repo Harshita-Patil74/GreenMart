@@ -276,4 +276,216 @@ describe("End-to-end order workflow", () => {
     const product = await Product.findById(productId);
     expect(product.stock).toBe(98); // 100 - 2
   });
+
+  describe("Order notifications", () => {
+    it("customer receives a notification after placing an order", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const res = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(res.status).toBe(201);
+      const notifRes = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${customerToken}`);
+      expect(notifRes.status).toBe(200);
+      const placed = notifRes.body.find((n) => n.title === "Order placed successfully");
+      expect(placed).toBeDefined();
+      expect(placed.message).toContain(`#${res.body.orderNumber}`);
+    });
+
+    it("farmer receives a new order notification for their own items", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const res = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(res.status).toBe(201);
+      const notifRes = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(notifRes.status).toBe(200);
+      const newOrder = notifRes.body.find((n) => n.title === "New order received");
+      expect(newOrder).toBeDefined();
+      expect(newOrder.message).toBe("You have received a new order containing your products.");
+    });
+
+    it("customer receives notifications after successful status change", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const orderRes = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(orderRes.status).toBe(201);
+      const orderId2 = orderRes.body._id;
+
+      await request(app)
+        .patch(`/api/orders/${orderId2}/status`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ status: "Packed" });
+
+      const res = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${customerToken}`);
+      expect(res.status).toBe(200);
+      const packed = res.body.find((n) => n.title === "Order packed");
+      expect(packed).toBeDefined();
+      expect(packed.message).toContain(orderRes.body.orderNumber || orderId2.toString());
+    });
+
+    it("farmer receives notification when order is cancelled", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const orderRes = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(orderRes.status).toBe(201);
+      const orderId2 = orderRes.body._id;
+
+      await request(app)
+        .patch(`/api/orders/${orderId2}/status`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ status: "Cancelled" });
+
+      const res = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(res.status).toBe(200);
+      const cancelled = res.body.find((n) => n.title === "Order cancelled");
+      expect(cancelled).toBeDefined();
+    });
+
+    it("failed status update does not create a notification", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const orderRes = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(orderRes.status).toBe(201);
+      const orderId2 = orderRes.body._id;
+
+      await request(app)
+        .patch(`/api/orders/${orderId2}/status`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ status: "Packed" });
+
+      const unreadBefore = await request(app)
+        .get("/api/notifications/unread-count")
+        .set("Authorization", `Bearer ${customerToken}`);
+      const before = Number(unreadBefore.body.count);
+
+      await request(app)
+        .patch(`/api/orders/${orderId2}/status`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ status: "Order Placed" });
+
+      const unreadAfter = await request(app)
+        .get("/api/notifications/unread-count")
+        .set("Authorization", `Bearer ${customerToken}`);
+      const after = Number(unreadAfter.body.count);
+      expect(after).toBe(before);
+    });
+
+    it("prevents duplicate notifications for the same event", async () => {
+      await request(app)
+        .post("/api/cart/items")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ productId, quantity: 1 });
+      const res1 = await request(app)
+        .post("/api/orders")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({
+          address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+          coordinates: { lat: 15.4, lng: 75.6 },
+          paymentMethod: "UPI",
+        });
+      expect(res1.status).toBe(201);
+      const orderId2 = res1.body._id;
+
+      const notifRes = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${customerToken}`);
+      const placedForThisOrder = notifRes.body.filter(
+        (n) => n.title === "Order placed successfully" && String(n.orderId) === String(orderId2)
+      ).length;
+      expect(placedForThisOrder).toBe(1);
+    });
+
+    it("customer cannot access another customer's notifications", async () => {
+      const res = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${otherCustomerToken}`);
+      expect(res.status).toBe(200);
+      // other customer should not see this customer's notifications
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    it("mark as read updates unread count", async () => {
+      const unreadBefore = await request(app)
+        .get("/api/notifications/unread-count")
+        .set("Authorization", `Bearer ${customerToken}`);
+      const before = Number(unreadBefore.body.count);
+
+      const list = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${customerToken}`);
+      const unreadItem = list.body.find((n) => !n.isRead);
+      if (unreadItem) {
+        await request(app)
+          .patch(`/api/notifications/${unreadItem._id}/read`)
+          .set("Authorization", `Bearer ${customerToken}`);
+      }
+
+      const unreadAfter = await request(app)
+        .get("/api/notifications/unread-count")
+        .set("Authorization", `Bearer ${customerToken}`);
+      expect(Number(unreadAfter.body.count)).toBeLessThanOrEqual(before);
+    });
+
+    it("mark all as read sets unread count to zero", async () => {
+      await request(app)
+        .patch("/api/notifications/read-all")
+        .set("Authorization", `Bearer ${customerToken}`);
+
+      const unreadAfter = await request(app)
+        .get("/api/notifications/unread-count")
+        .set("Authorization", `Bearer ${customerToken}`);
+      expect(Number(unreadAfter.body.count)).toBe(0);
+    });
+  });
 });

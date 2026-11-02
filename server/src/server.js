@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const app = require("./app");
 const env = require("./config/env");
-const getClientOrigins = require("./config/clientOrigins");
+const isClientOriginAllowed = require("./config/isClientOriginAllowed");
 const { connectDB } = require("./config/db");
 const setupSockets = require("./sockets");
 const { setIO } = require("./sockets/emitters");
@@ -13,7 +13,12 @@ async function main() {
   await connectDB();
   await ensureDefaults();
   const server = http.createServer(app);
-  const io = new Server(server, { cors: { origin: getClientOrigins(env.clientUrl, env.nodeEnv), credentials: true } });
+  const io = new Server(server, {
+    cors: {
+      origin: (origin, callback) => callback(null, isClientOriginAllowed(origin, env.clientUrl, env.nodeEnv)),
+      credentials: true,
+    },
+  });
   setupSockets(io);
   setIO(io);
   server.listen(env.port, "0.0.0.0", () => console.log(`Server on ${env.port}`));

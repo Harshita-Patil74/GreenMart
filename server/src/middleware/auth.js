@@ -15,9 +15,10 @@ async function auth(req, res, next) {
   }
 
   try {
-    const user = await User.findById(decoded.id).select("-passwordHash");
+    const user = await User.findById(decoded.id).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry");
     if (!user) return res.status(401).json({ message: "Unauthorized" });
     if (user.status === "blocked") return res.status(403).json({ message: "Account blocked" });
+    if (user.accountActivated === false) return res.status(403).json({ message: "Account activation is required." });
     req.user = user.toObject();
     if (user.role === "farmer") {
       const farmerProfile = await FarmerProfile.findOne({ user: user._id })

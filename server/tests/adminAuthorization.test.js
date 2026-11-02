@@ -1,16 +1,8 @@
-jest.mock("../src/services/statsService", () => ({
-  adminStats: jest.fn().mockResolvedValue({}),
-}));
-jest.mock("../src/models/User", () => ({ findById: jest.fn(), find: jest.fn() }));
-jest.mock("../src/models/Product", () => ({ find: jest.fn() }));
-jest.mock("../src/models/Order", () => ({ countDocuments: jest.fn() }));
-jest.mock("../src/models/FarmerProfile", () => ({
-  findOne: jest.fn().mockReturnValue({ select: jest.fn().mockResolvedValue(null) }),
-}));
-
 const request = require("supertest");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { app } = require("../tests/setup");
+const { connectDB, disconnectDB } = require("./db");
 const User = require("../src/models/User");
 const env = require("../src/config/env");
 
@@ -19,14 +11,39 @@ const CUSTOMER = "507f1f77bcf86cd799439032";
 const FARMER = "507f1f77bcf86cd799439033";
 
 describe("admin authorization", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: "x", role: "customer", status: "active", toObject: () => ({ _id: "x", role: "customer" }) }) });
+  beforeAll(async () => {
+    await connectDB();
+    const passwordHash = await bcrypt.hash("TestPass1!", 10);
+    await User.create({
+      _id: ADMIN,
+      name: "Admin User",
+      email: "admin@example.test",
+      passwordHash,
+      role: "admin",
+    });
+    await User.create({
+      _id: CUSTOMER,
+      name: "Customer User",
+      email: "customer@example.test",
+      passwordHash,
+      role: "customer",
+    });
+    await User.create({
+      _id: FARMER,
+      name: "Farmer User",
+      email: "farmer@example.test",
+      passwordHash,
+      role: "farmer",
+    });
   });
 
-  function mockUser(id, role) {
-    User.findById.mockReturnValue({ select: jest.fn().mockResolvedValue({ _id: id, role, status: "active", toObject: () => ({ _id: id, role }) }) });
-  }
+  afterAll(async () => {
+    await disconnectDB();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
   it("rejects unauthenticated", async () => {
     const res = await request(app).get("/api/admin/stats");
@@ -34,21 +51,18 @@ describe("admin authorization", () => {
   });
 
   it("rejects customer", async () => {
-    mockUser(CUSTOMER, "customer");
     const token = jwt.sign({ id: CUSTOMER }, env.jwtSecret);
     const res = await request(app).get("/api/admin/stats").set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it("rejects farmer", async () => {
-    mockUser(FARMER, "farmer");
     const token = jwt.sign({ id: FARMER }, env.jwtSecret);
     const res = await request(app).get("/api/admin/stats").set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(403);
   });
 
   it("allows admin", async () => {
-    mockUser(ADMIN, "admin");
     const token = jwt.sign({ id: ADMIN }, env.jwtSecret);
     const res = await request(app).get("/api/admin/stats").set("Authorization", `Bearer ${token}`);
     expect(res.status).toBe(200);

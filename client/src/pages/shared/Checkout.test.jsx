@@ -39,6 +39,24 @@ describe("Checkout page", () => {
     expect(screen.getByRole("button", { name: /Place Order/i })).toBeInTheDocument();
   });
 
+  it("shows the backend-applied offer discount in the checkout summary", async () => {
+    const discounted = {
+      ...preloaded,
+      cart: {
+        ...preloaded.cart,
+        items: [{
+          product: { _id: "product-a", name: "Organic Tomatoes", price: 40, unit: "kg" },
+          quantity: 2,
+          offer: { title: "Farm Special", appliedDiscount: 5, finalUnitPrice: 37.5, lineTotal: 75 },
+        }],
+      },
+    };
+    renderWithStore(<Checkout />, discounted);
+
+    expect(await screen.findByText("Offer savings")).toBeInTheDocument();
+    expect(screen.getByText("₹ 105")).toBeInTheDocument();
+  });
+
   it("creates a real order with the selected address and clears the cart after success", async () => {
     const { store } = renderWithStore(<Checkout />, preloaded);
     const placeOrder = await screen.findByRole("button", { name: /Place Order/i });
@@ -46,7 +64,8 @@ describe("Checkout page", () => {
     fireEvent.click(placeOrder);
     await waitFor(() => expect(orderApi.create).toHaveBeenCalledWith({
       address: { name: "Customer", line1: "1 Market Road", city: "Gadag", phone: "555-0100" },
-      paymentMethod: "Cash on Delivery",
+      paymentMethod: "cod",
+      paymentConfirmed: false,
     }));
     await waitFor(() => expect(store.getState().cart.items).toEqual([]));
   });

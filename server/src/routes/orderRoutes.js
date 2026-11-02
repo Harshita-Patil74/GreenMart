@@ -8,6 +8,8 @@ router.post("/", auth, c.create);
 router.get("/mine", auth, c.mine);
 router.get("/farmer", auth, role("farmer","admin"), approvedFarmer, c.farmer);
 router.get("/admin/all", auth, role("admin"), c.adminAll);
+router.get("/:id/invoice", auth, role("customer", "admin"), c.invoice);
+router.get("/:id/invoice/download", auth, role("customer", "admin"), c.invoiceDownload);
 router.get("/:id", auth, approvedFarmer, c.get);
 router.patch("/:id/status", auth, role("farmer","admin"), approvedFarmer, c.updateStatus);
 router.patch("/:id/location", auth, role("farmer","admin"), approvedFarmer, c.updateLocation);

@@ -38,6 +38,7 @@ beforeAll(async () => {
 
   const vegetable = await Product.create({
     name: "PDF Test Tomatoes",
+    description: "PDF test tomatoes description",
     category: "Vegetables",
     price: 125.5,
     stock: 10,
@@ -45,6 +46,7 @@ beforeAll(async () => {
   });
   const fruit = await Product.create({
     name: "PDF Test Apples",
+    description: "PDF test apples description",
     category: "Fruits",
     price: 88,
     stock: 10,

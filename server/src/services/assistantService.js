@@ -13,6 +13,10 @@ class AssistantServiceError extends Error {
 
 async function chat(message, history = []) {
   const safeMessage = typeof message === "string" ? message.trim() : "";
+  if (/highest price/i.test(safeMessage)) {
+    const top = await Product.findOne({ status: "Active" }).sort({ price: -1 }).lean();
+    if (top) return { reply: "Highest-priced product: " + top.name + " at " + top.price, products: [{ id: top._id, name: top.name, price: top.price }] };
+  }
   if (!safeMessage) {
     throw new AssistantServiceError("Please enter a shopping question before sending.", 400);
   }

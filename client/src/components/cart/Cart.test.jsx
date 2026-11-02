@@ -1,5 +1,5 @@
 import React from "react";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 import Cart from "../../pages/shared/Cart.jsx";
 
@@ -26,31 +26,42 @@ describe("Cart page", () => {
 
   it("renders cart items with quantity controls and remove", () => {
     renderWithStore(<Cart />, { cart: { items: cartItems, deliveryCharge: 30 } });
-    expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
+    const mobileCard = screen.getByRole("article");
+    expect(within(mobileCard).getByText("Organic Tomatoes")).toBeInTheDocument();
     expect(screen.getAllByText(/₹ 40/).length).toBeGreaterThan(0);
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Remove Organic Tomatoes/i })).toBeInTheDocument();
+    expect(within(mobileCard).getByText("1")).toBeInTheDocument();
+    expect(within(mobileCard).getByRole("button", { name: /Remove Organic Tomatoes/i })).toBeInTheDocument();
+  });
+
+  it("shows a server-applied offer discount in the cart total", () => {
+    const discountedItem = {
+      ...cartItems[0],
+      quantity: 2,
+      offer: { title: "Farm Special", appliedDiscount: 5, finalUnitPrice: 37.5, lineTotal: 75 },
+    };
+    renderWithStore(<Cart />, { cart: { items: [discountedItem], deliveryCharge: 30 } });
+
+    expect(screen.getByText("Offer savings")).toBeInTheDocument();
+    expect(screen.getByText("₹ 105")).toBeInTheDocument();
   });
 
   it("increments quantity on plus button click", async () => {
     renderWithStore(<Cart />, { cart: { items: cartItems, deliveryCharge: 30 } });
-    const buttons = screen.getAllByRole("button", { name: /Increase Organic Tomatoes quantity/i });
-    expect(buttons.length).toBeGreaterThan(0);
-    fireEvent.click(buttons[0]);
-    await waitFor(() => expect(screen.getByText("2")).toBeInTheDocument());
+    const mobileCard = screen.getByRole("article");
+    fireEvent.click(within(mobileCard).getByRole("button", { name: /Increase Organic Tomatoes quantity/i }));
+    await waitFor(() => expect(within(mobileCard).getByText("2")).toBeInTheDocument());
   });
 
   it("decrements quantity on minus button click", async () => {
     renderWithStore(<Cart />, { cart: { items: [{ ...cartItems[0], quantity: 2 }], deliveryCharge: 30 } });
-    const buttons = screen.getAllByRole("button", { name: /Decrease Organic Tomatoes quantity/i });
-    expect(buttons.length).toBeGreaterThan(0);
-    fireEvent.click(buttons[0]);
-    await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+    const mobileCard = screen.getByRole("article");
+    fireEvent.click(within(mobileCard).getByRole("button", { name: /Decrease Organic Tomatoes quantity/i }));
+    await waitFor(() => expect(within(mobileCard).getByText("1")).toBeInTheDocument());
   });
 
   it("removes item on remove button click", async () => {
     renderWithStore(<Cart />, { cart: { items: cartItems, deliveryCharge: 30 } });
-    fireEvent.click(screen.getByRole("button", { name: /Remove Organic Tomatoes/i }));
+    fireEvent.click(within(screen.getByRole("article")).getByRole("button", { name: /Remove Organic Tomatoes/i }));
     await waitFor(() => expect(screen.getByText(/Your cart is empty/i)).toBeInTheDocument());
   });
 });

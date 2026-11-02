@@ -21,6 +21,7 @@ describe("PublicNavigation", () => {
     );
 
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Offers" })).toHaveAttribute("href", "/shop?offers=true");
     expect(screen.getByRole("link", { name: "Farmers" })).toHaveAttribute("href", "/farmers");
     expect(screen.getByRole("link", { name: "Contact" })).toHaveAttribute("href", "/contact");
     expect(screen.queryByRole("link", { name: "Dashboard" })).not.toBeInTheDocument();

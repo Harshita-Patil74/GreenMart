@@ -29,9 +29,9 @@ describe("GreenMart footer", () => {
     expect(screen.getByRole("link", { name: "My Account" })).toHaveAttribute("href", "/customer/dashboard");
     expect(screen.getByRole("link", { name: "My Orders" })).toHaveAttribute("href", "/customer/orders");
     expect(screen.getByRole("link", { name: "Track Order" })).toHaveAttribute("href", "/track-order");
-    expect(screen.getByRole("link", { name: "Farmer Login" })).toHaveAttribute("href", "/login?role=farmer");
+    expect(screen.getByRole("link", { name: "Farmer Login" })).toHaveAttribute("href", "/login");
     expect(screen.getByRole("link", { name: "Become a Farmer" })).toHaveAttribute("href", "/register?role=farmer");
-    expect(screen.getByRole("link", { name: "Admin Login" })).toHaveAttribute("href", "/admin/login");
+    expect(screen.getByRole("link", { name: "Admin Login" })).toHaveAttribute("href", "/login");
     expect(screen.getByRole("link", { name: "Manage Users" })).toHaveAttribute("href", "/admin/users");
     expect(screen.getByRole("link", { name: "Reports" })).toHaveAttribute("href", "/admin/reports");
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/admin/settings");

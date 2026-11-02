@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { ArrowRight, Heart, Package, ShoppingBag, Wallet } from "lucide-react";
+import toast from "react-hot-toast";
+import { ArrowRight, BadgePercent, CalendarDays, Heart, Package, ShoppingBag, Wallet } from "lucide-react";
 import ProductCard from "../../components/product/ProductCard.jsx";
+import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import productApi from "../../api/productApi";
 import orderApi from "../../api/orderApi";
 import { fetchWishlist } from "../../features/wishlist/wishlistSlice.js";
-import { fetchCart } from "../../features/cart/cartSlice.js";
+import { addItem, fetchCart } from "../../features/cart/cartSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { ChatAssistant } from "../../components/assistant/ChatAssistant.jsx";
 import { formatCurrency } from "../../utils/constants.js";
+import { getImageUrl } from "../../utils/imageUrl.js";
 
 const HERO_IMAGE = "/images/banners/hero-basket.jpg";
 
@@ -21,6 +24,9 @@ export default function CustomerDashboard() {
   const [featured, setFeatured] = useState([]);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [featuredError, setFeaturedError] = useState(null);
+  const [featuredOffers, setFeaturedOffers] = useState([]);
+  const [featuredOffersLoading, setFeaturedOffersLoading] = useState(true);
+  const [featuredOffersError, setFeaturedOffersError] = useState("");
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState(null);
@@ -52,8 +58,26 @@ export default function CustomerDashboard() {
     }
   };
 
+  const loadFeaturedOffers = async () => {
+    setFeaturedOffersLoading(true);
+    setFeaturedOffersError("");
+    try {
+      const { data } = await productApi.storefrontOffers();
+      const activeOffers = Array.isArray(data?.items)
+        ? data.items.filter((offer) => offer.effectiveStatus === "Active" && offer.product?.stock > 0).slice(0, 4)
+        : [];
+      setFeaturedOffers(activeOffers);
+    } catch (requestError) {
+      setFeaturedOffers([]);
+      setFeaturedOffersError(requestError?.message || "Couldn't load featured offers.");
+    } finally {
+      setFeaturedOffersLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFeatured();
+    loadFeaturedOffers();
     loadOrders();
     if (user?.role === "customer" && token && token !== "demo-token") dispatch(fetchWishlist());
   }, [dispatch, token, user?.role]);
@@ -74,7 +98,7 @@ export default function CustomerDashboard() {
   const latestOrder = orders[0];
 
   return (
-    <div className="space-y-4 pb-8">
+    <div className="space-y-4 pb-4 sm:pb-6 lg:pb-8">
       <section>
         <h1 className="text-xl font-heading font-bold text-gray-900">Welcome back{user?.name ? `, ${user.name}` : ""}!</h1>
         <p className="mt-1 text-xs text-gray-500">Discover fresh, organic products for a healthier you.</p>
@@ -126,6 +150,44 @@ export default function CustomerDashboard() {
         </section>
       </div>
 
+      {(featuredOffersLoading || featuredOffersError || featuredOffers.length > 0) && (
+        <section className="rounded-xl border border-[#E8EEEA] bg-white p-3 sm:p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Fresh Deals from Our Farmers</h2>
+              <p className="mt-0.5 text-[10px] text-gray-500">Discover fresh organic products at special prices.</p>
+            </div>
+            <Link to="/customer/offers" className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-[#16803C] hover:text-[#0F6A3A]">
+              View All Offers <ArrowRight aria-hidden="true" className="h-3 w-3" />
+            </Link>
+          </div>
+          {featuredOffersLoading ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((item) => <div key={item} className="h-60 animate-pulse rounded-xl bg-gray-50" />)}
+            </div>
+          ) : featuredOffersError ? (
+            <p role="status" className="rounded-lg bg-gray-50 p-4 text-center text-xs text-gray-500">{featuredOffersError}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+              {featuredOffers.map((offer) => (
+                <FeaturedOfferCard
+                  key={offer._id}
+                  offer={offer}
+                  onAdd={async () => {
+                    try {
+                      await dispatch(addItem(offer.product)).unwrap();
+                      toast.success(`Added ${offer.product.name} to your cart.`);
+                    } catch (requestError) {
+                      toast.error(requestError?.message || "Couldn't add this product to your cart.");
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div><h2 className="text-sm font-semibold text-gray-900">Recommended for You</h2><p className="mt-0.5 text-[10px] text-gray-500">Fresh picks from GreenMart farmers.</p></div>
@@ -141,5 +203,61 @@ export default function CustomerDashboard() {
         <ChatAssistant />
       </section>
     </div>
+  );
+}
+
+function FeaturedOfferCard({ offer, onAdd }) {
+  const product = offer.product || {};
+  const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart farmer";
+  const savingLabel = offer.discountType === "Percentage"
+    ? `${offer.discountPercent}% OFF`
+    : `Save ${formatCurrency(offer.discountAmount)}`;
+  const requiredQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
+  const unit = product.unit || "unit";
+  const productId = product._id;
+  const [adding, setAdding] = useState(false);
+
+  const addToCart = async () => {
+    if (adding || Number(product.stock) < requiredQuantity) return;
+    setAdding(true);
+    try {
+      await onAdd();
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#E5EBE5] bg-white">
+      <Link to={`/product/${productId}`} className="relative block h-24 overflow-hidden bg-[#F3F6F3] sm:h-32">
+        <ImageWithFallback src={getImageUrl(product.images?.[0])} alt={product.name || "Offer product"} className="h-full w-full object-cover" />
+        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-semibold text-white">
+          <BadgePercent aria-hidden="true" className="h-3 w-3" /> {offer.type}
+        </span>
+        <span className="absolute right-2 top-2 rounded-full bg-white px-2 py-1 text-[9px] font-bold text-[#16803C]">{savingLabel}</span>
+      </Link>
+      <div className="flex flex-1 flex-col p-2.5">
+        <Link to={`/product/${productId}`} className="line-clamp-1 text-xs font-semibold text-[#22352B] hover:text-[#16803C]">
+          {product.name}
+        </Link>
+        <p className="mt-0.5 truncate text-[10px] text-[#7A877F]">{farmerName}</p>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
+          <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.offerPrice)} / {unit}</span>
+          <span className="text-[10px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)}</span>
+        </div>
+        {requiredQuantity > 1 && <p className="mt-1 text-[9px] leading-3 text-[#71817D]">At {requiredQuantity}+ {unit}</p>}
+        <p className="mt-1 flex items-center gap-1 text-[9px] text-[#71817D]">
+          <CalendarDays aria-hidden="true" className="h-3 w-3 shrink-0" />
+          Ends {new Date(offer.endDate).toLocaleDateString("en-IN")}
+        </p>
+        <p className="mt-0.5 text-[9px] text-[#71817D]">{product.stock} in stock</p>
+        <div className="mt-auto grid grid-cols-1 gap-1.5 pt-2">
+          <Link to={`/product/${productId}`} className="inline-flex h-7 items-center justify-center rounded-md border border-[#DDE8DF] text-[10px] font-semibold text-[#176B3B]">View Product</Link>
+          <button type="button" onClick={addToCart} disabled={adding || Number(product.stock) < requiredQuantity} className="h-7 rounded-md bg-[#16803C] text-[10px] font-semibold text-white hover:bg-[#0F6A3A] disabled:cursor-not-allowed disabled:bg-gray-300">
+            {adding ? "Adding…" : "Add to Cart"}
+          </button>
+        </div>
+      </div>
+    </article>
   );
 }

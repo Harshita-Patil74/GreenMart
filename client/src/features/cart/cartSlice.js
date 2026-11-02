@@ -7,6 +7,11 @@ const unwrapCart = (data) => ({
   deliveryCharge: data?.deliveryCharge == null ? null : Number(data.deliveryCharge),
 });
 
+const itemId = (item) => item.product?._id || item.product?.id || item.product || item.id;
+
+const ensurePending = (state) => { if (!state.itemPending) state.itemPending = {}; };
+const ensureSeq = (state) => { if (!state.updateSequence) state.updateSequence = {}; };
+
 export const fetchDeliveryCharge = createAsyncThunk("cart/fetchDeliveryCharge", async (_, { rejectWithValue }) => {
   try {
     const { data } = await settingsApi.get();
@@ -42,13 +47,27 @@ export const addItem = createAsyncThunk("cart/addItem", async (product, { getSta
   }
 });
 
-export const updateQuantity = createAsyncThunk("cart/updateQuantity", async ({ productId, quantity }, { getState, rejectWithValue }) => {
-  const token = getState().auth?.token;
-  if (!token || token === "demo-token") return { productId, quantity, guest: true };
+export const updateQuantity = createAsyncThunk("cart/updateQuantity", async ({ productId, quantity }, { getState, dispatch, rejectWithValue }) => {
+  const state = getState();
+  const token = state.auth?.token;
+  const current = state.cart.items.find((i) => itemId(i) === productId);
+  const previousQty = current ? current.quantity : quantity;
+
+  if (!token || token === "demo-token") {
+    dispatch(optimisticUpdateQuantity({ productId, quantity }));
+    return { productId, quantity, guest: true };
+  }
+
+  const seq = (state.cart.updateSequence?.[productId] || 0) + 1;
+  dispatch(optimisticUpdateQuantity({ productId, quantity, seq }));
+
   try {
     const { data } = await cartApi.update(productId, { quantity });
-    return { ...unwrapCart(data), guest: false };
+    const latestSeq = getState().cart.updateSequence?.[productId];
+    if (latestSeq !== seq) return { productId, quantity, guest: false, stale: true };
+    return { ...unwrapCart(data), guest: false, productId };
   } catch (error) {
+    dispatch(revertQuantity({ productId, quantity: previousQty }));
     return rejectWithValue(error);
   }
 });
@@ -66,7 +85,7 @@ export const removeItem = createAsyncThunk("cart/removeItem", async (productId, 
 
 const slice = createSlice({
   name: "cart",
-  initialState: { items: [], deliveryCharge: null, deliveryLoading: false, deliveryError: null, loading: false, saving: false, error: null, loaded: false },
+  initialState: { items: [], deliveryCharge: null, deliveryLoading: false, deliveryError: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
   reducers: {
     setCart: (state, action) => {
       const cart = unwrapCart(action.payload);
@@ -80,6 +99,22 @@ const slice = createSlice({
       state.error = null;
       state.loaded = true;
     },
+    optimisticUpdateQuantity: (state, action) => {
+      const { productId, quantity, seq } = action.payload;
+      const item = state.items.find((i) => itemId(i) === productId);
+      if (item) item.quantity = quantity;
+      ensurePending(state);
+      if (seq != null) { ensureSeq(state); state.updateSequence[productId] = seq; }
+      state.itemPending[productId] = true;
+      state.error = null;
+    },
+    revertQuantity: (state, action) => {
+      const { productId, quantity } = action.payload;
+      const item = state.items.find((i) => itemId(i) === productId);
+      if (item) item.quantity = quantity;
+      if (state.itemPending) delete state.itemPending[productId];
+    },
+    clearItemError: (state) => { state.error = null; },
   },
   extraReducers: (builder) => {
     builder
@@ -98,9 +133,9 @@ const slice = createSlice({
         state.loaded = true;
         state.error = action.payload?.message || "Couldn't load your cart.";
       })
-      .addCase(addItem.pending, (state) => { state.saving = true; state.error = null; })
+      .addCase(addItem.pending, (state) => { ensurePending(state); state.itemPending.addItem = true; state.error = null; })
       .addCase(addItem.fulfilled, (state, action) => {
-        state.saving = false;
+        if (state.itemPending) delete state.itemPending.addItem;
         state.loaded = true;
         if (!action.payload.guest) {
           state.items = action.payload.items;
@@ -109,40 +144,44 @@ const slice = createSlice({
         }
         const product = action.payload.product;
         const id = product._id || product.id;
-        const existing = state.items.find((item) => (item.product?._id || item.product?.id || item.product || item.id) === id);
+        const existing = state.items.find((item) => itemId(item) === id);
         if (existing) existing.quantity = (existing.quantity || 0) + 1;
         else state.items.push({ product, quantity: 1, price: product.price });
       })
-      .addCase(addItem.rejected, (state, action) => { state.saving = false; state.error = action.payload?.message || "Couldn't add this product to your cart."; })
-      .addCase(updateQuantity.pending, (state) => { state.saving = true; state.error = null; })
+      .addCase(addItem.rejected, (state, action) => { if (state.itemPending) delete state.itemPending.addItem; state.error = action.payload?.message || "Couldn't add this product to your cart."; })
+      .addCase(updateQuantity.pending, (state) => { state.error = null; })
       .addCase(updateQuantity.fulfilled, (state, action) => {
-        state.saving = false;
+        if (action.payload.stale) return;
         state.loaded = true;
         if (!action.payload.guest) {
-          state.items = action.payload.items;
+          const pid = action.payload.productId;
+          const serverItem = action.payload.items && Array.isArray(action.payload.items)
+            ? action.payload.items.find((i) => itemId(i) === pid)
+            : null;
+          if (serverItem) {
+            const item = state.items.find((i) => itemId(i) === pid);
+            if (item) item.quantity = serverItem.quantity;
+          }
           if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
-          return;
         }
-        const { productId, quantity } = action.payload;
-        if (quantity <= 0) state.items = state.items.filter((item) => (item.product?._id || item.product?.id || item.product || item.id) !== productId);
-        else {
-          const item = state.items.find((entry) => (entry.product?._id || entry.product?.id || entry.product || entry.id) === productId);
-          if (item) item.quantity = quantity;
-        }
+        if (state.itemPending) delete state.itemPending[action.payload.productId];
       })
-      .addCase(updateQuantity.rejected, (state, action) => { state.saving = false; state.error = action.payload?.message || "Couldn't update this quantity."; })
-      .addCase(removeItem.pending, (state) => { state.saving = true; state.error = null; })
+      .addCase(updateQuantity.rejected, (state, action) => {
+        if (state.itemPending) delete state.itemPending[action.meta.arg.productId];
+        state.error = action.payload?.message || action.payload?.msg || action.payload?.error || "Couldn't update this quantity.";
+      })
+      .addCase(removeItem.pending, (state) => { ensurePending(state); state.itemPending.removeItem = true; state.error = null; })
       .addCase(removeItem.fulfilled, (state, action) => {
-        state.saving = false;
+        if (state.itemPending) delete state.itemPending.removeItem;
         state.loaded = true;
         if (!action.payload.guest) {
           state.items = action.payload.items;
           if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
         } else {
-          state.items = state.items.filter((item) => (item.product?._id || item.product?.id || item.product || item.id) !== action.payload.productId);
+          state.items = state.items.filter((item) => itemId(item) !== action.payload.productId);
         }
       })
-      .addCase(removeItem.rejected, (state, action) => { state.saving = false; state.error = action.payload?.message || "Couldn't remove this item."; })
+      .addCase(removeItem.rejected, (state, action) => { if (state.itemPending) delete state.itemPending.removeItem; state.error = action.payload?.message || action.payload?.msg || action.payload?.error || "Couldn't remove this item."; })
       .addCase("auth/logout", (state) => {
         state.items = [];
         state.error = null;
@@ -151,5 +190,5 @@ const slice = createSlice({
   },
 });
 
-export const { setCart, clearCart } = slice.actions;
+export const { setCart, clearCart, optimisticUpdateQuantity, revertQuantity, clearItemError } = slice.actions;
 export default slice.reducer;

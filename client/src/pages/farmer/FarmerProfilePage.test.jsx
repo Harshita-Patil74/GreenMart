@@ -62,7 +62,7 @@ describe("Farmer profile photo", () => {
 
     await waitFor(() => expect(userApi.updateMe).toHaveBeenCalledTimes(1));
     await waitFor(() => {
-      const avatar = document.querySelector("header img");
+      const avatar = document.querySelector('header img[alt=""]');
       expect(avatar).not.toBeNull();
       expect(avatar.getAttribute("src")).toContain("/uploads/avatars/farmer-photo.png");
     });

@@ -1,5 +1,6 @@
 jest.mock("../src/models/Product", () => ({
   findById: jest.fn(),
+  findByIdAndUpdate: jest.fn(),
 }));
 jest.mock("../src/models/User", () => ({
   findById: jest.fn(),
@@ -8,6 +9,7 @@ jest.mock("../src/models/FarmerProfile", () => ({
   findOne: jest.fn().mockResolvedValue(null),
 }));
 
+jest.resetModules();
 const Product = require("../src/models/Product");
 const { update, remove } = require("../src/controllers/productController");
 
@@ -29,6 +31,7 @@ describe("farmer product ownership", () => {
   it("allows owner to update", async () => {
     const save = jest.fn().mockResolvedValue(true);
     Product.findById.mockResolvedValue({ _id: P_OWNER, farmer: FARMER_A, save, images: [] });
+    Product.findByIdAndUpdate.mockResolvedValue({ _id: P_OWNER, farmer: FARMER_A, quantity: 10 });
     const req = { params: { id: P_OWNER }, user: { _id: FARMER_A, role: "farmer" }, body: { name: "X" }, files: [] };
     const res = makeRes();
     await update(req, res, jest.fn());

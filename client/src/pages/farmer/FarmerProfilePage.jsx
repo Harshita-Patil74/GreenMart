@@ -39,6 +39,7 @@ export default function FarmerProfilePage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [extended, setExtended] = useState({});
   const [savingFarm, setSavingFarm] = useState(false);
   const [editingPhoto, setEditingPhoto] = useState(false);
 
@@ -75,9 +76,10 @@ export default function FarmerProfilePage() {
     setLoading(true);
     setError("");
     try {
-      const [farmResponse, userResponse] = await Promise.all([
+      const [farmResponse, userResponse, profileResponse] = await Promise.all([
         farmerApi.get(userId),
         authApi.me(),
+        farmerApi.profile(),
       ]);
       dispatch(updateUser(userResponse.data));
       const data = farmResponse.data;
@@ -155,6 +157,8 @@ export default function FarmerProfilePage() {
       setSavingFarm(false);
     }
   };
+
+  const saveExtended = async () => {};
 
   return (
     <section className="space-y-4 pb-5 text-[13px] text-[#20312E]">

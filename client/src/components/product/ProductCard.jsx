@@ -25,6 +25,13 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
   const displayImage = product.images?.[0] || "/images/placeholder.svg";
   const unit = product.unit || "kg";
   const outOfStock = product.stock === 0;
+  const offer = product.offer;
+  const offerPrice = offer?.appliesToSingleUnit ? offer.offerPrice : offer?.minimumEligiblePrice;
+  const offerLabel = offer
+    ? offer.discountType === "Percentage"
+      ? `${offer.discountPercent}% OFF`
+      : `Save ₹${Number(offer.discountAmount || 0).toFixed(2)}`
+    : "";
 
   const handleWishlist = async (event) => {
     event.preventDefault();
@@ -70,6 +77,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
     >
       <div className={`relative overflow-hidden rounded-[10px] bg-[#F6F7F6] ${compact ? "h-20 sm:h-24" : "h-[148px]"}`}>
         <ImageWithFallback src={displayImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        {offer && <span className="absolute left-2 top-2 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white">{offerLabel}</span>}
         {showWishlist && (
           <button
             onClick={handleWishlist}
@@ -82,7 +90,14 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
       </div>
       <div className={`flex flex-1 flex-col ${compact ? "mt-1.5" : "mt-2.5"}`}>
         <h3 className={`line-clamp-1 font-medium leading-snug text-[#1F2937] ${compact ? "text-[11px]" : "text-[15px]"}`}>{product.name}</h3>
-        <div className={`font-bold text-[#0F3D2E] ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[16px]"}`}>₹ {product.price} / {unit}</div>
+        <div className={`font-bold text-[#0F3D2E] ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[16px]"}`}>
+          {offer ? (
+            <><span>₹ {Number(offerPrice).toFixed(2)}</span><span className="ml-1 text-[10px] font-normal text-gray-400 line-through">₹ {Number(product.price).toFixed(2)}</span><span className="ml-1 text-[10px] font-normal">/ {unit}</span></>
+          ) : <>₹ {product.price} / {unit}</>}
+        </div>
+        {offer && <p className="mt-1 line-clamp-1 text-[9px] font-medium text-[#16803C]" title={`${offer.title} · ${offer.type}`}>
+          {offer.title} · {offer.type}{Number(offer.minimumQuantity) > 1 ? ` · min ${offer.minimumQuantity}` : Number(offer.minimumAmount) > 0 ? ` · min cart ₹${Number(offer.minimumAmount)}` : ""}
+        </p>}
         {!compact && <div className="mt-1 flex items-center gap-1 text-xs text-muted">
           <Star className="w-3 h-3 fill-[#F5B301] text-[#F5B301]" />
           <span className="font-medium text-[#1F2937]">{Number(product.ratingCount) > 0 ? Number(product.ratingAverage || 0).toFixed(1) : "New"}</span>

@@ -4,3 +4,7 @@ exports.list = asyncHandler(async (req,res) => res.json(await Notification.find(
 exports.unreadCount = asyncHandler(async (req,res) => res.json({ count: await Notification.countDocuments({ user: req.user._id, isRead: false }) }));
 exports.markRead = asyncHandler(async (req,res) => { await Notification.updateOne({ _id: req.params.id, user: req.user._id }, { isRead: true }); res.json({ message: "ok" }); });
 exports.markAllRead = asyncHandler(async (req,res) => { await Notification.updateMany({ user: req.user._id }, { isRead: true }); res.json({ message: "ok" }); });
+exports.remove = asyncHandler(async (req,res) => {
+  await Notification.deleteOne({ _id: req.params.id, user: req.user._id });
+  res.json({ message: "ok" });
+});

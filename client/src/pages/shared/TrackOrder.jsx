@@ -4,6 +4,7 @@ import { Clock3, MapPin, PackageCheck, Search, Truck } from "lucide-react";
 import orderApi from "../../api/orderApi";
 import OrderStepper from "../../components/orders/OrderStepper.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
+import ErrorState from "../../components/common/ErrorState.jsx";
 import { formatCurrency } from "../../utils/constants.js";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
 

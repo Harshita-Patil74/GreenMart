@@ -1,6 +1,8 @@
 const Review = require("../models/Review");
 const Product = require("../models/Product");
+const User = require("../models/User");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { createNotification } = require("../services/notificationService");
 
 exports.eligibility = asyncHandler(async (req,res) => {
   const Order = require("../models/Order");
@@ -29,5 +31,19 @@ exports.create = asyncHandler(async (req,res) => {
   const r = await Review.create({ product: req.params.id, user: req.user._id, rating: req.body.rating, comment: req.body.comment });
   const agg = await Review.aggregate([{ $match: { product: r.product } }, { $group: { _id: null, avg: { $avg: "$rating" }, count: { $sum: 1 } } }]);
   await Product.updateOne({ _id: r.product }, { ratingAverage: agg[0]?.avg||0, ratingCount: agg[0]?.count||0 });
+  // Notify all admins about the new review
+  const product = await Product.findById(r.product);
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+  for (const admin of admins) {
+    await createNotification({
+      userId: admin._id,
+      type: "newReviewAdmin",
+      category: "reviews",
+      title: "New product review",
+      message: `A customer has submitted a review for ${product ? product.name : "a product"}.`,
+      resourceType: "Review",
+      resourceId: r._id,
+    });
+  }
   res.status(201).json(r);
 });

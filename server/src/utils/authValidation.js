@@ -1,6 +1,5 @@
-const gmailEmailPattern = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@gmail\.com$/;
-const demoEmailPattern = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@demo\.greenmart\.test$/;
-const loginEmailPattern = /^[a-z0-9]+(?:[._%+-][a-z0-9]+)*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const emailPattern = /^[a-z](?:[a-z0-9]|\.(?=[a-z0-9]))*@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const demoEmailPattern = /^[a-z](?:[a-z0-9]|\.(?=[a-z0-9]))*@demo\.greenmart\.test$/;
 
 function passwordRequirements(password) {
   return [
@@ -8,7 +7,8 @@ function passwordRequirements(password) {
     ["one lowercase letter", /[a-z]/.test(password)],
     ["one uppercase letter", /[A-Z]/.test(password)],
     ["one number", /\d/.test(password)],
-    ["one special character", /[^A-Za-z0-9]/.test(password)],
+    ["one special character (@ # $ ! % & *)", /[@#$!%&*]/.test(password)],
+    ["no spaces", !/\s/.test(password)],
   ];
 }
 
@@ -20,8 +20,8 @@ function passwordValidationMessage(password) {
 }
 
 module.exports = {
-  gmailEmailPattern,
+  emailPattern,
   demoEmailPattern,
-  loginEmailPattern,
+  loginEmailPattern: emailPattern,
   passwordValidationMessage,
 };

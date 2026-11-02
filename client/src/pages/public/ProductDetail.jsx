@@ -7,6 +7,7 @@ import productApi from "../../api/productApi";
 import reviewApi from "../../api/reviewApi.js";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { getImageUrl } from "../../utils/imageUrl.js";
+import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import ReviewList, { ReviewForm } from "../../components/product/ReviewList.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import NextButton from "../../components/common/NextButton.jsx";
@@ -111,12 +112,25 @@ export default function ProductDetail() {
       <BackButton fallback="/shop" />
       <div className="grid gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2 md:p-5">
         <div className="flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-          {image ? <img src={getImageUrl(image)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
+          {image ? <ImageWithFallback src={getImageUrl(image)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
         </div>
         <div className="flex flex-col">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{product.category}</p>
           <h1 className="mt-1 text-xl font-heading font-bold text-gray-900">{product.name}</h1>
-          <div className="mt-2 flex items-baseline gap-1.5"><span className="text-xl font-bold text-primary">₹ {product.price}</span><span className="text-xs text-gray-500">/ {product.unit || "unit"}</span></div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-1.5">
+            {product.offer ? <>
+              <span className="text-xl font-bold text-primary">₹ {Number(product.offer.appliesToSingleUnit ? product.offer.offerPrice : product.offer.minimumEligiblePrice).toFixed(2)}</span>
+              <span className="text-xs text-gray-400 line-through">₹ {product.price}</span>
+              <span className="text-xs text-gray-500">/ {product.unit || "unit"}</span>
+            </> : <><span className="text-xl font-bold text-primary">₹ {product.price}</span><span className="text-xs text-gray-500">/ {product.unit || "unit"}</span></>}
+          </div>
+          {product.offer && <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+            <p className="font-semibold">{product.offer.title} · {product.offer.type}</p>
+            <p className="mt-0.5">Original price ₹{Number(product.price).toFixed(2)} · Offer price ₹{Number(product.offer.appliesToSingleUnit ? product.offer.offerPrice : product.offer.minimumEligiblePrice).toFixed(2)} / {product.unit || "unit"}</p>
+            <p className="mt-0.5">{product.offer.discountType === "Percentage" ? `${product.offer.discountPercent}% off` : `Save ₹${Number(product.offer.discountAmount).toFixed(2)} per ${product.unit || "unit"}`} (save ₹{Number(product.offer.totalSavings).toFixed(2)} at minimum quantity) · Valid {new Date(product.offer.startDate).toLocaleDateString()} – {new Date(product.offer.endDate).toLocaleDateString()}</p>
+            {(Number(product.offer.minimumQuantity) > 1 || Number(product.offer.minimumAmount) > 0) && <p className="mt-0.5 text-[10px]">Requires {Number(product.offer.minimumQuantity) > 1 ? `${product.offer.minimumQuantity} or more units of this product` : "eligible quantity"}{Number(product.offer.minimumAmount) > 0 ? ` and a cart subtotal of at least ₹${product.offer.minimumAmount}` : ""}.</p>}
+            {product.offer.maximumDiscount != null && <p className="mt-0.5 text-[10px]">Maximum savings: ₹{Number(product.offer.maximumDiscount).toFixed(2)}.</p>}
+          </div>}
           <div className="mt-2 flex items-center gap-1 text-xs text-gray-500"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /><span>{product.ratingAverage == null ? "No rating" : Number(product.ratingAverage).toFixed(1)}</span><span>({product.ratingCount || 0} reviews)</span></div>
           <div className="mt-3 flex flex-wrap gap-2">
             {product.isOrganic && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-800"><Check className="h-3 w-3" />Organic</span>}

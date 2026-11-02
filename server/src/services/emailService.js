@@ -7,7 +7,8 @@ const templates = {
   newOrderFarmer: (o, items) => ({ subject: `New order ${o.orderNumber}`, html: layout("New Order", `<p>Items: ${items.map(i=>i.name+" x"+i.quantity).join(", ")}</p>`) }),
   statusUpdate: (o) => ({ subject: `Order ${o.orderNumber} ${o.status}`, html: layout("Status Update", `<p>Your order is now ${o.status}.</p>`) }),
   lowStock: (p) => ({ subject: `Low stock: ${p.name}`, html: layout("Low Stock", `<p>${p.name} stock is low.</p>`) }),
-  passwordReset: (link) => ({ subject: "Reset password", html: layout("Reset Password", `<p><a href="${link}">Reset</a></p>`) }),
+  passwordReset: (link) => ({ subject: "Reset password", html: layout("Reset Password", `<p>Use this one-time link to reset your password. It expires in one hour.</p><p><a href="${link}">Reset password</a></p>`) }),
+  farmerActivation: (link) => ({ subject: "Activate your GreenMart farmer account", html: layout("Set Up Your Farmer Account", `<p>Use this secure, one-time link to create your password:</p><p><a href="${link}">Activate account</a></p><p>This link expires in 24 hours.</p>`) }),
   newMessage: (m) => ({ subject: "New message from customer", html: layout("New Message", `<p>${m.text}</p>`) }),
   contactForm: (d) => ({ subject: "Contact form", html: layout("Contact", `<p>${d.name} ${d.email}: ${d.message}</p>`) }),
 };

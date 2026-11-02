@@ -3,20 +3,68 @@ const { emitToUser, emitToFarmer, emitToAdmins } = require("../sockets/emitters"
 const User = require("../models/User");
 const emailService = require("./emailService");
 
-async function createNotification({ userId, type, title, message, orderId }) {
-  const n = await Notification.create({ user: userId, type, title, message, orderId });
-  const user = await User.findById(userId);
-  // emit
-  if (user.role === "farmer") emitToFarmer(userId, "notification:new", n);
-  else if (user.role === "admin") emitToAdmins("notification:new", n);
-  else emitToUser(userId, "notification:new", n);
-  if (user.emailNotifications) {
-    // async email not blocking
-    emailService.sendEmail(type, user.email, { ...n.toObject(), orderNumber: orderId }).catch((error) => {
-      console.warn("Notification email was not delivered:", error?.code || "EMAIL_ERROR");
+async function createNotification({
+  userId,
+  type,
+  category,
+  title,
+  message,
+  orderId,
+  resourceType,
+  resourceId,
+  orderNumber,
+  status,
+}) {
+  try {
+    // Prevent duplicate notifications for the same event and recipient
+    const existing = await Notification.findOne({
+      user: userId,
+      type,
+      category,
+      title,
+      ...(orderId ? { orderId } : {}),
+      ...(resourceId ? { resourceId } : {}),
     });
+    if (existing) return existing;
+
+    const n = await Notification.create({
+      user: userId,
+      type,
+      category,
+      title,
+      message,
+      orderId,
+      resourceType,
+      resourceId,
+    });
+    let user;
+    try { user = await User.findById(userId); } catch (e) { user = null; }
+
+    // emit to the intended recipient's room only (io may be null in tests)
+    if (user) {
+      if (user.role === "farmer") emitToFarmer(userId, "notification:new", n);
+      else if (user.role === "admin") emitToAdmins("notification:new", n);
+      else emitToUser(userId, "notification:new", n);
+    }
+
+    // email must never block order creation/status updates
+    if (user && user.emailNotifications) {
+      try {
+        await emailService.sendEmail(type, user.email, {
+          ...n.toObject(),
+          orderNumber: orderNumber || orderId,
+          status: status || "",
+        });
+      } catch (emailError) {
+        console.warn("Notification email was not delivered:", emailError?.code || "EMAIL_ERROR");
+      }
+    }
+    return n;
+  } catch (error) {
+    // Never let notification failure break business operations
+    console.warn("Notification creation failed:", error?.code || error?.message || String(error));
+    return null;
   }
-  return n;
 }
 
 module.exports = { createNotification };

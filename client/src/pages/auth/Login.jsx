@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
@@ -13,46 +13,44 @@ import {
   passwordValidationMessage,
 } from "../../utils/authValidation.js";
 
-export default function Login({ initialRole = "customer" }) {
+export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
-  const [selectedRole, setSelectedRole] = useState(() => (
-    initialRole !== "customer" ? initialRole : searchParams.get("role") === "farmer" ? "farmer" : "customer"
-  ));
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const normalizedEmail = normalizeEmail(email);
-    if (!isLoginEmailValid(normalizedEmail)) {
+    if (!isLoginEmailValid(email)) {
       setValidationError("Enter a valid lowercase email address.");
       return;
     }
+    const normalizedEmail = normalizeEmail(email);
     if (password.length < 8) {
       setValidationError("Password must be at least 8 characters.");
       return;
     }
-    if (!isLegacyDemoEmail(normalizedEmail) && passwordValidationMessage(password)) {
-      setValidationError(passwordValidationMessage(password));
+    const passwordError = passwordValidationMessage(password);
+    if (/\s/.test(password) || (!isLegacyDemoEmail(normalizedEmail) && passwordError)) {
+      setValidationError(/\s/.test(password) ? "Password must not contain spaces." : passwordError);
       return;
     }
     setValidationError("");
     setLoading(true);
     try {
       const res = await dispatch(login({ email: normalizedEmail, password, remember })).unwrap();
-      if (res.user?.role !== selectedRole) {
+      const destination = dashboardPathForRole(res.user?.role);
+      if (destination === "/login") {
         dispatch(logout());
-        setValidationError(`These credentials are not authorized for ${selectedRole} login.`);
+        setValidationError("This account type cannot sign in.");
         return;
       }
       toast.success("Welcome back!");
-      navigate(res.user?.role === "customer" ? "/" : dashboardPathForRole(res.user?.role), { replace: true });
+      navigate(destination, { replace: true });
     } catch (e) {
       const message = e?.response?.data?.message || e?.message || "Invalid email or password.";
       setValidationError(message);
@@ -69,27 +67,10 @@ export default function Login({ initialRole = "customer" }) {
       </div>
       <h1 className="text-[22px] font-heading font-semibold text-center text-[#1F2937]">Welcome Back</h1>
       <p className="text-[13px] text-muted text-center mt-1">Login to your account to continue</p>
-      <div role="group" aria-label="Choose account type" className="mt-5 flex h-10 overflow-hidden rounded-lg border border-border">
-        {[
-          ["customer", "Customer Login"],
-          ["farmer", "Farmer Login"],
-          ["admin", "Admin Login"],
-        ].map(([role, label]) => (
-          <button
-            key={role}
-            type="button"
-            aria-pressed={selectedRole === role}
-            onClick={() => { setSelectedRole(role); setValidationError(""); }}
-            className={`flex-1 px-1 text-[11px] font-medium transition sm:text-xs ${selectedRole === role ? "bg-primary text-white" : "bg-white text-text hover:bg-emerald-50"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4 mt-6">
+      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
           <label className="block text-[13px] font-medium text-text mb-1.5">Email Address</label>
-          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setValidationError(""); }} onBlur={() => setEmail(normalizeEmail(email))} placeholder="Enter your email" autoComplete="username" required className="gm-input" />
+          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setValidationError(""); }} placeholder="Enter your email" autoComplete="username" required className="gm-input" />
         </div>
         <div>
           <label className="block text-[13px] font-medium text-text mb-1.5">Password</label>
@@ -103,7 +84,13 @@ export default function Login({ initialRole = "customer" }) {
               required
               className="gm-input pr-10"
             />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted">
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-sm text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
@@ -117,18 +104,13 @@ export default function Login({ initialRole = "customer" }) {
           <Link to="/forgot-password" className="font-medium text-primary hover:underline">Forgot password?</Link>
         </div>
         <button type="submit" disabled={loading} className="w-full h-11 bg-primary hover:bg-primary-hover text-white font-medium text-sm rounded-[8px] shadow-btn disabled:opacity-60">
-          {loading ? "Logging in..." : selectedRole === "admin" ? "Admin Login" : selectedRole === "farmer" ? "Farmer Login" : "Login"}
+          {loading ? "Logging in..." : "Login"}
         </button>
       </form>
 
       <p className="text-xs text-center text-muted mt-5">
         Don't have an account? <Link to="/register" className="font-semibold text-primary hover:underline">Register</Link>
       </p>
-      {selectedRole !== "admin" && (
-        <p className="text-xs text-center text-muted mt-3">
-          Administrator? <Link to="/admin/login" className="font-semibold text-primary hover:underline">Admin Login</Link>
-        </p>
-      )}
     </div>
   );
 }

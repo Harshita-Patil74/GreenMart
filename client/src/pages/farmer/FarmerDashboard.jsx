@@ -7,6 +7,7 @@ import orderApi from "../../api/orderApi";
 import productApi from "../../api/productApi";
 import getImageUrl from "../../utils/imageUrl";
 import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
+import BottomNavigation from "../../components/layout/BottomNavigation.jsx";
 
 function salesSeries(orders, farmerId, days) {
   const now = new Date();
@@ -97,7 +98,7 @@ export default function FarmerDashboard() {
   }
 
   return (
-    <section className="space-y-3.5 pb-5 text-[13px] text-[#20312E]">
+    <section className="space-y-3.5 pb-28 text-[13px] text-[#20312E]">
       <header>
         <h1 className="text-xl font-bold tracking-tight text-[#172A27]">Farmer Dashboard</h1>
         <p className="mt-1 text-xs text-[#71817D]">Welcome back, {user?.name || "Farmer"}. Here's what's happening with your farm and products.</p>
@@ -121,7 +122,7 @@ export default function FarmerDashboard() {
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "16px", width: "100%", alignItems: "stretch" }} className="grid-cols-1">
+      <div className="grid w-full grid-cols-1 items-stretch gap-4 xl:grid-cols-2">
         <section className="rounded-lg border border-[#E7EEEC] bg-white p-3.5 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div><h2 className="text-xs font-semibold text-[#2C3E39]">Sales Overview</h2><p className="text-[9px] text-[#86938E]">Order totals from your products</p></div>
@@ -179,7 +180,7 @@ export default function FarmerDashboard() {
               { label: "Add Product", path: "/farmer/products/new", icon: Plus },
               { label: "Manage Products", path: "/farmer/products", icon: Package },
               { label: "View Orders", path: "/farmer/orders", icon: ClipboardList },
-              { label: "Update Inventory", path: "/farmer/inventory", icon: Boxes },
+              { label: "Update Inventory", path: "/farmer/inventory-management", icon: Boxes },
             ].map(({ label, path, icon: Icon }) => (
               <Link key={path} to={path} className="flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[#E3ECE7] bg-white px-2 text-center text-[10px] font-medium text-[#38524A] hover:border-[#B7DACA] hover:bg-[#F5FAF7]">
                 <Icon size={13} className="shrink-0 text-[#07814E]" /> {label}
@@ -203,7 +204,6 @@ export default function FarmerDashboard() {
     </section>
   );
 }
-
 
 
 

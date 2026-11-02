@@ -5,9 +5,8 @@ const { auth } = require("../middleware/auth");
 const { validate } = require("../middleware/validate");
 const { z } = require("zod");
 const {
-  gmailEmailPattern,
+  emailPattern,
   demoEmailPattern,
-  loginEmailPattern,
   passwordValidationMessage,
 } = require("../utils/authValidation");
 const registrationPassword = z.string()
@@ -15,11 +14,14 @@ const registrationPassword = z.string()
   .regex(/[a-z]/, "Password must include a lowercase letter.")
   .regex(/[A-Z]/, "Password must include an uppercase letter.")
   .regex(/\d/, "Password must include a number.")
-  .regex(/[^A-Za-z0-9]/, "Password must include a special character.");
+  .regex(/[@#$!%&*]/, "Password must include one of these special characters: @ # $ ! % & *.")
+  .regex(/^\S+$/, "Password must not contain spaces.");
 const registrationSchema = z.object({
   body: z.object({
     name: z.string().trim().min(1).optional(),
-    email: z.string().trim().regex(gmailEmailPattern, "Use a lowercase Gmail address, such as name@gmail.com."),
+    email: z.string()
+      .regex(emailPattern, "Enter a valid lowercase email address.")
+      .transform((email) => email.toLowerCase()),
     password: registrationPassword,
     role: z.string().optional(),
     adminCode: z.string().optional(),
@@ -30,14 +32,30 @@ const registrationSchema = z.object({
 });
 const resetPasswordSchema = z.object({
   body: z.object({
-    email: z.string().trim().email(),
+    email: z.string().trim().email().transform((email) => email.toLowerCase()),
+    token: z.string().min(1),
+    password: registrationPassword,
+  }),
+});
+const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email().transform((email) => email.toLowerCase()),
+  }),
+});
+const activationSchema = z.object({
+  body: z.object({
+    email: z.string().trim().email().transform((email) => email.toLowerCase()),
     token: z.string().min(1),
     password: registrationPassword,
   }),
 });
 const loginBody = z.object({
-    email: z.string().trim().regex(loginEmailPattern, "Enter a valid lowercase email address."),
-    password: z.string().min(8, "Password must be at least 8 characters."),
+    email: z.string()
+      .regex(emailPattern, "Enter a valid lowercase email address.")
+      .transform((email) => email.toLowerCase()),
+    password: z.string()
+      .min(8, "Password must be at least 8 characters.")
+      .regex(/^\S+$/, "Password must not contain spaces."),
   }).superRefine(({ email, password }, context) => {
     if (demoEmailPattern.test(email)) return;
     const message = passwordValidationMessage(password);
@@ -51,6 +69,7 @@ const loginSchema = z.object({
 router.post("/register", validate(registrationSchema), c.register);
 router.post("/login", validate(loginSchema), c.login);
 router.get("/me", auth, c.me);
-router.post("/forgot-password", c.forgotPassword);
+router.post("/forgot-password", validate(forgotPasswordSchema), c.forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), c.resetPassword);
+router.post("/activate-account", validate(activationSchema), c.activateAccount);
 module.exports = router;

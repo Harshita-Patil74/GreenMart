@@ -4,8 +4,9 @@ import { tokenStorage } from "../../utils/tokenStorage";
 
 export const login = createAsyncThunk("auth/login", async (creds, { rejectWithValue }) => {
   try {
-    const { data } = await authApi.login(creds);
-    tokenStorage.set(data.token, creds.remember);
+    const { email, password, remember } = creds;
+    const { data } = await authApi.login({ email, password });
+    tokenStorage.set(data.token, remember);
     return data;
   } catch (e) {
     return rejectWithValue(e);

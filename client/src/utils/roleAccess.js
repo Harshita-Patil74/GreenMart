@@ -1,5 +1,5 @@
 export const DASHBOARD_PATH_BY_ROLE = {
-  customer: "/customer/dashboard",
+  customer: "/",
   farmer: "/farmer/dashboard",
   admin: "/admin/dashboard",
 };

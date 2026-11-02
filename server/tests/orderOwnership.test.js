@@ -9,6 +9,7 @@ jest.mock("../src/models/FarmerProfile", () => ({
   findOne: jest.fn().mockResolvedValue(null),
 }));
 
+jest.resetModules();
 const Order = require("../src/models/Order");
 const { get } = require("../src/controllers/orderController");
 

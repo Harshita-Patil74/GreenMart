@@ -5,9 +5,52 @@ const FarmerProfile = require("../models/FarmerProfile");
 const statsService = require("../services/statsService");
 const { buildReportPdf, REPORT_TYPES } = require("../services/reportPdfService");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { createNotification } = require("../services/notificationService");
+const { randomToken, hashToken } = require("../utils/tokens");
+const bcrypt = require("bcryptjs");
+const { sendEmail } = require("../services/emailService");
+const { getSmtpStatus } = require("../config/mailer");
+const env = require("../config/env");
+const AdminAuditLog = require("../models/AdminAuditLog");
+
+async function recordAdminAction(actorId, action, targetUserId) {
+  await AdminAuditLog.create({ actor: actorId, action, targetUser: targetUserId });
+}
+
+function farmerActivationLink(email, token) {
+  return `${env.clientUrl}/activate-account?email=${encodeURIComponent(email)}#token=${token}`;
+}
+
+async function issueFarmerActivation(user) {
+  const token = randomToken();
+  user.activationTokenHash = await hashToken(token);
+  user.activationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await user.save();
+
+  const smtpStatus = getSmtpStatus();
+  if (env.emailEnabled && smtpStatus.configured) {
+    await sendEmail("farmerActivation", user.email, farmerActivationLink(user.email, token));
+    return null;
+  }
+  if (env.nodeEnv === "development") return farmerActivationLink(user.email, token);
+  if (env.nodeEnv === "test") return null;
+  const error = new Error("Farmer activation email is not configured.");
+  error.code = "SMTP_NOT_CONFIGURED";
+  throw error;
+}
 
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
-exports.users = asyncHandler(async (req,res) => res.json(await User.find().select("-passwordHash")));
+exports.users = asyncHandler(async (req,res) => {
+  const query = ["customer", "farmer", "admin"].includes(req.query.role) ? { role: req.query.role } : {};
+  res.json(await User.find(query).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry"));
+});
+exports.farmers = asyncHandler(async (req, res) => {
+  const farmers = await FarmerProfile.find()
+    .select("user farmName certification createdAt")
+    .populate("user", "_id name email accountActivated")
+    .sort({ createdAt: -1 });
+  res.json(farmers);
+});
 exports.lowStock = asyncHandler(async (req,res) => res.json(await Product.find({ $expr: { $lte: ["$stock","$lowStockThreshold"] } })));
 exports.sales = asyncHandler(async (req,res) => res.json(await statsService.sales()));
 exports.categoriesShare = asyncHandler(async (req,res) => res.json(await statsService.categoriesShare()));
@@ -45,17 +88,135 @@ exports.updateUser = asyncHandler(async (req,res) => {
   const allowed = ["name","email","phone","status","role"];
   const update = {};
   for (const k of allowed) if (req.body[k] !== undefined) update[k] = req.body[k];
-  res.json(await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).select("-passwordHash"));
+  const updated = await User.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry");
+  if (target.role === "farmer" && (req.body.status !== undefined || req.body.role !== undefined)) {
+    await recordAdminAction(req.user._id, "farmer.account.updated", target._id);
+  }
+  // Notify all admins when a farmer account status changes
+  if (req.body.status !== undefined && target.role === "farmer") {
+    const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+    for (const admin of admins) {
+      await createNotification({
+        userId: admin._id,
+        type: "farmerStatusAdmin",
+        category: "farmers",
+        title: "Farmer account status changed",
+        message: `A farmer account status has been updated to ${updated.status}.`,
+        resourceType: "User",
+        resourceId: target._id,
+      });
+    }
+  }
+  res.json(updated);
 });
 exports.verifyFarmer = asyncHandler(async (req,res) => {
   const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": true, "certification.verifiedAt": new Date(), "certification.rejectedByAdmin": false, "certification.rejectionReason": "" }, { new: true });
   if (!fp) return res.status(404).json({ message: "Farmer profile not found" });
+  await recordAdminAction(req.user._id, "farmer.certification.verified", fp.user);
+  // Notify all admins about farmer verification
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+  for (const admin of admins) {
+    await createNotification({
+      userId: admin._id,
+      type: "farmerVerifiedAdmin",
+      category: "farmers",
+      title: "Farmer account verified",
+      message: `A farmer account has been verified and approved.`,
+      resourceType: "User",
+      resourceId: req.params.id,
+    });
+  }
   res.json(fp);
 });
 exports.rejectFarmer = asyncHandler(async (req,res) => {
   const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0,500) : "";
   const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": false, "certification.rejectedByAdmin": true, "certification.rejectedAt": new Date(), "certification.rejectionReason": reason }, { new: true });
   if (!fp) return res.status(404).json({ message: "Farmer profile not found" });
+  await recordAdminAction(req.user._id, "farmer.certification.rejected", fp.user);
+  // Notify all admins about farmer rejection
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+  for (const admin of admins) {
+    await createNotification({
+      userId: admin._id,
+      type: "farmerRejectedAdmin",
+      category: "farmers",
+      title: "Farmer account rejected",
+      message: `A farmer account has been rejected.`,
+      resourceType: "User",
+      resourceId: req.params.id,
+    });
+  }
   res.json(fp);
 });
+exports.createFarmer = asyncHandler(async (req,res) => {
+  const { name, email, phone, farmName, farmAddress, farmCategory, about } = req.body;
+  const normalizedEmail = email.toLowerCase();
+  const exists = await User.findOne({ email: normalizedEmail });
+  if (exists) return res.status(400).json({ message: "Email is already registered." });
+  const passwordHash = await bcrypt.hash(randomToken(), 10);
+  let user;
+  try {
+    user = await User.create({ name, email: normalizedEmail, passwordHash, role: "farmer", phone, accountActivated: false });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({ message: "Email is already registered." });
+    }
+    throw error;
+  }
+  await FarmerProfile.create({ user: user._id, farmName: farmName || name+" Farm", address: farmAddress, category: farmCategory, description: about });
+  await recordAdminAction(req.user._id, "farmer.account.created", user._id);
+  let activationLink;
+  try {
+    activationLink = await issueFarmerActivation(user);
+  } catch (error) {
+    console.warn("Farmer activation email was not delivered:", error?.code || "EMAIL_ERROR");
+    return res.status(201).json({
+      message: "Farmer account created, but activation email could not be sent. Check email settings and use Resend activation.",
+      activationEmailSent: false,
+    });
+  }
+  // Notify all admins about the new farmer registration
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+  for (const admin of admins) {
+    await createNotification({
+      userId: admin._id,
+      type: "newFarmerAdmin",
+      category: "farmers",
+      title: "New farmer registered",
+      message: `A new farmer has registered on GreenMart.`,
+      resourceType: "User",
+      resourceId: user._id,
+    });
+  }
+  res.status(201).json({ message: "Farmer created. The farmer must activate their account to set a password.", ...(activationLink ? { activationLink } : {}) });
+});
+
+exports.resendFarmerActivation = asyncHandler(async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, role: "farmer" });
+  if (!user) return res.status(404).json({ message: "Farmer account not found." });
+  if (user.accountActivated !== false) return res.status(409).json({ message: "This farmer account is already activated." });
+  await recordAdminAction(req.user._id, "farmer.activation.resent", user._id);
+  let activationLink;
+  try {
+    activationLink = await issueFarmerActivation(user);
+  } catch (error) {
+    console.warn("Farmer activation email was not delivered:", error?.code || "EMAIL_ERROR");
+    return res.status(503).json({ message: "The activation email could not be sent. Check email delivery and try again." });
+  }
+  res.json({ message: "Activation link sent to the farmer.", ...(activationLink ? { activationLink } : {}) });
+});
+exports.getLandReview = async (req, res) => {
+  const FarmerProfile = require("../models/FarmerProfile");
+  const fp = await FarmerProfile.findOne({ user: req.params.farmerId }).populate("user", "name email");
+  if (!fp) return res.status(404).json({ message: "Profile not found" });
+  res.json(fp);
+};
+exports.updateLandReview = async (req, res) => {
+  const FarmerProfile = require("../models/FarmerProfile");
+  const { status, remarks } = req.body;
+  if (!["Pending Review", "Approved", "Rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.farmerId }, { landVerificationStatus: status, landReviewRemarks: remarks || "", landReviewedBy: req.user._id, landReviewedAt: new Date() }, { new: true });
+  if (!fp) return res.status(404).json({ message: "Profile not found" });
+  res.json(fp);
+};
 module.exports = exports;

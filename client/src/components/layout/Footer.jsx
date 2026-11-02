@@ -33,7 +33,7 @@ const linkGroups = [
     label: "Farmer links",
     links: [
       { label: "Explore Farmers", to: "/farmers" },
-      { label: "Farmer Login", to: "/login?role=farmer" },
+      { label: "Farmer Login", to: "/login" },
       { label: "Become a Farmer", to: "/register?role=farmer" },
       { label: "Farmer Support", to: "/contact" },
     ],
@@ -42,7 +42,7 @@ const linkGroups = [
     title: "For admins",
     label: "Admin links",
     links: [
-      { label: "Admin Login", to: "/admin/login" },
+      { label: "Admin Login", to: "/login" },
       { label: "Manage Users", to: "/admin/users" },
       { label: "Reports", to: "/admin/reports" },
       { label: "Settings", to: "/admin/settings" },

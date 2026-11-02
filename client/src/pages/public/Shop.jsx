@@ -14,7 +14,8 @@ export default function Shop() {
   const [params, setParams] = useSearchParams();
   const category = params.get("category") || "";
   const requestedSort = params.get("sort");
-  const sort = ["price_asc", "price_desc", "rating"].includes(requestedSort) ? requestedSort : "newest";
+  const sort = ["price_asc", "price_desc", "rating", "discount_desc"].includes(requestedSort) ? requestedSort : "newest";
+  const offersOnly = params.get("offers") === "true";
   const search = params.get("search") || "";
   const page = Math.max(1, Number(params.get("page") || 1));
   const [maxPrice, setMaxPrice] = useState(Number(params.get("maxPrice") || 1000));
@@ -40,7 +41,8 @@ export default function Shop() {
     const availability = inStock && !outOfStock ? "true" : !inStock && outOfStock ? "false" : undefined;
     productApi.storefront({
       category: category || undefined,
-      sort: ["price_asc", "price_desc", "rating"].includes(sort) ? sort : undefined,
+      sort: ["price_asc", "price_desc", "rating", "discount_desc"].includes(sort) ? sort : undefined,
+      hasOffer: offersOnly ? "true" : undefined,
       search: debouncedSearch.trim() || undefined,
       maxPrice: maxPrice < 1000 ? maxPrice : undefined,
       inStock: availability,
@@ -62,7 +64,7 @@ export default function Shop() {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [category, sort, debouncedSearch, maxPrice, inStock, outOfStock, page, retryCount]);
+  }, [category, sort, offersOnly, debouncedSearch, maxPrice, inStock, outOfStock, page, retryCount]);
 
   const setParam = (key, value, resetPage = true) => {
     const next = new URLSearchParams(params);
@@ -92,10 +94,6 @@ export default function Shop() {
     <div className="gm-container py-5 pb-16">
       <BackButton fallback="/" />
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-heading font-bold text-gray-900">{category || "Shop Organic Products"}</h1>
-          <p className="mt-1 text-xs text-gray-500">Fresh produce from GreenMart farmers.</p>
-        </div>
         <button onClick={() => setMobileFilterOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 md:hidden"><SlidersHorizontal className="h-4 w-4 text-primary" />Filters</button>
       </div>
 
@@ -124,7 +122,18 @@ export default function Shop() {
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
               <option value="rating">Top Rated</option>
+              <option value="discount_desc">Highest Discount</option>
             </select>
+            <label className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700">
+              <input
+                type="checkbox"
+                aria-label="Offers only"
+                checked={offersOnly}
+                onChange={(event) => setParam("offers", event.target.checked ? "true" : "")}
+                className="h-3.5 w-3.5 accent-[#16803C]"
+              />
+              Offers only
+            </label>
           </div>
           <div className="mb-3 text-[11px] text-gray-500">{loading ? "Loading products..." : `Showing ${total ? (page - 1) * PAGE_SIZE + 1 : 0}–${Math.min(page * PAGE_SIZE, total)} of ${total} products`}</div>
           {error ? <ErrorState message={error} onRetry={() => setRetryCount((count) => count + 1)} /> : loading ? (

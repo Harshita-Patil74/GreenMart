@@ -9,6 +9,12 @@ const IMAGE_TYPES = {
   "image/webp": ".webp",
 };
 
+const LAND_TYPES = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+};
+
 function makeUploader(subdir) {
   const dest = path.join(__dirname, "..", "..", "uploads", subdir);
   fs.mkdirSync(dest, { recursive: true });
@@ -71,4 +77,24 @@ function makeUploader(subdir) {
     array: (...args) => wrap(uploader.array(...args)),
   };
 }
-module.exports = { makeUploader, uploadProduct: makeUploader("products"), uploadAvatar: makeUploader("avatars"), uploadFarm: makeUploader("farms") };
+function makeLandUploader(subdir) {
+  const dest = path.join(__dirname, "..", "..", "private", "uploads", subdir);
+  fs.mkdirSync(dest, { recursive: true });
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, dest),
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomUUID()}${LAND_TYPES[file.mimetype] || ""}`),
+  });
+  const uploader = multer({ storage, limits: { fileSize: 5*1024*1024 }, fileFilter: (req,file,cb) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const expectedExtension = LAND_TYPES[file.mimetype];
+    if (expectedExtension && (extension === expectedExtension || (file.mimetype === "image/jpeg" && extension === ".jpeg"))) {
+      cb(null, true);
+      return;
+    }
+    const error = new Error("Only PDF, JPG, and PNG are supported.");
+    error.status = 400;
+    cb(error);
+  }});
+  return { single: (name) => uploader.single(name) };
+}
+module.exports = { makeUploader, uploadProduct: makeUploader("products"), uploadAvatar: makeUploader("avatars"), uploadFarm: makeUploader("farms"), uploadLand: makeLandUploader("land") };

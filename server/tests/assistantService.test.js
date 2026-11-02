@@ -14,6 +14,7 @@ beforeAll(async () => {
   });
   await Product.create({
     name: "Organic Apples",
+    description: "Fresh organic apples",
     price: 100,
     unit: "kg",
     category: "Fruits",

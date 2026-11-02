@@ -18,15 +18,23 @@ async function authUserPayload(user) {
 
 exports.register = async (req,res) => {
   const { name, password, farmName, farmAddress, location } = req.body;
-  const email = req.body.email.trim();
+  const email = req.body.email.toLowerCase();
   // Public registration may only create customer or farmer accounts.
   // Admin accounts must be created through trusted server-side processes.
   const requestedRole = req.body.role;
   const role = requestedRole === "farmer" ? "farmer" : "customer";
   const exists = await User.findOne({ email });
-  if (exists) return res.status(400).json({ message: "Email in use" });
+  if (exists) return res.status(400).json({ message: "Email is already registered." });
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ name, email, passwordHash, role });
+  let user;
+  try {
+    user = await User.create({ name, email, passwordHash, role });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({ message: "Email is already registered." });
+    }
+    throw error;
+  }
   if (role === "farmer") {
     const FarmerProfile = require("../models/FarmerProfile");
     await FarmerProfile.create({ user: user._id, farmName: farmName || name+" Farm", address: farmAddress, location });
@@ -40,8 +48,11 @@ exports.register = async (req,res) => {
 
 exports.login = async (req,res) => {
   const { password } = req.body;
-  const email = req.body.email.trim();
+  const email = req.body.email.toLowerCase();
   const user = await User.findOne({ email });
+  if (user && user.accountActivated === false) {
+    return res.status(403).json({ message: "Activate your account using the link sent to your email." });
+  }
   if (!user || !(await user.comparePassword(password))) return res.status(401).json({ message: "Invalid credentials" });
   const passwordError = passwordValidationMessage(password);
   const isConfiguredDemoAccount = user.isDemo && email.endsWith("@demo.greenmart.test");
@@ -56,14 +67,14 @@ exports.login = async (req,res) => {
 exports.me = async (req,res) => { res.json(req.user); };
 
 exports.forgotPassword = async (req,res) => {
-  const { email } = req.body;
+  const email = req.body.email.toLowerCase();
   const user = await User.findOne({ email });
-  if (user) {
+  if (user && user.accountActivated !== false) {
     const token = randomToken();
     user.resetTokenHash = await hashToken(token);
     user.resetTokenExpiry = new Date(Date.now()+3600000);
     await user.save();
-    const link = `${env.clientUrl}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const link = `${env.clientUrl}/reset-password?email=${encodeURIComponent(email)}#token=${token}`;
     try {
       await sendEmail("passwordReset", user.email, link);
     } catch (error) {
@@ -74,9 +85,10 @@ exports.forgotPassword = async (req,res) => {
 };
 
 exports.resetPassword = async (req,res) => {
-  const { email, token, password } = req.body;
+  const { token, password } = req.body;
+  const email = req.body.email.toLowerCase();
   const user = await User.findOne({ email });
-  if (!user || !user.resetTokenHash || user.resetTokenExpiry < new Date()) return res.status(400).json({ message: "Invalid token" });
+  if (!user || user.accountActivated === false || !user.resetTokenHash || !user.resetTokenExpiry || user.resetTokenExpiry < new Date()) return res.status(400).json({ message: "Invalid token" });
   const ok = await bcrypt.compare(token, user.resetTokenHash);
   if (!ok) return res.status(400).json({ message: "Invalid token" });
   user.passwordHash = await bcrypt.hash(password, 10);
@@ -84,4 +96,21 @@ exports.resetPassword = async (req,res) => {
   user.resetTokenExpiry = undefined;
   await user.save();
   res.json({ message: "Password reset" });
+};
+
+exports.activateAccount = async (req, res) => {
+  const { token, password } = req.body;
+  const user = await User.findOne({ email: req.body.email.toLowerCase(), role: "farmer" });
+  if (!user || user.accountActivated !== false || !user.activationTokenHash || !user.activationTokenExpiry || user.activationTokenExpiry < new Date()) {
+    return res.status(400).json({ message: "Invalid or expired activation link." });
+  }
+  if (!(await bcrypt.compare(token, user.activationTokenHash))) {
+    return res.status(400).json({ message: "Invalid or expired activation link." });
+  }
+  user.passwordHash = await bcrypt.hash(password, 10);
+  user.accountActivated = true;
+  user.activationTokenHash = undefined;
+  user.activationTokenExpiry = undefined;
+  await user.save();
+  res.json({ message: "Account activated. You can now sign in." });
 };

@@ -1,3 +1,4 @@
+jest.mock("../src/services/cloudinaryUpload", () => ({ uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/avatar.png") }));
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
@@ -69,7 +70,7 @@ describe("Authenticated profile image uploads", () => {
       .attach("avatar", pngHeader, { filename: "avatar.png", contentType: "image/png" });
 
     expect(response.status).toBe(200);
-    expect(response.body.avatar).toMatch(/^\/uploads\/avatars\//);
+    expect(response.body.avatar).toMatch(/^https:\/\/res\.cloudinary\.com\//);
     trackUpload(response.body.avatar);
     const storedUser = await User.findById(customerId);
     expect(storedUser.avatar).toBe(response.body.avatar);
@@ -79,9 +80,6 @@ describe("Authenticated profile image uploads", () => {
       .set("Authorization", `Bearer ${customerToken}`);
     expect(profile.body.avatar).toBe(response.body.avatar);
 
-    const image = await request(app).get(response.body.avatar);
-    expect(image.status).toBe(200);
-    expect(image.headers["content-type"]).toMatch(/^image\/png/);
   });
 
   it("saves farmer profile photos to each farmer account independently", async () => {

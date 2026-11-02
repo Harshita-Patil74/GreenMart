@@ -1,14 +1,45 @@
 const mongoose = require("mongoose");
 const FarmerProfileSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", unique: true },
+  fullName: String,
+  mobile: String,
+  dateOfBirth: Date,
+  residentialAddress: String,
+  village: String,
+  district: String,
+  state: String,
+  pinCode: String,
   farmName: { type: String, required: true },
+  farmAddress: String,
+  farmVillage: String,
+  farmDistrict: String,
+  farmState: String,
+  farmPinCode: String,
+  farmCategory: String,
+  totalFarmArea: String,
+  surveyNumber: { type: String, trim: true, maxlength: 60 },
+  landOwnershipType: { type: String, enum: ["Owned", "Leased", "Shared"], trim: true },
+  totalLandArea: { type: Number, min: 0 },
+  cultivatedArea: { type: Number, min: 0, validate: { validator: function (v) { if (v == null || this.totalLandArea == null) return true; return v <= this.totalLandArea; }, message: "Cultivated area cannot exceed total land area" } },
+  landAreaUnit: { type: String, enum: ["Acres", "Hectares"], trim: true },
+  landVillage: { type: String, trim: true, maxlength: 80 },
+  landTaluk: { type: String, trim: true, maxlength: 80 },
+  landDistrict: { type: String, trim: true, maxlength: 80 },
+  landState: { type: String, trim: true, maxlength: 80 },
+  landPinCode: { type: String, trim: true, maxlength: 12 },
+  landDescription: { type: String, trim: true, maxlength: 500 },
   category: String,
   description: String,
   address: String,
   location: { lat: Number, lng: Number },
   photo: String,
   certification: { body: String, number: String, verifiedByAdmin: { type: Boolean, default: false }, verifiedAt: Date, rejectedByAdmin: { type: Boolean, default: false }, rejectedAt: Date, rejectionReason: String },
-  isDemo: { type: Boolean, default: false } }, { timestamps: true });
+  landVerificationStatus: { type: String, enum: ["Not Submitted", "Pending Review", "Approved", "Rejected"], default: "Not Submitted" },
+  landReviewRemarks: String,
+  landReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  landReviewedAt: Date,
+}, { timestamps: true });
+
 module.exports = mongoose.model("FarmerProfile", FarmerProfileSchema);
 
 
