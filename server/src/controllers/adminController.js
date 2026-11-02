@@ -27,16 +27,18 @@ async function issueFarmerActivation(user) {
   user.activationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
   await user.save();
 
+  const link = farmerActivationLink(user.email, token);
+
   const smtpStatus = getSmtpStatus();
   if (env.emailEnabled && smtpStatus.configured) {
-    await sendEmail("farmerActivation", user.email, farmerActivationLink(user.email, token));
-    return null;
+    try {
+      await sendEmail("farmerActivation", user.email, link);
+    } catch (emailError) {
+      console.warn("Failed to send activation email:", emailError?.message);
+    }
   }
-  if (env.nodeEnv === "development") return farmerActivationLink(user.email, token);
-  if (env.nodeEnv === "test") return null;
-  const error = new Error("Farmer activation email is not configured.");
-  error.code = "SMTP_NOT_CONFIGURED";
-  throw error;
+
+  return link;
 }
 
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
@@ -165,16 +167,8 @@ exports.createFarmer = asyncHandler(async (req,res) => {
   }
   await FarmerProfile.create({ user: user._id, farmName: farmName || name+" Farm", address: farmAddress, category: farmCategory, description: about });
   await recordAdminAction(req.user._id, "farmer.account.created", user._id);
-  let activationLink;
-  try {
-    activationLink = await issueFarmerActivation(user);
-  } catch (error) {
-    console.warn("Farmer activation email was not delivered:", error?.code || "EMAIL_ERROR");
-    return res.status(201).json({
-      message: "Farmer account created, but activation email could not be sent. Check email settings and use Resend activation.",
-      activationEmailSent: false,
-    });
-  }
+  const activationLink = await issueFarmerActivation(user);
+  const emailSent = env.emailEnabled && getSmtpStatus().configured;
   // Notify all admins about the new farmer registration
   const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
   for (const admin of admins) {
@@ -188,7 +182,13 @@ exports.createFarmer = asyncHandler(async (req,res) => {
       resourceId: user._id,
     });
   }
-  res.status(201).json({ message: "Farmer created. The farmer must activate their account to set a password.", ...(activationLink ? { activationLink } : {}) });
+  res.status(201).json({
+    message: emailSent
+      ? "Farmer created. Activation email sent."
+      : "Farmer created, but activation email could not be sent. Check email settings and use Resend activation.",
+    activationLink,
+    activationEmailSent: emailSent,
+  });
 });
 
 exports.resendFarmerActivation = asyncHandler(async (req, res) => {
@@ -196,14 +196,15 @@ exports.resendFarmerActivation = asyncHandler(async (req, res) => {
   if (!user) return res.status(404).json({ message: "Farmer account not found." });
   if (user.accountActivated !== false) return res.status(409).json({ message: "This farmer account is already activated." });
   await recordAdminAction(req.user._id, "farmer.activation.resent", user._id);
-  let activationLink;
-  try {
-    activationLink = await issueFarmerActivation(user);
-  } catch (error) {
-    console.warn("Farmer activation email was not delivered:", error?.code || "EMAIL_ERROR");
-    return res.status(503).json({ message: "The activation email could not be sent. Check email delivery and try again." });
-  }
-  res.json({ message: "Activation link sent to the farmer.", ...(activationLink ? { activationLink } : {}) });
+  const activationLink = await issueFarmerActivation(user);
+  const emailSent = env.emailEnabled && getSmtpStatus().configured;
+  res.json({
+    message: emailSent
+      ? "Activation link sent to the farmer."
+      : "Activation link regenerated. Email could not be sent. Use the link below to activate the farmer's account.",
+    activationLink,
+    activationEmailSent: emailSent,
+  });
 });
 exports.getLandReview = async (req, res) => {
   const FarmerProfile = require("../models/FarmerProfile");
