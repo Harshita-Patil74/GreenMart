@@ -8,7 +8,7 @@ import { toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 
 vi.mock("../../api/productApi.js", () => ({
-  default: { storefrontOffers: vi.fn() },
+  default: { storefrontOffers: vi.fn(), serverTime: vi.fn() },
 }));
 vi.mock("../../api/categoryApi.js", () => ({
   default: { list: vi.fn() },
@@ -114,6 +114,7 @@ describe("Customer Offers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     productApi.storefrontOffers.mockResolvedValue({ data: { items: offers } });
+    productApi.serverTime.mockResolvedValue({ data: { serverTime: new Date().toISOString() } });
     categoryApi.list.mockResolvedValue({
       data: [
         { _id: "fruits", name: "Fruits" },

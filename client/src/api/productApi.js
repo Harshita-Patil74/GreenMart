@@ -5,6 +5,7 @@ export default {
   storefront: (p = {}) => api.get("/products/storefront", { params: p }),
   storefrontOffers: () => api.get("/products/storefront/offers"),
   storefrontGet: (id) => api.get(`/products/storefront/${id}`),
+  serverTime: () => api.get("/products/storefront/server-time"),
   mine: (p = {}) => api.get("/products/mine", { params: p }),
   get: (id) => api.get(`/products/${id}`),
   create: (fd) => api.post("/products", fd),

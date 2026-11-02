@@ -80,6 +80,8 @@ describe("Farmer My Offers", () => {
     fireEvent.change(screen.getByRole("spinbutton", { name: "Discount value" }), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText("Offer start date"), { target: { value: "2026-06-01" } });
     fireEvent.change(screen.getByLabelText("Offer end date"), { target: { value: "2026-06-30" } });
+    fireEvent.change(screen.getByLabelText("Offer start time"), { target: { value: "09:00" } });
+    fireEvent.change(screen.getByLabelText("Offer end time"), { target: { value: "17:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit for Approval" }));
 
     await waitFor(() => expect(farmerOffersApi.create).toHaveBeenCalledWith(expect.objectContaining({

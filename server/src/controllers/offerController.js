@@ -3,12 +3,14 @@ const Offer = require("../models/Offer");
 const Product = require("../models/Product");
 const FarmerProfile = require("../models/FarmerProfile");
 const User = require("../models/User");
+const Wishlist = require("../models/Wishlist");
 const { asyncHandler } = require("../utils/asyncHandler");
-const { createNotification } = require("../services/notificationService");
+const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 const {
   money,
   getEffectiveStatus,
   getSalesByOffer,
+  combineDateTimeToUTC,
 } = require("../services/offerService");
 
 const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "Bundle Offer"];
@@ -55,10 +57,16 @@ async function validateOfferData(body, farmerId, existing) {
   if (Number(product.price) <= 0) return { error: "Offers require a product with a price greater than zero." };
   const startValue = body.startDate ?? existing?.startDate;
   const endValue = body.endDate ?? existing?.endDate;
+  const startTimeValue = body.startTime ?? existing?.startTime;
+  const endTimeValue = body.endTime ?? existing?.endTime;
   const startDate = new Date(startValue);
   const endDate = new Date(endValue);
   if (typeof startValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(startValue)) startDate.setUTCHours(0, 0, 0, 0);
   if (typeof endValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(endValue)) endDate.setUTCHours(23, 59, 59, 999);
+
+  // Combine date and time inputs (Asia/Kolkata) into UTC startAt/endAt
+  const startAt = combineDateTimeToUTC(startValue, startTimeValue) || startDate;
+  const endAt = combineDateTimeToUTC(endValue, endTimeValue) || endDate;
 
   const data = {
     title: String(body.title ?? existing?.title ?? "").trim(),
@@ -69,6 +77,8 @@ async function validateOfferData(body, farmerId, existing) {
     discountValue: Number(body.discountValue ?? existing?.discountValue),
     startDate,
     endDate,
+    startAt,
+    endAt,
     minimumQuantity: Number(body.minimumQuantity ?? existing?.minimumQuantity ?? 1),
     minimumAmount: Number(body.minimumAmount ?? existing?.minimumAmount ?? 0),
     maximumDiscount: body.maximumDiscount === "" || body.maximumDiscount === null || Number(body.maximumDiscount ?? existing?.maximumDiscount ?? 0) === 0
@@ -86,6 +96,11 @@ async function validateOfferData(body, farmerId, existing) {
   if (data.discountType === "Fixed Amount" && data.discountValue >= Number(product.price)) return { error: "Fixed discount must be lower than the product price." };
   if (Number.isNaN(data.startDate.getTime()) || Number.isNaN(data.endDate.getTime()) || data.endDate <= data.startDate) {
     return { error: "Enter valid offer dates; the end date must be after the start date." };
+  }
+  const startMs = new Date(data.startAt).getTime();
+  const endMs = new Date(data.endAt).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return { error: "Enter valid offer start and end dates/times; the end datetime must be after the start datetime." };
   }
   if (!Number.isInteger(data.minimumQuantity) || data.minimumQuantity < 1 || data.minimumQuantity > Number(product.stock)) {
     return { error: "Minimum quantity must be a whole number within available stock." };
@@ -272,6 +287,22 @@ exports.farmerUpdate = asyncHandler(async (req, res) => {
     resourceId: offer._id,
   })));
   const updated = await Offer.findById(offer._id).populate("product", PRODUCT_FIELDS);
+
+  // Notify the farmer that their edited offer is awaiting administrator approval
+  await createNotification({
+    userId: offer.farmer,
+    type: "offerResubmitted",
+    category: "offers",
+    title: "Offer awaiting approval",
+    message: `Your edited offer "${offer.title}" is awaiting administrator approval.`,
+    resourceType: "Offer",
+    resourceId: offer._id,
+    icon: "RefreshCw",
+    priority: "normal",
+    actionUrl: `/farmer/offers/${offer._id}`,
+    eventKey: `${EVENT_KEY_PREFIXES.offerResubmitted}:${offer._id}`,
+  });
+
   res.json(serialize(updated));
 });
 
@@ -410,6 +441,29 @@ exports.adminApprove = asyncHandler(async (req, res) => {
     resourceType: "Offer",
     resourceId: offer._id,
   });
+
+  // Notify wishlist customers that their wishlisted product is now on offer
+  const productDoc = await Product.findById(offer.product).select("_id name");
+  if (productDoc) {
+    const wishlists = await Wishlist.find({ products: offer.product }).populate("user", "_id name email");
+    for (const wishlist of wishlists) {
+      if (wishlist.user) {
+        await createNotification({
+          userId: wishlist.user._id,
+          type: "wishlistOffer",
+          category: "offers",
+          title: "New special offer",
+          message: `${productDoc.name} is now available with a special discount.`,
+          resourceType: "Offer",
+          resourceId: offer._id,
+          icon: "Tag",
+          priority: "normal",
+          actionUrl: `/product/${offer.product}`,
+          eventKey: `${EVENT_KEY_PREFIXES.wishlistOffer}:${offer.product}:${wishlist.user._id}`,
+        });
+      }
+    }
+  }
   res.json(serialize(await Offer.findById(updatedOffer._id).populate("product", PRODUCT_FIELDS)));
 });
 

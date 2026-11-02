@@ -11,6 +11,7 @@ import productApi from "../../api/productApi.js";
 import categoryApi from "../../api/categoryApi.js";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { fetchWishlist, toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
+import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
 
@@ -56,6 +57,7 @@ export default function CustomerOffers() {
   const [sort, setSort] = useState("newest");
   const [onlyActive, setOnlyActive] = useState(true);
   const [addingId, setAddingId] = useState("");
+  const [serverTime, setServerTime] = useState(null);
   const offersRef = useRef(null);
 
   useEffect(() => {
@@ -100,6 +102,11 @@ export default function CustomerOffers() {
       .finally(() => {
         if (active) setLoading(false);
       });
+    productApi.serverTime()
+      .then(({ data }) => {
+        if (active) setServerTime(data.serverTime);
+      })
+      .catch(() => { /* server time is optional */ });
     return () => { active = false; };
   }, [retry]);
 
@@ -323,6 +330,7 @@ export default function CustomerOffers() {
                 adding={addingId === String(offer._id)}
                 onAdd={() => addOfferToCart(offer)}
                 onWishlist={() => toggleProductWishlist(offer)}
+                serverTime={serverTime}
               />
             ))}
           </div>
@@ -338,7 +346,7 @@ export default function CustomerOffers() {
   );
 }
 
-function OfferCard({ offer, wished, adding, onAdd, onWishlist }) {
+function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
   const product = offer.product || {};
   const farmerName = offer.farmer?.name || product.farmer?.name || "Local Farmer";
   const offerType = offer.type || "Farmer Offer";
@@ -393,6 +401,12 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist }) {
         )}
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 border-t border-[#EEF1ED] pt-1.5 text-[8px] text-[#67756A] sm:text-[9px]">
           <span className="inline-flex items-center gap-1 whitespace-nowrap"><CalendarDays aria-hidden="true" className="h-3 w-3" />Till {formatDate(offer.endDate, { day: "2-digit", month: "short", year: "numeric" })}</span>
+          {offer.startAt && offer.effectiveStatus === "Upcoming" && (
+            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
+          )}
+          {offer.endAt && offer.effectiveStatus === "Active" && (
+            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
+          )}
           <span className={outOfStock ? "font-semibold text-red-600" : "whitespace-nowrap"}>{outOfStock ? "Out of Stock" : `In Stock: ${stock}`}</span>
         </div>
 

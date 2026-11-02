@@ -171,23 +171,22 @@ exports.updateStatus = asyncHandler(async (req,res) => {
   });
   emitToUser(updated.user, "order:statusUpdated", updated);
   emitToAdmins("order:statusUpdated", updated);
-  // Notify farmers when a status change requires their attention
-  if (["Cancelled", "Delivery Failed"].includes(status)) {
-    const farmers = [...new Set(updated.items.map(i=>String(i.farmer)))];
-    for (const f of farmers) {
-      const farmerView = farmerOrderView(updated, f);
-      await createNotification({
-        userId: f,
-        type: "statusUpdate",
-        title: notificationTitle,
-        message: `Order #${updated.orderNumber} status updated to ${status}.`,
-        orderId: updated._id,
-        orderNumber: updated.orderNumber,
-        status,
-      });
-      emitToFarmer(f, "order:statusUpdated", farmerView);
-    }
+  // Notify farmers about status changes affecting their items
+  const farmers = [...new Set(updated.items.map(i=>String(i.farmer)))];
+  for (const f of farmers) {
+    const farmerView = farmerOrderView(updated, f);
+    await createNotification({
+      userId: f,
+      type: "statusUpdate",
+      title: notificationTitle,
+      message: `Order #${updated.orderNumber} status updated to ${status}.`,
+      orderId: updated._id,
+      orderNumber: updated.orderNumber,
+      status,
+    });
+    emitToFarmer(f, "order:statusUpdated", farmerView);
   }
+
   // Notify all admins about order cancellation or delivery failure
   if (["Cancelled", "Delivery Failed"].includes(status)) {
     const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });

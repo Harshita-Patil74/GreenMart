@@ -117,7 +117,7 @@ describe("Admin farmer verification", () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.activationLink).toBeUndefined();
+    expect(response.body.activationLink).toContain("/activate-account?");
     const createdUser = await User.findOne({ email });
     expect(createdUser.role).toBe("farmer");
     expect(createdUser.accountActivated).toBe(false);
@@ -229,7 +229,7 @@ describe("Admin farmer verification", () => {
     }
   });
 
-  it("never returns an activation link when email is unavailable in production", async () => {
+  it("always returns an activation link even when email is unavailable", async () => {
     const previousNodeEnv = env.nodeEnv;
     env.nodeEnv = "production";
     try {
@@ -240,7 +240,7 @@ describe("Admin farmer verification", () => {
 
       expect(response.status).toBe(201);
       expect(response.body.activationEmailSent).toBe(false);
-      expect(response.body.activationLink).toBeUndefined();
+      expect(response.body.activationLink).toContain("/activate-account?");
     } finally {
       env.nodeEnv = previousNodeEnv;
     }

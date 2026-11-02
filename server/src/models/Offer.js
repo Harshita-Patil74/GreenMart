@@ -14,6 +14,8 @@ const OfferSchema = new mongoose.Schema({
   discountValue: { type: Number, required: true, min: 0 },
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
+  startAt: { type: Date, index: true },
+  endAt: { type: Date, index: true },
   minimumQuantity: { type: Number, default: 1, min: 1 },
   minimumAmount: { type: Number, default: 0, min: 0 },
   maximumDiscount: { type: Number, default: null, min: 0 },
@@ -45,6 +47,6 @@ const OfferSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 OfferSchema.index({ farmer: 1, createdAt: -1 });
-OfferSchema.index({ product: 1, status: 1, isActive: 1, startDate: 1, endDate: 1 });
+OfferSchema.index({ product: 1, status: 1, isActive: 1, startDate: 1, endDate: 1, startAt: 1, endAt: 1 });
 
 module.exports = mongoose.model("Offer", OfferSchema);

@@ -19,6 +19,7 @@ Tagline: **Fresh. Organic. Direct from Farmers.**
   - [Shared Features](#shared-features)
 - [Admin Offer Management](#admin-offer-management)
 - [Home Page Offers](#home-page-offers)
+- [Time-Based Offers & Scheduling](#time-based-offers--scheduling)
 - [Notification System](#notification-system)
 - [Roles & Permissions](#roles--permissions)
 - [Environment Variables](#environment-variables)
@@ -141,6 +142,7 @@ greenmart/
 | `components/common/*.jsx` | Shared UI components: Button, Input, Modal, Pagination, EmptyState, ErrorState, ImageWithFallback, Loader, Rating, etc. |
 | `components/layout/*.jsx` | Layout shells: Navbar, Topbar, Sidebar, Footer, PublicNavigation, RoleNavigation, MobileNavigationDrawer |
 | `components/notifications/*.jsx` | NotificationBell |
+| `components/offers/*.jsx` | OfferCountdown (live countdown timers for scheduled offers) |
 | `components/product/*.jsx` | ProductCard, ProductGrid, ProductForm, FilterPanel, ReviewList |
 | `components/cart/*.jsx` | CartTable, OrderSummary, QuantityControl |
 | `components/checkout/*.jsx` | AddressCard, CheckoutStepper |
@@ -174,10 +176,10 @@ greenmart/
 
 - **Account**: Register/login as a customer, manage profile and saved addresses
 - **Shopping**: Browse products with search, filter (category, price), and farm origin details; view product detail pages with reviews
-- **Home Page Offers**: "Special Offers & Discounts" section below the hero shows approved, active product offers with real prices, images, dates, and a **View All Offers** link
+- **Home Page Offers**: "Special Offers & Discounts" section below the hero shows approved, active product offers with real prices, images, dates, live countdown timers (hours:minutes:seconds), and a **View All Offers** link
 - **Cart**: DB-persisted cart that survives across sessions/devices; quantity adjustment and removal
-- **Checkout**: Demo checkout with UPI / Card / Cash on Delivery payment options; delivery charge applied; offers revalidated and calculated by the backend
-- **Offers**: Eligible, approved farmer promotions are priced by the server, shown in the shop/cart, and snapshotted on order items at checkout
+- **Checkout**: Demo checkout with UPI / Card / Cash on Delivery payment options; delivery charge applied; offers revalidated and calculated by the backend using server time
+- **Offers**: Eligible, approved farmer promotions are priced by the server, shown in the shop/cart, and snapshotted on order items at checkout. Offers support scheduled start/end date and time; upcoming offers show a countdown until start, active offers show a countdown until expiry
 - **Featured Products**: Products with an eligible active offer show original price (strikethrough), discounted price, and a discount badge; products without offers keep their normal price
 - **Order Tracking**: Live order status tracking (Order Placed → Packed → Out for Delivery → Delivered) with Socket.io updates and farmer delivery location
 - **Wishlist**: Save products to a wishlist; notified when a wishlisted product comes back in stock
@@ -193,7 +195,7 @@ greenmart/
 - **Profile Photos**: Authenticated customer/farmer avatar and farmer farm-photo uploads stored via Multer + Cloudinary
 - **Inventory**: Track stock levels, receive low-stock alerts, manage inventory; notified when stock transitions to low or back in stock
 - **Orders**: View orders containing their products; update order status and delivery location
-- **My Offers**: Create, edit, view, and deactivate product offers; new or materially edited offers require admin approval
+- **My Offers**: Create, edit, view, and deactivate product offers with scheduled start/end date and time; new or materially edited offers require admin approval
 - **Offer performance**: Offer units and sales are attributed from delivered order-item snapshots, not current product prices
 - **Bundle offers**: Bundle discounts apply to the selected product once its minimum quantity is met; multi-product bundles are not supported. Minimum order amount is evaluated against the original cart subtotal before discounts.
 - **Earnings**: View earnings and stats dashboard
@@ -208,7 +210,7 @@ greenmart/
 - **Farmer Management**: View and manage all farmers; verify/revoke farmer certifications; notified of new farmer registrations
 - **Product Management**: Manage all products across all farmers; notified of new products, low-stock, out-of-stock
 - **Offer Approvals**: Filter, review, approve, reject, and deactivate farmer offers; rejection includes reason
-- **Admin Offer Management**: Independently create new offers (for any farmer's eligible product) and edit any farmer's offer; admin-created/edited offers are approved directly without a separate approval step; notified farmers of changes
+- **Admin Offer Management**: Independently create new offers (for any farmer's eligible product) and edit any farmer's offer; supports scheduled start/end date and time; admin-created/edited offers are approved directly without a separate approval step; notified farmers of changes
 - **Order Management**: View and manage all orders
 - **Certification**: Verify or revoke farmer certifications
 - **Inventory Alerts**: Monitor low-stock products across all farmers
@@ -241,7 +243,7 @@ Farmers retain their existing permissions: create/edit offers for their own elig
 
 ### Admin Create Offer
 
-Admin can create an offer via **Admin → Offer Management → Create Offer**. Fields: Offer Title, Description, Offer Type, Farmer, Product, Discount Type, Discount Value, Start Date, End Date, Minimum Quantity, Minimum Order Amount, Maximum Discount.
+Admin can create an offer via **Admin → Offer Management → Create Offer**. Fields: Offer Title, Description, Offer Type, Farmer, Product, Discount Type, Discount Value, Start Date, Start Time, End Date, End Time, Minimum Quantity, Minimum Order Amount, Maximum Discount.
 
 - Admin can select any registered and eligible farmer; after selecting a farmer, only that farmer's eligible products load (actual product name, image, price, stock from MongoDB).
 - Frontend validation plus full backend validation of discount values, dates, and minimum conditions.
@@ -251,7 +253,7 @@ Admin can create an offer via **Admin → Offer Management → Create Offer**. F
 
 ### Admin Edit Offer
 
-Admin can edit any offer regardless of which farmer created it, via the **Edit Offer** action on the offer details page and offer list. Editable fields: Offer Title, Description, Offer Type, Associated Farmer, Associated Product, Discount Type, Discount Value, Start Date, End Date, Minimum Quantity, Minimum Order Amount, Maximum Discount.
+Admin can edit any offer regardless of which farmer created it, via the **Edit Offer** action on the offer details page and offer list. Editable fields: Offer Title, Description, Offer Type, Associated Farmer, Associated Product, Discount Type, Discount Value, Start Date, Start Time, End Date, End Time, Minimum Quantity, Minimum Order Amount, Maximum Discount.
 
 - Existing offer details load into the edit form; changing the farmer reloads that farmer's eligible products.
 - Product ownership and offer configuration are revalidated on the backend; frontend-supplied prices/stock are not trusted.
@@ -265,13 +267,69 @@ Admin can edit any offer regardless of which farmer created it, via the **Edit O
 
 The Home page now includes a **Special Offers & Discounts** section below the hero and before Featured Products.
 
-- Only offers that are `Approved`, active, not deactivated, within valid start/end dates, with an active available product belonging to the correct farmer, and valid discount configuration appear.
+- Only offers that are `Approved`, active, not deactivated, within valid start/end dates/times, with an active available product belonging to the correct farmer, and valid discount configuration appear.
 - Pending, rejected, inactive, or expired offers never appear as active promotions.
-- Each offer card shows product image, product name, offer title, original price (strikethrough), discounted final price, discount badge (`20% OFF` / `₹30 OFF`), start/end dates, minimum quantity, and a **Shop Now** action.
-- Discounts are calculated using actual database product prices, respecting maximum discount limits, minimum quantity, minimum order amount, and offer dates.
+- Each offer card shows product image, product name, offer title, original price (strikethrough), discounted final price, discount badge (`20% OFF` / `₹30 OFF`), start/end dates and times, minimum quantity, live countdown timer, and a **Shop Now** action.
+- Discounts are calculated using actual database product prices, respecting maximum discount limits, minimum quantity, minimum order amount, and offer dates/times.
+- Upcoming offers show a countdown until start; active offers show a countdown until expiry.
 - Featured Products cards show original price (strikethrough), discounted price, and discount badge when a product has an eligible offer; products without offers keep their normal price.
 - **View All Offers** link navigates to the existing Offers page.
 - Empty state: "No active offers available right now. Check back soon!"
+
+---
+
+## Time-Based Offers & Scheduling
+
+GreenMart offers support scheduled start and end date/time for precise discount windows. Both farmers and admins can create offers with `Start Date`, `Start Time`, `End Date`, and `End Time` fields.
+
+### Scheduling Fields
+
+| Field | Example | Description |
+|---|---|---|
+| Start Date | 10 November 2026 | Date the offer becomes eligible |
+| Start Time | 09:00 AM | Time the offer becomes eligible |
+| End Date | 12 November 2026 | Date the offer expires |
+| End Time | 09:00 PM | Time the offer expires |
+
+### Backend Scheduling
+
+- **`startAt` / `endAt`**: New UTC `Date` fields added to the `Offer` model alongside existing `startDate`/`endDate` for backward compatibility.
+- **Timezone handling**: Farmer/admin date+time inputs are interpreted in `Asia/Kolkata` (UTC+5:30) and converted to UTC before storage.
+- **Validation**: End datetime must be after start datetime; invalid dates/times are rejected; product prices and stock are verified from MongoDB (not trusted from frontend).
+- **Backward compatibility**: Existing offers with only `startDate`/`endDate` continue to work — end dates are treated as end-of-day UTC.
+
+### Automatic Offer Status
+
+Offer eligibility is calculated dynamically using server time (no cron job required):
+
+| Status | Condition | Discount Applies? | Countdown |
+|---|---|---|---|
+| Pending Approval | Waiting for admin approval | No | No |
+| Scheduled | Approved, start time in future | No | "Starts in HH:MM:SS" |
+| Active | Approved, within start/end window | Yes | "Offer ends in HH:MM:SS" |
+| Expired | End time passed | No | No |
+| Inactive | Manually deactivated | No | No |
+
+- Approval status and time-based availability are both checked — an approved offer can be `Scheduled` rather than `Active`.
+- Offers automatically activate at `startAt` and expire at `endAt`; no admin manual activation required.
+- Checkout independently revalidates offers from MongoDB using server time; expired/upcoming/pending/rejected/deactivated offers are rejected.
+
+### Live Countdown
+
+A reusable `OfferCountdown` component (`client/src/components/offers/OfferCountdown.jsx`) displays `HH:MM:SS` on customer-facing pages:
+
+- Updates every second
+- Shows "Starts in" for upcoming offers, "Offer ends in" for active offers
+- Stops at zero; does not continue showing old discounted prices
+- Handles browser tab visibility changes (recalculates on focus)
+- Clears intervals on unmount (no memory leaks)
+- Uses server-provided time offset for clock accuracy
+
+### Countdown on Customer Pages
+
+- **Home page**: Offer cards show countdown timers; upcoming offers display original price with "Starts in", active offers show discounted price with "Offer ends in"
+- **Customer Offers page**: Offer cards show countdown timers
+- **Product cards**: Products with eligible offers show countdown timers
 
 ---
 
@@ -492,8 +550,8 @@ Demo accounts are created by `npm run seed` using `SEED_PASSWORD`. Do **not** ru
 Server tests run with `mongodb-memory-server` and include Socket.io integration tests for order status and location updates.
 
 **Latest test results** (all green):
-- Backend: 25 suites, 239 tests passed
-- Frontend: 40 suites, 204 tests passed
+- Backend: 25 suites, 248 tests passed
+- Frontend: 41 suites, 215 tests passed
 - Production build (`npm run build`): succeeds
 
 ---
@@ -509,6 +567,8 @@ Server tests run with `mongodb-memory-server` and include Socket.io integration 
 | Admin login fails / admin not found | `npm run seed:admin` was not run or `ADMIN_EMAIL`/`ADMIN_PASSWORD` not set | Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `server/.env`, then run `npm run seed:admin`. |
 | Image upload fails | Cloudinary credentials missing or invalid | Configure `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` in `server/.env`. Multer stores files locally first; Cloudinary upload requires valid credentials. |
 | `farmerApi is not defined` | Missing import in a public page | Ensure `farmerApi` is imported (fixed in `client/src/pages/public/FarmLocations.jsx`). |
+| Offer countdown not updating | Server time not fetched or component unmounted | The `OfferCountdown` component fetches server time via `GET /products/storefront/server-time`; ensure the backend is running. |
+| Offer not activating at start time | `startAt`/`endAt` stored in UTC; date/time inputs interpreted in Asia/Kolkata | Backend converts Asia/Kolkata local date+time to UTC before storage. Verify server timezone and input format (`YYYY-MM-DD` + `HH:MM`). |
 
 ---
 
@@ -518,8 +578,14 @@ This project is private and intended for internal use. Do not distribute or publ
 
 ---
 
-## Recent Changes
+## Final Production Readiness Audit
+- Backend Jest: 25 suites / 248 tests passed
+- Frontend Vitest: 41 suites / 215 tests passed
+- Frontend production build: succeeded (`✓ built in 12.84s`)
+- Backend startup: MongoDB connected; no startup errors
+- No new bugs discovered; no secrets exposed; no commits/pushes performed
 
+- **Time-Based Product Offers & Countdown**: Added scheduled start/end date and time to offers (`startAt`/`endAt` UTC fields); automatic offer activation at start time and expiration at end time using server time; live `HH:MM:SS` countdown timers on Home page, Customer Offers page, and product cards; `OfferCountdown` reusable component; timezone handling (Asia/Kolkata → UTC); server-time API endpoint (`GET /products/storefront/server-time`); checkout revalidates offers using server time; 17 new backend test scenarios; 22 frontend test updates
 - **Admin Offer Management**: Admin can independently create and edit offers for any farmer; admin-created/edited offers are approved directly after backend validation; farmers are notified; full frontend + backend validation; 12 new test scenarios
 - **Home Page Offers**: New "Special Offers & Discounts" section below the hero showing approved, active offers with real prices, images, dates, and badges; Featured Products show discount strikethrough/badge when eligible; View All Offers link; empty/loading states
 - **Admin Add Farmer Certification Fields**: Added "Certification Name" and "Certificate Number" text inputs to the Add Farmer form; saved to FarmerProfile MongoDB record; does not auto-verify the farmer; displayed in the Farmer Verification table ("Not provided" when missing)

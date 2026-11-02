@@ -8,6 +8,7 @@ const { uploadProduct } = require("../middleware/upload");
 router.get("/mine", auth, role("farmer"), approvedFarmer, c.mine);
 router.get("/storefront", c.storefront);
 router.get("/storefront/offers", c.storefrontOffers);
+router.get("/storefront/server-time", c.serverTime);
 router.get("/storefront/:id", c.storefrontGet);
 router.get("/", c.list);
 router.get("/:id", c.get);

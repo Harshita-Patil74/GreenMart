@@ -8,6 +8,7 @@ import Modal from "../../components/common/Modal.jsx";
 import Pagination from "../../components/common/Pagination.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import farmerOffersApi from "../../api/farmerOffersApi.js";
+import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "./farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
 
@@ -16,8 +17,8 @@ const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "B
 const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
 const EMPTY_DRAFT = {
   title: "", description: "", type: OFFER_TYPES[0], product: "", discountType: "Percentage",
-  discountValue: "", startDate: "", endDate: "", minimumQuantity: "1",
-  minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
+  discountValue: "", startDate: "", endDate: "", startTime: "", endTime: "",
+  minimumQuantity: "1", minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
 };
 
 function statusStyle(status) {
@@ -123,6 +124,8 @@ export default function FarmerOffers() {
       discountValue: String(offer.discountValue ?? ""),
       startDate: formDate(offer.startDate),
       endDate: formDate(offer.endDate),
+      startTime: offer.startAt ? new Date(offer.startAt).toISOString().slice(11, 16) : "",
+      endTime: offer.endAt ? new Date(offer.endAt).toISOString().slice(11, 16) : "",
       minimumQuantity: String(offer.minimumQuantity ?? 1),
       minimumAmount: String(offer.minimumAmount ?? 0),
       maximumDiscount: offer.maximumDiscount == null ? "" : String(offer.maximumDiscount),
@@ -143,6 +146,8 @@ export default function FarmerOffers() {
     if (draft.discountType === "Percentage" && value > 100) errors.discountValue = "Percentage cannot exceed 100.";
     if (draft.discountType === "Fixed Amount" && selectedProduct && value >= Number(selectedProduct.price)) errors.discountValue = "Discount must be lower than the product price.";
     if (!draft.startDate || !draft.endDate || new Date(draft.endDate) <= new Date(draft.startDate)) errors.endDate = "End date must be after start date.";
+    if (!draft.startTime || !draft.endTime) errors.startTime = "Start time and end time are required.";
+    else if (new Date(`${draft.startDate}T${draft.startTime}`) >= new Date(`${draft.endDate}T${draft.endTime}`)) errors.endTime = "End datetime must be after start datetime.";
     const quantity = Number(draft.minimumQuantity);
     if (!Number.isInteger(quantity) || quantity < 1 || (selectedProduct && quantity > Number(selectedProduct.stock))) errors.minimumQuantity = "Enter a valid quantity within available stock.";
     if (draft.type === "Bundle Offer" && quantity < 2) errors.minimumQuantity = "A bundle must require at least two units.";
@@ -164,6 +169,8 @@ export default function FarmerOffers() {
         minimumQuantity: Number(draft.minimumQuantity),
         minimumAmount: Number(draft.minimumAmount),
         maximumDiscount: draft.maximumDiscount === "" ? null : Number(draft.maximumDiscount),
+        startTime: draft.startTime,
+        endTime: draft.endTime,
       };
       if (editing) await farmerOffersApi.update(editing._id, payload);
       else await farmerOffersApi.create(payload);
@@ -260,7 +267,11 @@ export default function FarmerOffers() {
                       </td>
                       <td className="px-4 py-3"><span className="rounded-full bg-[#EDF6F1] px-2.5 py-1.5 text-[10px] font-medium text-[#297453]">{offer.type}</span></td>
                       <td className="px-4 py-3 text-xs font-semibold text-[#32473F]">{offer.discountType === "Percentage" ? `${offer.discountValue}% OFF` : `${formatCurrency(offer.discountValue)} OFF`}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-[10px] text-[#687972]">{formatDate(offer.startDate, { day: "numeric", month: "short" })} – {formatDate(offer.endDate, { day: "numeric", month: "short" })}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-[10px] text-[#687972]">
+                        {formatDate(offer.startDate, { day: "numeric", month: "short" })} – {formatDate(offer.endDate, { day: "numeric", month: "short" })}
+                        {offer.startAt && offer.effectiveStatus === "Upcoming" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
+                        {offer.endAt && offer.effectiveStatus === "Active" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
+                      </td>
                       <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-semibold ${statusStyle(status)}`}>{status}</span></td>
                       <td className="px-4 py-3 whitespace-nowrap text-[10px] text-[#65756F]">{offer.unitsSold || 0} units</td>
                       <td className="relative px-4 py-3 text-right">
@@ -357,6 +368,14 @@ export default function FarmerOffers() {
             <label className="text-[11px] font-medium text-[#52645D]">End Date
               <input aria-label="Offer end date" type="date" value={draft.endDate} onChange={(event) => setDraft({ ...draft, endDate: event.target.value })} className={inputClass(Boolean(formErrors.endDate))} />
               {formErrors.endDate && <span className="mt-1 block text-[10px] text-red-600">{formErrors.endDate}</span>}
+            </label>
+            <label className="text-[11px] font-medium text-[#52645D]">Start Time
+              <input aria-label="Offer start time" type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} className={inputClass(Boolean(formErrors.startTime))} />
+              {formErrors.startTime && <span className="mt-1 block text-[10px] text-red-600">{formErrors.startTime}</span>}
+            </label>
+            <label className="text-[11px] font-medium text-[#52645D]">End Time
+              <input aria-label="Offer end time" type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} className={inputClass(Boolean(formErrors.endTime))} />
+              {formErrors.endTime && <span className="mt-1 block text-[10px] text-red-600">{formErrors.endTime}</span>}
             </label>
             <label className="text-[11px] font-medium text-[#52645D]">Minimum Quantity
               <input aria-label="Minimum quantity" type="number" min="1" step="1" value={draft.minimumQuantity} onChange={(event) => setDraft({ ...draft, minimumQuantity: event.target.value })} className={inputClass(Boolean(formErrors.minimumQuantity))} />

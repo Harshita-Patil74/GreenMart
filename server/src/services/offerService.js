@@ -7,13 +7,45 @@ const FarmerProfile = require("../models/FarmerProfile");
 
 const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 
+// Combine a date string (YYYY-MM-DD) and time string (HH:MM) interpreted in Asia/Kolkata into a UTC Date.
+// Returns null if either value is missing or invalid.
+function combineDateTimeToUTC(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return null;
+  const datePart = String(dateValue).trim();
+  const timePart = String(timeValue).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart) || !/^\d{2}:\d{2}$/.test(timePart)) return null;
+  // Asia/Kolkata is UTC+5:30; construct ISO string in local time then let Date parse it as UTC,
+  // then subtract 5h30m to get true UTC.
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [h, mi] = timePart.split(":").map(Number);
+  // Build "YYYY-MM-DDTHH:MM:SS" treated as Kolkata local time
+  const localIso = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}T${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}:00`;
+  const localMs = Date.parse(localIso);
+  if (!Number.isFinite(localMs)) return null;
+  // Subtract 5h30m (19800000 ms) to convert Kolkata local time to UTC
+  return new Date(localMs - 5 * 60 * 60 * 1000 - 30 * 60 * 1000);
+}
+
+function getEffectiveStart(offer) {
+  if (offer.startAt) return new Date(offer.startAt).getTime();
+  if (offer.startDate) return new Date(offer.startDate).getTime();
+  return null;
+}
+
+function getEffectiveEnd(offer) {
+  if (offer.endAt) return new Date(offer.endAt).getTime();
+  if (offer.endDate) return new Date(offer.endDate).getTime();
+  return null;
+}
+
 function getEffectiveStatus(offer, product, now = new Date()) {
+  const nowMs = now.getTime();
   if (offer.status === "Pending" || offer.status === "Rejected") return offer.status;
   if (offer.status === "Inactive" || !offer.isActive) return "Inactive";
-  const startTime = new Date(offer.startDate).getTime();
-  const endTime = new Date(offer.endDate).getTime();
+  const startTime = getEffectiveStart(offer);
+  const endTime = getEffectiveEnd(offer);
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) return "Inactive";
-  if (endTime < now.getTime()) return "Expired";
+  if (endTime < nowMs) return "Expired";
   if (
     !product ||
     product.status !== "Active" ||
@@ -26,18 +58,22 @@ function getEffectiveStatus(offer, product, now = new Date()) {
     (offer.discountType === "Percentage" && Number(offer.discountValue) > 100) ||
     (offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= Number(product.price))
   ) return "Inactive";
-  if (startTime > now.getTime()) return "Scheduled";
+  if (startTime > nowMs) return "Scheduled";
   return "Active";
 }
 
 async function getActiveOffers(productIds, now = new Date()) {
   if (!productIds.length) return [];
+  const nowMs = now.getTime();
   const offers = await Offer.find({
     product: { $in: productIds },
     status: "Active",
     isActive: true,
-    startDate: { $lte: now },
-    endDate: { $gte: now },
+    $or: [
+      { startAt: { $lte: now }, endAt: { $gte: now } },
+      { startAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+      { endAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+    ],
   });
   if (!offers.length) return [];
 
@@ -64,12 +100,16 @@ async function getActiveOffers(productIds, now = new Date()) {
 
   return offers.filter((offer) => {
     const product = productsById.get(String(offer.product));
+    const startTime = getEffectiveStart(offer);
+    const endTime = getEffectiveEnd(offer);
     const quantity = Number(offer.minimumQuantity || 1);
     const value = Number(offer.discountValue);
     return product &&
       String(product.farmer) === String(offer.farmer) &&
       eligibleFarmerIds.has(String(offer.farmer)) &&
       verifiedFarmerIds.has(String(offer.farmer)) &&
+      Number.isFinite(startTime) && startTime <= nowMs &&
+      Number.isFinite(endTime) && endTime > nowMs &&
       Number.isInteger(quantity) &&
       quantity > 0 &&
       Number(product.stock) >= quantity &&
@@ -151,6 +191,8 @@ function getDisplayedOffer(product, offers) {
       appliesToSingleUnit: minimumEligibleQuantity <= 1 && Number(offer.minimumAmount || 0) <= 0,
       startDate: offer.startDate,
       endDate: offer.endDate,
+      startAt: offer.startAt,
+      endAt: offer.endAt,
       originalPrice: Number(product.price),
       offerPrice: minimumEligiblePrice,
       maximumDiscount: offer.maximumDiscount,
@@ -247,4 +289,7 @@ module.exports = {
   attachProductOffers,
   enrichCart,
   getSalesByOffer,
+  combineDateTimeToUTC,
+  getEffectiveStart,
+  getEffectiveEnd,
 };

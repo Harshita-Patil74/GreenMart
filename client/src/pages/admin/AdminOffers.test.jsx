@@ -123,6 +123,8 @@ describe("Admin offers management", () => {
     fireEvent.change(screen.getByRole("spinbutton", { name: "Discount value" }), { target: { value: "15" } });
     fireEvent.change(screen.getByLabelText("Offer start date"), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByLabelText("Offer end date"), { target: { value: "2026-12-31" } });
+    fireEvent.change(screen.getByLabelText("Offer start time"), { target: { value: "09:00" } });
+    fireEvent.change(screen.getByLabelText("Offer end time"), { target: { value: "17:00" } });
 
     expect(screen.getByLabelText("Selected product preview")).toHaveTextContent("Organic Fig");
     expect(screen.getByText("₹100.00 / kg · 20 in stock")).toBeInTheDocument();
@@ -178,6 +180,8 @@ describe("Admin offers management", () => {
 
     fireEvent.change(screen.getByRole("textbox", { name: "Offer title" }), { target: { value: "Updated Fig Offer" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "Discount value" }), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("Offer start time"), { target: { value: "09:00" } });
+    fireEvent.change(screen.getByLabelText("Offer end time"), { target: { value: "17:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Save & Approve" }));
 
     await waitFor(() => expect(adminOffersApi.update).toHaveBeenCalledWith("offer-1", expect.objectContaining({

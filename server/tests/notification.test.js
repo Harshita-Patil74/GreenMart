@@ -5,8 +5,11 @@ const { connectDB, disconnectDB } = require("./db");
 const User = require("../src/models/User");
 const Notification = require("../src/models/Notification");
 const Product = require("../src/models/Product");
+const Order = require("../src/models/Order");
+const Offer = require("../src/models/Offer");
 const Wishlist = require("../src/models/Wishlist");
 const FarmerProfile = require("../src/models/FarmerProfile");
+const { randomToken, hashToken } = require("../src/utils/tokens");
 const { EVENT_KEY_PREFIXES } = require("../src/services/notificationService");
 
 let adminToken, adminId, farmerToken, farmerId, customerToken, customerId;
@@ -201,6 +204,212 @@ describe("Notification system", () => {
       const notifications = await Notification.find({ type: "backInStock", user: customerId });
       expect(notifications.length).toBeGreaterThan(0);
       expect(notifications[0].title).toBe("Product back in stock");
+    });
+  });
+
+  describe("Password change notification", () => {
+    it("notifies customer after successful password reset", async () => {
+      const customerUser = await User.findById(customerId);
+      const resetToken = randomToken();
+      customerUser.resetTokenHash = await hashToken(resetToken);
+      customerUser.resetTokenExpiry = new Date(Date.now() + 3600000);
+      await customerUser.save();
+
+      await request(app)
+        .post("/api/auth/reset-password")
+        .send({ email: customerUser.email, token: resetToken, password: "NewValidPass1!" });
+      const notifications = await Notification.find({ type: "passwordChanged", user: customerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Password changed");
+      expect(notifications[0].category).toBe("account");
+    });
+  });
+
+  describe("Farmer account activation notification", () => {
+    it("notifies farmer when account is activated", async () => {
+      const farmerUser = await User.findById(farmerId);
+      farmerUser.accountActivated = false;
+      const token = randomToken();
+      farmerUser.activationTokenHash = await hashToken(token);
+      farmerUser.activationTokenExpiry = new Date(Date.now() + 3600000);
+      await farmerUser.save();
+
+      await request(app)
+        .post("/api/auth/activate-account")
+        .send({ email: farmerUser.email, token, password: "NewValidPass1!" });
+
+      const notifications = await Notification.find({ type: "farmerAccountActivated", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Farmer account activated");
+    });
+  });
+
+  describe("Offer resubmitted notification", () => {
+    it("notifies farmer when their edited offer is resubmitted for review", async () => {
+      const { createNotification, EVENT_KEY_PREFIXES } = require("../src/services/notificationService");
+      await createNotification({
+        userId: farmerId,
+        type: "offerResubmitted",
+        category: "offers",
+        title: "Offer awaiting approval",
+        message: "Your edited offer is awaiting administrator approval.",
+        resourceType: "Offer",
+        resourceId: new (require("mongoose")).Types.ObjectId(),
+        icon: "RefreshCw",
+        priority: "normal",
+        eventKey: `${EVENT_KEY_PREFIXES.offerResubmitted}:test-offer`,
+      });
+      const notifications = await Notification.find({ type: "offerResubmitted", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Offer awaiting approval");
+    });
+  });
+
+  describe("Farmer order status notification", () => {
+    it("notifies farmer for all order status changes", async () => {
+      const product = await Product.create({
+        name: "Test Product",
+        description: "Test",
+        category: "Fruits",
+        price: 100,
+        unit: "kg",
+        stock: 50,
+        farmer: farmerId,
+        images: [],
+      });
+      const order = await Order.create({
+        orderNumber: "TEST-001",
+        user: customerId,
+        items: [{ product: product._id, name: "Test Product", price: 100, quantity: 1, farmer: farmerId }],
+        address: { name: "Test", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
+        paymentMethod: "COD",
+        status: "Order Placed",
+        statusHistory: [{ status: "Order Placed", at: new Date() }],
+        subtotal: 100,
+        deliveryCharge: 30,
+        total: 130,
+      });
+
+      await request(app)
+        .patch(`/api/orders/${order._id}/status`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ status: "Packed" });
+
+      const notifications = await Notification.find({ type: "statusUpdate", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Order packed");
+    });
+  });
+
+  describe("Farmer low stock notification", () => {
+    it("notifies farmer when their product reaches low stock", async () => {
+      const product = await Product.create({
+        name: "Low Stock Product",
+        description: "Test",
+        category: "Fruits",
+        price: 100,
+        unit: "kg",
+        stock: 10,
+        lowStockThreshold: 5,
+        farmer: farmerId,
+        images: [],
+      });
+
+      await request(app)
+        .put(`/api/products/${product._id}`)
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .send({ stock: 3, name: "Low Stock Product", description: "Test", category: "Fruits", price: 100, unit: "kg", lowStockThreshold: 5 });
+
+      const notifications = await Notification.find({ type: "stockAlert", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Product low stock");
+    });
+  });
+
+  describe("Farmer certification verified/rejected notification", () => {
+    it("notifies farmer when certification is verified", async () => {
+      const fp = await FarmerProfile.findOne({ user: farmerId });
+      fp.certification.verifiedByAdmin = false;
+      fp.certification.rejectedByAdmin = false;
+      await fp.save();
+
+      await request(app)
+        .patch(`/api/admin/farmers/${farmerId}/verify`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      const notifications = await Notification.find({ type: "farmerCertificationVerified", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Certification verified");
+    });
+
+    it("notifies farmer when certification is rejected", async () => {
+      await request(app)
+        .patch(`/api/admin/farmers/${farmerId}/reject`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({ reason: "Documents incomplete" });
+
+      const notifications = await Notification.find({ type: "farmerCertificationRejected", user: farmerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("Certification rejected");
+    });
+  });
+
+  describe("Admin certification submitted notification", () => {
+    it("notifies admins when certification is submitted during farmer creation", async () => {
+      const beforeCount = await Notification.countDocuments({ type: "farmerCertificationSubmitted" });
+      await request(app)
+        .post("/api/admin/farmers")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          name: "Cert Farmer",
+          email: "cert.farmer@greenmart.test",
+          password: "StrongPass1!",
+          farmName: "Cert Farm",
+          certificationName: "Organic Certificate",
+          certificateNumber: "OC-2026-001",
+        });
+      const afterCount = await Notification.countDocuments({ type: "farmerCertificationSubmitted" });
+      expect(afterCount).toBeGreaterThan(beforeCount);
+    });
+  });
+
+  describe("Wishlist offer notification", () => {
+    it("notifies wishlist customers when their wishlisted product gets an offer", async () => {
+      const product = await Product.create({
+        name: "Wishlist Product",
+        description: "Test",
+        category: "Fruits",
+        price: 100,
+        unit: "kg",
+        stock: 50,
+        farmer: farmerId,
+        images: [],
+      });
+      await Wishlist.create({ user: customerId, products: [product._id] });
+
+      const offer = await Offer.create({
+        title: "Special Offer",
+        description: "Discount offer",
+        product: product._id,
+        farmer: farmerId,
+        type: "Seasonal Offer",
+        discountType: "Percentage",
+        discountValue: 20,
+        startDate: new Date(Date.now() - 86400000),
+        endDate: new Date(Date.now() + 86400000),
+        minimumQuantity: 1,
+        minimumAmount: 0,
+        status: "Pending",
+        isActive: true,
+      });
+
+      await request(app)
+        .patch(`/api/admin/offers/${offer._id}/approve`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      const notifications = await Notification.find({ type: "wishlistOffer", user: customerId });
+      expect(notifications.length).toBeGreaterThan(0);
+      expect(notifications[0].title).toBe("New special offer");
     });
   });
 });

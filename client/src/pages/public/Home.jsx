@@ -5,13 +5,14 @@ import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import { listDemoProducts, unwrapList } from "../../data/demoCatalog.js";
+import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
 
 const HERO =
   "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
-function HomeOfferCard({ offer }) {
+function HomeOfferCard({ offer, serverTime }) {
   const navigate = useNavigate();
   const product = offer.product || {};
   const productId = product._id || product.id;
@@ -66,6 +67,12 @@ function HomeOfferCard({ offer }) {
             <ArrowRight aria-hidden="true" className="h-3 w-3" />
             {formatDate(offer.startDate)} – {formatDate(offer.endDate, { day: "2-digit", month: "short", year: "numeric" })}
           </span>
+          {offer.startAt && offer.effectiveStatus === "Upcoming" && (
+            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
+          )}
+          {offer.endAt && offer.effectiveStatus === "Active" && (
+            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
+          )}
           <span className={disabled ? "font-semibold text-red-600" : "whitespace-nowrap"}>{disabled ? "Out of Stock" : `In Stock: ${stock}`}</span>
         </div>
 
@@ -97,6 +104,7 @@ export default function Home() {
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(true);
   const [offersError, setOffersError] = useState("");
+  const [serverTime, setServerTime] = useState(null);
 
   useEffect(() => {
     productApi
@@ -123,6 +131,11 @@ export default function Home() {
       .finally(() => {
         if (active) setOffersLoading(false);
       });
+    productApi.serverTime()
+      .then(({ data }) => {
+        if (active) setServerTime(data.serverTime);
+      })
+      .catch(() => { /* server time is optional */ });
     return () => { active = false; };
   }, []);
 
@@ -206,7 +219,7 @@ export default function Home() {
         ) : eligibleOffers.length ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
             {eligibleOffers.map((offer) => (
-              <HomeOfferCard key={offer._id} offer={offer} />
+              <HomeOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
             ))}
           </div>
         ) : (

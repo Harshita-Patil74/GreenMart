@@ -5,7 +5,7 @@ const FarmerProfile = require("../models/FarmerProfile");
 const statsService = require("../services/statsService");
 const { buildReportPdf, REPORT_TYPES } = require("../services/reportPdfService");
 const { asyncHandler } = require("../utils/asyncHandler");
-const { createNotification } = require("../services/notificationService");
+const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 const { randomToken, hashToken } = require("../utils/tokens");
 const bcrypt = require("bcryptjs");
 const { sendEmail } = require("../services/emailService");
@@ -36,12 +36,10 @@ async function issueFarmerActivation(user) {
     } catch (emailError) {
       console.warn("Failed to send activation email:", emailError?.message);
     }
-    return link;
   }
 
-  if (env.nodeEnv === "development") return link;
-
-  return;
+  // Always return the link so admins can copy and share it manually when email is not configured.
+  return link;
 }
 
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
@@ -111,6 +109,20 @@ exports.updateUser = asyncHandler(async (req,res) => {
         resourceId: target._id,
       });
     }
+    // Notify the farmer when their account is activated
+    if (updated.status === "active") {
+      await createNotification({
+        userId: target._id,
+        type: "farmerAccountActivated",
+        category: "account",
+        title: "Farmer account approved",
+        message: "Your farmer account has been approved by Admin. You can now add products.",
+        icon: "UserCheck",
+        priority: "high",
+        actionUrl: "/farmer/dashboard",
+        eventKey: `${EVENT_KEY_PREFIXES.farmerAccountActivated}:${target._id}`,
+      });
+    }
   }
   res.json(updated);
 });
@@ -131,6 +143,18 @@ exports.verifyFarmer = asyncHandler(async (req,res) => {
       resourceId: req.params.id,
     });
   }
+  // Notify the farmer that their certification is verified
+  await createNotification({
+    userId: fp.user,
+    type: "farmerCertificationVerified",
+    category: "certifications",
+    title: "Certification verified",
+    message: "Your Organic Farming Certificate has been verified.",
+    icon: "ShieldCheck",
+    priority: "high",
+    actionUrl: "/farmer/profile",
+    eventKey: `${EVENT_KEY_PREFIXES.farmerCertificationVerified}:${fp.user}`,
+  });
   res.json(fp);
 });
 exports.rejectFarmer = asyncHandler(async (req,res) => {
@@ -151,6 +175,18 @@ exports.rejectFarmer = asyncHandler(async (req,res) => {
       resourceId: req.params.id,
     });
   }
+  // Notify the farmer that their certification is rejected
+  await createNotification({
+    userId: fp.user,
+    type: "farmerCertificationRejected",
+    category: "certifications",
+    title: "Certification rejected",
+    message: `Your certification was rejected: ${reason || "Please review the rejection reason."}`,
+    icon: "FileX",
+    priority: "high",
+    actionUrl: "/farmer/profile",
+    eventKey: `${EVENT_KEY_PREFIXES.farmerCertificationRejected}:${fp.user}`,
+  });
   res.json(fp);
 });
 exports.createFarmer = asyncHandler(async (req,res) => {
@@ -195,6 +231,24 @@ exports.createFarmer = asyncHandler(async (req,res) => {
       resourceType: "User",
       resourceId: user._id,
     });
+  }
+  // Notify admins when certification is submitted for verification
+  if (certificationName || certificateNumber) {
+    for (const admin of admins) {
+      await createNotification({
+        userId: admin._id,
+        type: "farmerCertificationSubmitted",
+        category: "certifications",
+        title: "Certification submitted",
+        message: `Farmer ${name} submitted ${certificationName || "a certificate"} for verification.`,
+        resourceType: "User",
+        resourceId: user._id,
+        icon: "FileText",
+        priority: "normal",
+        actionUrl: `/admin/farmers/${user._id}`,
+        eventKey: `${EVENT_KEY_PREFIXES.farmerCertificationSubmitted}:${user._id}`,
+      });
+    }
   }
   res.status(201).json({
     message: emailSent

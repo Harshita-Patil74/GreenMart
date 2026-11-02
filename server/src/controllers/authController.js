@@ -114,6 +114,17 @@ exports.resetPassword = async (req,res) => {
   user.resetTokenHash = undefined;
   user.resetTokenExpiry = undefined;
   await user.save();
+  await createNotification({
+    userId: user._id,
+    type: "passwordChanged",
+    category: "account",
+    title: "Password changed",
+    message: "Your account password was successfully changed.",
+    icon: "LockKeyhole",
+    priority: "normal",
+    actionUrl: "/settings",
+    eventKey: `${EVENT_KEY_PREFIXES.passwordChanged}:${user._id}`,
+  });
   res.json({ message: "Password reset" });
 };
 
@@ -131,5 +142,16 @@ exports.activateAccount = async (req, res) => {
   user.activationTokenHash = undefined;
   user.activationTokenExpiry = undefined;
   await user.save();
+  await createNotification({
+    userId: user._id,
+    type: "farmerAccountActivated",
+    category: "account",
+    title: "Farmer account activated",
+    message: "Your farmer account has been activated. You can now add products.",
+    icon: "UserCheck",
+    priority: "high",
+    actionUrl: "/farmer/dashboard",
+    eventKey: `${EVENT_KEY_PREFIXES.farmerAccountActivated}:${user._id}`,
+  });
   res.json({ message: "Account activated. You can now sign in." });
 };

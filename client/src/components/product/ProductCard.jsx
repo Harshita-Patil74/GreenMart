@@ -6,8 +6,9 @@ import { Heart, Star } from "lucide-react";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { fetchWishlist, toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
 import ImageWithFallback from "../common/ImageWithFallback.jsx";
+import OfferCountdown from "../offers/OfferCountdown.jsx";
 
-export default function ProductCard({ product, showWishlist = true, compact = false }) {
+export default function ProductCard({ product, showWishlist = true, compact = false, serverTime }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user, token } = useSelector((state) => state.auth);
@@ -98,6 +99,11 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
         {offer && <p className="mt-1 line-clamp-1 text-[9px] font-medium text-[#16803C]" title={`${offer.title} · ${offer.type}`}>
           {offer.title} · {offer.type}{Number(offer.minimumQuantity) > 1 ? ` · min ${offer.minimumQuantity}` : Number(offer.minimumAmount) > 0 ? ` · min cart ₹${Number(offer.minimumAmount)}` : ""}
         </p>}
+        {offer && offer.startAt && offer.effectiveStatus !== "Pending" && offer.effectiveStatus !== "Rejected" && offer.effectiveStatus !== "Inactive" && (
+          <div className="mt-1 flex items-center gap-1">
+            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
+          </div>
+        )}
         {!compact && <div className="mt-1 flex items-center gap-1 text-xs text-muted">
           <Star className="w-3 h-3 fill-[#F5B301] text-[#F5B301]" />
           <span className="font-medium text-[#1F2937]">{Number(product.ratingCount) > 0 ? Number(product.ratingAverage || 0).toFixed(1) : "New"}</span>

@@ -28,6 +28,13 @@ const EVENT_KEY_PREFIXES = {
   farmerRejectedAdmin: "farmer:rejected-admin",
   customerRegisteredAdmin: "customer:registered-admin",
   backInStock: "product:back-in-stock",
+  offerResubmitted: "offer:resubmitted",
+  passwordChanged: "auth:password-changed",
+  farmerCertificationVerified: "farmer:certification-verified",
+  farmerCertificationRejected: "farmer:certification-rejected",
+  farmerAccountActivated: "farmer:account-activated",
+  farmerCertificationSubmitted: "farmer:certification-submitted",
+  wishlistOffer: "offer:wishlist",
 };
 
 async function createNotification({

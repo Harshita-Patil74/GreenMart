@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  BadgePercent, Check, ChevronLeft, ChevronRight, Eye, Plus, Search, ShieldCheck, X,
+  BadgePercent, Check, ChevronLeft, ChevronRight, Clock3, Eye, Plus, Search, ShieldCheck, X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import adminOffersApi from "../../api/adminOffersApi.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import Modal from "../../components/common/Modal.jsx";
+import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
 
 const PAGE_SIZE = 10;
@@ -16,7 +17,7 @@ const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
 const OFFER_STATUSES = ["Pending", "Active", "Rejected", "Expired", "Inactive", "Scheduled"];
 const EMPTY_DRAFT = {
   title: "", description: "", type: OFFER_TYPES[0], farmer: "", product: "",
-  discountType: "Percentage", discountValue: "", startDate: "", endDate: "",
+  discountType: "Percentage", discountValue: "", startDate: "", endDate: "", startTime: "", endTime: "",
   minimumQuantity: "1", minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
 };
 const actionSuccessMessages = {
@@ -246,6 +247,8 @@ export default function AdminOffers() {
       discountValue: String(offer.discountValue ?? ""),
       startDate: formDate(offer.startDate),
       endDate: formDate(offer.endDate),
+      startTime: offer.startAt ? new Date(offer.startAt).toISOString().slice(11, 16) : "",
+      endTime: offer.endAt ? new Date(offer.endAt).toISOString().slice(11, 16) : "",
       minimumQuantity: String(offer.minimumQuantity ?? 1),
       minimumAmount: String(offer.minimumAmount ?? 0),
       maximumDiscount: offer.maximumDiscount == null ? "" : String(offer.maximumDiscount),
@@ -271,6 +274,8 @@ export default function AdminOffers() {
     if (draft.discountType === "Percentage" && value > 100) errors.discountValue = "Percentage cannot exceed 100.";
     if (draft.discountType === "Fixed Amount" && selectedProduct && value >= Number(selectedProduct.price)) errors.discountValue = "Discount must be lower than the product price.";
     if (!draft.startDate || !draft.endDate || new Date(draft.endDate) <= new Date(draft.startDate)) errors.endDate = "End date must be after start date.";
+    if (!draft.startTime || !draft.endTime) errors.startTime = "Start time and end time are required.";
+    else if (new Date(`${draft.startDate}T${draft.startTime}`) >= new Date(`${draft.endDate}T${draft.endTime}`)) errors.endTime = "End datetime must be after start datetime.";
     const quantity = Number(draft.minimumQuantity);
     if (!Number.isInteger(quantity) || quantity < 1 || (selectedProduct && quantity > Number(selectedProduct.stock))) errors.minimumQuantity = "Enter a valid quantity within available stock.";
     if (draft.type === "Bundle Offer" && quantity < 2) errors.minimumQuantity = "A bundle must require at least two units.";
@@ -297,6 +302,8 @@ export default function AdminOffers() {
         discountValue: Number(draft.discountValue),
         startDate: draft.startDate,
         endDate: draft.endDate,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
         minimumQuantity: Number(draft.minimumQuantity),
         minimumAmount: Number(draft.minimumAmount),
         maximumDiscount: draft.maximumDiscount === "" ? null : Number(draft.maximumDiscount),
@@ -487,6 +494,8 @@ export default function AdminOffers() {
                     <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-800">{formatCurrency(offer.offerPrice)}</td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-[10px] text-gray-600">
                       {formatDate(offer.startDate)} – {formatDate(offer.endDate)}
+                      {offer.startAt && offer.effectiveStatus === "Upcoming" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
+                      {offer.endAt && offer.effectiveStatus === "Active" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
                     </td>
                     <td className="px-3 py-2.5"><OfferStatus status={status} /></td>
                     <td className="min-w-[255px] whitespace-nowrap px-3 py-2.5">
@@ -749,6 +758,14 @@ export default function AdminOffers() {
               <label className="text-[11px] font-medium text-[#52645D]">End Date
                 <input aria-label="Offer end date" type="date" value={draft.endDate} onChange={(event) => setDraft({ ...draft, endDate: event.target.value })} className={inputClass(Boolean(formErrors.endDate))} />
                 {formErrors.endDate && <span className="mt-1 block text-[10px] text-red-600">{formErrors.endDate}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">Start Time
+                <input aria-label="Offer start time" type="time" value={draft.startTime} onChange={(event) => setDraft({ ...draft, startTime: event.target.value })} className={inputClass(Boolean(formErrors.startTime))} />
+                {formErrors.startTime && <span className="mt-1 block text-[10px] text-red-600">{formErrors.startTime}</span>}
+              </label>
+              <label className="text-[11px] font-medium text-[#52645D]">End Time
+                <input aria-label="Offer end time" type="time" value={draft.endTime} onChange={(event) => setDraft({ ...draft, endTime: event.target.value })} className={inputClass(Boolean(formErrors.endTime))} />
+                {formErrors.endTime && <span className="mt-1 block text-[10px] text-red-600">{formErrors.endTime}</span>}
               </label>
               <label className="text-[11px] font-medium text-[#52645D]">Minimum Quantity
                 <input aria-label="Minimum quantity" type="number" min="1" step="1" value={draft.minimumQuantity} onChange={(event) => setDraft({ ...draft, minimumQuantity: event.target.value })} className={inputClass(Boolean(formErrors.minimumQuantity))} />

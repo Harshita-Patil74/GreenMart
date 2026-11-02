@@ -37,6 +37,11 @@ export const NOTIFICATION_TYPE_ICONS = {
   passwordChanged: LockKeyhole,
   accountSecurity: ShieldAlert,
   systemNotification: Bell,
+  farmerCertificationVerified: ShieldCheck,
+  farmerCertificationRejected: FileX,
+  farmerAccountActivated: UserCheck,
+  farmerCertificationSubmitted: FileText,
+  wishlistOffer: Tag,
 };
 
 const TYPE_COLORS = {
@@ -67,6 +72,11 @@ const TYPE_COLORS = {
   passwordChanged: { icon: "text-slate-600", background: "bg-slate-100" },
   accountSecurity: { icon: "text-red-600", background: "bg-red-50" },
   systemNotification: { icon: "text-slate-600", background: "bg-slate-100" },
+  farmerCertificationVerified: { icon: "text-emerald-600", background: "bg-emerald-50" },
+  farmerCertificationRejected: { icon: "text-red-600", background: "bg-red-50" },
+  farmerAccountActivated: { icon: "text-emerald-600", background: "bg-emerald-50" },
+  farmerCertificationSubmitted: { icon: "text-amber-600", background: "bg-amber-50" },
+  wishlistOffer: { icon: "text-emerald-600", background: "bg-emerald-50" },
 };
 
 export function getNotificationIcon(type) {

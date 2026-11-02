@@ -5,7 +5,7 @@ import Home from "./Home.jsx";
 import productApi from "../../api/productApi.js";
 
 vi.mock("../../api/productApi", () => ({
-  default: { storefront: vi.fn(), storefrontOffers: vi.fn() },
+  default: { storefront: vi.fn(), storefrontOffers: vi.fn(), serverTime: vi.fn() },
 }));
 
 const percentageOffer = {
@@ -77,6 +77,7 @@ describe("Home page offers", () => {
       data: { items: [], total: 0, pages: 1 },
     });
     productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    productApi.serverTime.mockResolvedValue({ data: { serverTime: new Date().toISOString() } });
   });
 
   it("renders approved active offers with product image, name, title, prices and dates", async () => {

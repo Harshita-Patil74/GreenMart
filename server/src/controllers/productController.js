@@ -228,6 +228,23 @@ exports.update = asyncHandler(async (req,res) => {
           eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}`,
         });
       }
+      // Notify the owning farmer of low stock or out of stock on their product
+      const farmerId = String(updated.farmer || updated.product?.farmer || "");
+      if (farmerId && farmerId !== "") {
+        await createNotification({
+          userId: farmerId,
+          type: "stockAlert",
+          category: "inventory",
+          title,
+          message: `Your ${updated.name} ${newStock === 0 ? "is now out of stock." : `has reached its low-stock threshold (${newStock} remaining).`}`,
+          resourceType: "Product",
+          resourceId: updated._id,
+          icon: "AlertTriangle",
+          priority: newStock === 0 ? "high" : "normal",
+          actionUrl: `/farmer/inventory/${updated._id}`,
+          eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}:farmer:${farmerId}`,
+        });
+      }
     }
     // Notify wishlist customers when a previously out-of-stock product is back in stock
     if (Number(oldStock) === 0 && newStock > 0) {
@@ -274,4 +291,8 @@ exports.remove = asyncHandler(async (req,res) => {
     });
   }
   res.json({ message: "Deleted" });
+});
+
+exports.serverTime = asyncHandler(async (req, res) => {
+  res.json({ serverTime: new Date().toISOString() });
 });

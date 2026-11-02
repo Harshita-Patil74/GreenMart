@@ -10,6 +10,8 @@ const offerFields = {
   discountValue: z.coerce.number().positive(),
   startDate: z.string().min(1),
   endDate: z.string().min(1),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
   minimumQuantity: z.coerce.number().int().positive().optional(),
   minimumAmount: z.coerce.number().nonnegative().optional(),
   maximumDiscount: z.union([z.coerce.number().nonnegative(), z.null(), z.literal("")]).optional(),
