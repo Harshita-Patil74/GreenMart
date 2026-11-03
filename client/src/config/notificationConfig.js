@@ -123,3 +123,41 @@ export const CATEGORY_ICONS = {
   messages: MessageCircle,
   account: User,
 };
+
+// Map notification `type` -> standard `category` for legacy records saved
+// without a category. `type` is the event; `category` is the filter group.
+export const TYPE_TO_CATEGORY = {
+  orderConfirmation: "orders",
+  newOrderFarmer: "orders",
+  newOrderAdmin: "orders",
+  statusUpdate: "orders",
+  orderStatusAdmin: "orders",
+  newOfferAdmin: "offers",
+  offerApproved: "offers",
+  offerRejected: "offers",
+  offerResubmitted: "offers",
+  offerDeactivated: "offers",
+  offerCreatedByAdmin: "offers",
+  offerUpdatedByAdmin: "offers",
+  newProductAdmin: "products",
+  productDeletedAdmin: "products",
+  stockAlert: "inventory",
+  backInStock: "inventory",
+  newReviewAdmin: "products",
+  newMessage: "messages",
+  newContactAdmin: "support",
+  farmerCertificationVerified: "certifications",
+  farmerCertificationRejected: "certifications",
+  farmerCertificationSubmitted: "certifications",
+  farmerAccountActivated: "account",
+  passwordChanged: "account",
+  accountSecurity: "account",
+  systemNotification: "account",
+};
+
+export function normalizeCategory(notification) {
+  const category = notification && (notification.category || notification.cat);
+  if (category) return String(category);
+  const type = notification && notification.type;
+  return type && TYPE_TO_CATEGORY[type] ? TYPE_TO_CATEGORY[type] : "";
+}

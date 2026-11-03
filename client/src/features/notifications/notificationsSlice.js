@@ -1,10 +1,10 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import notificationApi from "../../api/notificationApi";
 
-export const fetchNotifications = createAsyncThunk("notifications/fetch", async (_, { rejectWithValue }) => {
+export const fetchNotifications = createAsyncThunk("notifications/fetch", async (params = {}, { rejectWithValue }) => {
   try {
-    const { data } = await notificationApi.list();
-    return Array.isArray(data) ? data : [];
+    const { data } = await notificationApi.list(params);
+    return data;
   } catch (error) {
     return rejectWithValue(error);
   }
@@ -21,7 +21,7 @@ export const fetchUnreadCount = createAsyncThunk("notifications/fetchUnread", as
 
 const s = createSlice({
   name: "notifications",
-  initialState: { items: [], unread: 0, loading: false, error: null },
+  initialState: { items: [], unread: 0, loading: false, error: null, pagination: null },
   reducers: {
     setNotifications: (st, a) => { st.items = a.payload; st.unread = a.payload.filter((n) => !n.isRead).length; },
     setUnread: (st, a) => { st.unread = a.payload; },
@@ -43,7 +43,18 @@ const s = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchNotifications.pending, (st) => { st.loading = true; st.error = null; })
-      .addCase(fetchNotifications.fulfilled, (st, a) => { st.loading = false; st.items = a.payload; st.unread = a.payload.filter((n) => !n.isRead).length; })
+      .addCase(fetchNotifications.fulfilled, (st, a) => {
+        st.loading = false;
+        const payload = a.payload || [];
+        if (payload && payload.items) {
+          st.items = payload.items;
+          st.pagination = { total: payload.total, page: payload.page, pages: payload.pages, limit: payload.limit };
+        } else {
+          st.items = Array.isArray(payload) ? payload : [];
+          st.pagination = null;
+        }
+        st.unread = st.items.filter((n) => !n.isRead).length;
+      })
       .addCase(fetchNotifications.rejected, (st, a) => { st.loading = false; st.error = a.payload?.message || "Failed to load notifications."; })
       .addCase(fetchUnreadCount.fulfilled, (st, a) => { st.unread = a.payload; });
   },

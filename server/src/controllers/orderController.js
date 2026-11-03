@@ -43,6 +43,7 @@ exports.create = asyncHandler(async (req,res) => {
   await createNotification({
     userId: req.user._id,
     type: "orderConfirmation",
+    category: "orders",
     title: "Order placed successfully",
     message: `Your order #${order.orderNumber} has been placed successfully.`,
     orderId: order._id,
@@ -57,6 +58,7 @@ exports.create = asyncHandler(async (req,res) => {
     await createNotification({
       userId: f,
       type: "newOrderFarmer",
+      category: "orders",
       title: "New order received",
       message: "You have received a new order containing your products.",
       orderId: order._id,
@@ -163,6 +165,7 @@ exports.updateStatus = asyncHandler(async (req,res) => {
   await createNotification({
     userId: updated.user,
     type: "statusUpdate",
+    category: "orders",
     title: notificationTitle,
     message: `${notificationMessage} (Order #${updated.orderNumber})`,
     orderId: updated._id,

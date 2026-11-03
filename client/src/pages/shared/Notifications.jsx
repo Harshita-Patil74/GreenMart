@@ -13,18 +13,18 @@ import { Bell } from "lucide-react";
 export default function Notifications() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user } = useSelector((s) => s.auth || {});
-  const { items, loading, error } = useSelector((s) => s.notifications || { items: [], loading: false, error: null });
+  const { items, loading, error, pagination } = useSelector((s) => s.notifications || { items: [], loading: false, error: null, pagination: null });
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
   const load = useCallback(() => {
-    dispatch(fetchNotifications());
+    dispatch(fetchNotifications({ category, page, limit: PAGE_SIZE }));
     dispatch(fetchUnreadCount());
-  }, [dispatch]);
+  }, [dispatch, category, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setPage(1); }, [category]);
 
   const markRead = async (id) => {
     try {
@@ -57,7 +57,8 @@ export default function Notifications() {
     return String(n.category || "").toLowerCase() === category;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const total = pagination?.total ?? filtered.length;
+  const totalPages = pagination?.pages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const unreadCount = items.filter((n) => !n.isRead).length;
 
@@ -129,6 +130,9 @@ export default function Notifications() {
                         </time>
                       </div>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                      <span className={`text-[9px] font-semibold uppercase tracking-wider ${notification.isRead ? "text-gray-400" : "text-[#087449]"}`}>
+                        {CATEGORY_LABELS[notification.category] || "Update"}
+                      </span>
                     </div>
                     {!notification.isRead && (
                       <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={(e) => { e.stopPropagation(); markRead(notification._id); }} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />
@@ -147,10 +151,11 @@ export default function Notifications() {
         )}
       </div>
 
-      {filtered.length > PAGE_SIZE && (
+      {total > PAGE_SIZE && (
         <div className="flex items-center justify-between px-4 py-3 text-xs text-[#475852]">
-          <span>Page {page} of {totalPages}</span>
+          <span>Total Notifications: {total}</span>
           <div className="flex items-center gap-1">
+            <span className="mr-2">Page {page} of {totalPages}</span>
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}

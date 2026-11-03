@@ -3,42 +3,68 @@ import { Bell } from "lucide-react";
 import toast from "react-hot-toast";
 import notificationApi from "../../api/notificationApi";
 import BackButton from "../../components/common/BackButton.jsx";
-import { formatDate } from "./farmerUtils";
+import { formatDate, unwrapList } from "./farmerUtils.js";
 import {
-  getNotificationIcon, getNotificationStyle, FARMER_CATEGORIES, CATEGORY_LABELS, CATEGORY_ICONS,
+  getNotificationIcon, getNotificationStyle, FARMER_CATEGORIES, CATEGORY_LABELS, CATEGORY_ICONS, normalizeCategory,
 } from "../../config/notificationConfig.js";
 
 export default function FarmerNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
   const loadNotifications = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setError(null);
     try {
+      // No pagination params: backend returns the complete plain array for the
+      // authenticated farmer, which keeps per-category counts and unread counts
+      // accurate without fetching partial pages.
       const { data } = await notificationApi.list();
-      setNotifications(Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : []);
+      const items = unwrapList(data);
+      setNotifications(Array.isArray(items) ? items : []);
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "We couldn't load your notifications.");
     } finally {
       setLoading(false);
     }
   }, []);
+
   useEffect(() => { loadNotifications(); }, [loadNotifications]);
 
-  const filtered = useMemo(() => {
-    if (category === "all") return notifications;
-    return notifications.filter((n) => String(n.category || "").toLowerCase() === category);
-  }, [notifications, category]);
+  const normalized = useMemo(() => notifications.map((n) => ({
+    ...n,
+    category: normalizeCategory(n) || (n.category || ""),
+  })), [notifications]);
 
-  const unreadCount = useMemo(() => notifications.filter((item) => !item.isRead).length, [notifications]);
+  const filtered = useMemo(() => {
+    if (category === "all") return normalized;
+    return normalized.filter((n) => String(n.category || "").toLowerCase() === category);
+  }, [normalized, category]);
+
+  useEffect(() => { setPage(1); }, [category]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const unreadCount = useMemo(() => notifications.filter((item) => !item.isRead).length, [notifications]);
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    FARMER_CATEGORIES.forEach((cat) => {
+      counts[cat] = cat === "all" ? notifications.length : normalized.filter((n) => String(n.category || "").toLowerCase() === cat).length;
+    });
+    return counts;
+  }, [normalized, notifications.length]);
+  const categoryUnreadCounts = useMemo(() => {
+    const counts = {};
+    FARMER_CATEGORIES.forEach((cat) => {
+      counts[cat] = cat === "all" ? unreadCount : normalized.filter((n) => !n.isRead && String(n.category || "").toLowerCase() === cat).length;
+    });
+    return counts;
+  }, [normalized, unreadCount]);
 
   const markRead = async (notification) => {
     if (notification.isRead) return;
@@ -71,6 +97,14 @@ export default function FarmerNotifications() {
     }
   };
 
+  const goToOrder = (notification) => {
+    if (notification.orderId) {
+      // Navigation to order details is handled by the consumer/router; marking
+      // read happens here.
+    }
+    markRead(notification);
+  };
+
   return (
     <section className="mx-auto max-w-4xl space-y-4 pb-5 text-[13px] text-[#20312E]">
       <BackButton fallback="/farmer/dashboard" />
@@ -79,13 +113,16 @@ export default function FarmerNotifications() {
           <h1 className="text-xl font-bold tracking-tight text-[#172A27]">Notifications</h1>
           <p className="mt-1 text-xs text-[#71817D]">Updates about orders, your products, and farm activity.</p>
         </div>
-        {unreadCount > 0 && <button type="button" onClick={markAllRead} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#C9DCD4] px-3 text-xs font-medium text-[#087449] hover:bg-white"><Bell size={14} /> Mark all read</button>}
+        {unreadCount > 0 && (
+          <button type="button" onClick={markAllRead} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#C9DCD4] px-3 text-xs font-medium text-[#087449] hover:bg-white"><Bell size={14} /> Mark all read</button>
+        )}
       </header>
 
       <nav aria-label="Notification categories" className="flex min-w-0 gap-1.5 overflow-x-auto rounded-xl border border-[#E5ECE8] bg-white p-2 scrollbar-hide">
         {FARMER_CATEGORIES.map((cat) => {
           const Icon = CATEGORY_ICONS[cat] || Bell;
-          const unread = cat === "all" ? unreadCount : filtered.filter((n) => !n.isRead && String(n.category || "").toLowerCase() === cat).length;
+          const count = categoryCounts[cat] || 0;
+          const unread = categoryUnreadCounts[cat] || 0;
           return (
             <button
               key={cat}
@@ -100,7 +137,7 @@ export default function FarmerNotifications() {
             >
               {cat === "all" ? <Bell aria-hidden="true" className="h-3.5 w-3.5" /> : <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
               <span>{CATEGORY_LABELS[cat]}</span>
-              {unread > 0 && <span className={`min-w-4 rounded-full px-1 text-center text-[9px] leading-4 ${category === cat ? "bg-white/20 text-white" : "bg-[#EAF6ED] text-[#087449]"}`}>{unread}</span>}
+              {count > 0 && <span className={`min-w-4 rounded-full px-1 text-center text-[9px] leading-4 ${category === cat ? "bg-white/20 text-white" : "bg-[#EAF6ED] text-[#087449]"}`}>{count}</span>}
             </button>
           );
         })}
@@ -122,17 +159,15 @@ export default function FarmerNotifications() {
                 <li key={notification._id}>
                   <div className={`flex items-start gap-3 px-4 py-3.5 ${notification.isRead ? "bg-white" : "bg-[#F6FAF8]"}`}>
                     <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.background} ${style.color}`}><Icon size={15} /></span>
-                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => {
-                      if (notification.orderId) {
-                        // navigate handled via parent if router available; mark read only here
-                      }
-                      markRead(notification);
-                    }}>
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => goToOrder(notification)}>
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <h2 className={`text-xs ${notification.isRead ? "font-medium text-[#475852]" : "font-semibold text-[#253933]"}`}>{notification.title || "Farm update"}</h2>
                         <time className="whitespace-nowrap text-[10px] text-[#8A9692]" dateTime={notification.createdAt}>{formatDate(notification.createdAt, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</time>
                       </div>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                      <span className={`text-[9px] font-semibold uppercase tracking-wider ${notification.isRead ? "text-gray-400" : "text-[#087449]"}`}>
+                        {CATEGORY_LABELS[normalizeCategory(notification)] || CATEGORY_LABELS[notification.category] || "Update"}
+                      </span>
                     </div>
                     {!notification.isRead && (
                       <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={() => markRead(notification)} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />

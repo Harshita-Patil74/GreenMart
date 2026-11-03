@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const FarmerProfile = require("../models/FarmerProfile");
 const Product = require("../models/Product");
 const { asyncHandler } = require("../utils/asyncHandler");
@@ -10,9 +11,11 @@ exports.list = asyncHandler(async (req,res) => {
   res.json(profiles);
 });
 exports.get = asyncHandler(async (req,res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: "Farmer not found" });
   const p = await FarmerProfile.findOne({ user: req.params.id })
-    .select("user farmName address photo location certification.verifiedByAdmin")
-    .populate("user", "_id avatar");
+    .select("user farmName category description address photo location certification.verifiedByAdmin")
+    .populate("user", "_id name avatar");
+  if (!p) return res.status(404).json({ message: "Farmer not found" });
   res.json(p);
 });
 exports.updateLocation = asyncHandler(async (req,res) => {
