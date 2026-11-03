@@ -39,7 +39,7 @@ exports.getProfile = asyncHandler(async (req,res) => {
   res.json(p);
 });
 exports.updateProfile = asyncHandler(async (req,res) => {
-  const allowed = ["fullName","mobile","dateOfBirth","residentialAddress","village","district","state","pinCode","farmName","farmAddress","farmVillage","farmDistrict","farmState","farmPinCode","farmCategory","totalFarmArea","farmDescription","surveyNumber","landOwnershipType","totalLandArea","cultivatedArea","landAreaUnit","landVillage","landTaluk","landDistrict","landState","landPinCode","landDescription"];
+  const allowed = ["fullName","mobile","dateOfBirth","residentialAddress","village","district","state","pinCode","farmName","farmAddress","farmVillage","farmDistrict","farmState","farmPinCode","farmCategory","totalFarmArea","farmDescription","surveyNumber","landOwnershipType","totalLandArea","cultivatedArea","landAreaUnit","landVillage","landTaluk","landDistrict","landState","landPinCode","landDescription","certificateName","certificateNumber"];
   const update = {};
   for (const f of allowed) if (req.body[f] !== undefined) update[f] = req.body[f];
   const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, update, { new: true, upsert: true, runValidators: true }).populate("user","name email avatar");
@@ -51,6 +51,7 @@ exports.resubmitApplication = asyncHandler(async (req,res) => {
   if (!fp) return res.status(404).json({ message: "Profile not found" });
   fp.verificationStatus = "Pending";
   fp.changeRequestInstructions = "";
+  fp.submittedAt = new Date();
   fp.verificationHistory.push({ action: "Resubmitted", timestamp: new Date() });
   await fp.save();
   // notify admins

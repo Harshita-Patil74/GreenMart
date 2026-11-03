@@ -24,6 +24,7 @@ Tagline: **Fresh. Organic. Direct from Farmers.**
 - [Roles & Permissions](#roles--permissions)
 - [Environment Variables](#environment-variables)
 - [Run Locally](#run-locally)
+- [Development Workflow](#development-workflow)
 - [Database and First Admin](#database-and-first-admin)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
@@ -67,7 +68,7 @@ npm run dev      # http://127.0.0.1:5173
 ```
 
 > The root `server/.env.example` exists and should be copied to `.env` before starting the backend.
-> The client directory does **not** ship with a `.env.example` file. Create `client/.env` manually with `VITE_API_URL` and `VITE_SOCKET_URL`.
+> The client ships with `client/.env.example`. Copy it to `client/.env` and adjust `VITE_API_URL` / `VITE_SOCKET_URL` as needed.
 
 ---
 
@@ -75,8 +76,8 @@ npm run dev      # http://127.0.0.1:5173
 
 | Layer | Technologies |
 |---|---|
-| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast |
-| Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit |
+| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion |
+| Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
 | AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
 | Image Storage | Multer handles incoming multipart/form-data file uploads and stores them temporarily on the local server (`server/uploads/`). Cloudinary (via its Node.js SDK) provides cloud-based image storage and delivery — uploaded files are streamed from local temp storage to Cloudinary, and Cloudinary URLs are persisted in MongoDB. |
 | Testing | Vitest (client), Jest (server), including Socket.io integration tests |
@@ -99,6 +100,7 @@ greenmart/
 | `server.js` | Entry point: connects DB, runs defaults, creates HTTP + Socket.io server, listens on port |
 | `app.js` | Express app setup: helmet, CORS, JSON body parser, rate limiting, static uploads, route mounting, error handling |
 | `config/env.js` | Loads server environment variables; validates MongoDB at startup |
+| `config/db.js` | Mongoose database connection |
 | `config/cloudinary.js` | Cloudinary SDK configuration |
 | `config/gemini.js` | Lazy-initialized Google GenAI client |
 | `config/mailer.js` | Nodemailer SMTP transporter + `sendMail` helper |
@@ -113,10 +115,10 @@ greenmart/
 | `middleware/upload.js` | Multer configuration for product, avatar, and farm-photo uploads |
 | `middleware/validate.js` | Zod request validation middleware |
 | `middleware/errorHandler.js` | Global `notFound` and `errorHandler` middleware |
-| `models/*.js` | Mongoose schemas: User, Product, Order, Cart, Wishlist, Category, Address, FarmerProfile, Review, Notification, Message, Setting, Offer |
-| `routes/*.js` | Express route definitions for each domain (auth, product, order, cart, farmer, admin, contact, message, offer, review, settings, notification, etc.) |
+| `models/*.js` | Mongoose schemas: User, Product, Order, Cart, Wishlist, Category, Address, FarmerProfile, Review, Notification, Message, Setting, Offer, Crop, Harvest, InventoryAdjustment, InvoiceCounter, RefreshToken, AdminAuditLog |
+| `routes/*.js` | Express route definitions for each domain (auth, product, order, cart, farmer, admin, contact, message, offer, review, settings, notification, crop, harvest, inventory, sales, location, adminOffer, etc.) |
 | `routes/index.js` | Aggregates all route modules |
-| `services/*.js` | Business logic layer: cartService, orderService, offerService, emailService, notificationService, assistantService, statsService, cloudinaryUpload |
+| `services/*.js` | Business logic layer: cartService, orderService, offerService, emailService, notificationService, assistantService, statsService, cloudinaryUpload, reportPdfService |
 | `sockets/index.js` | Socket.io connection setup |
 | `sockets/emitters.js` | Socket emitters for real-time events (new order, status update, location update, notification) |
 | `bootstrap/ensureDefaults.js` | Seed default categories and settings on startup |
@@ -128,6 +130,9 @@ greenmart/
 | `utils/generateOrderNumber.js` | Order number generator |
 | `utils/haversine.js` | Distance calculation for farm locations |
 | `utils/tokens.js` | JWT token utilities |
+| `utils/invoice.js` | PDF invoice generation |
+| `utils/invoiceNumbers.js` | Invoice number sequencing |
+| `utils/offerValidation.js` | Offer discount validation helpers |
 
 ### Client (`client/src`)
 
@@ -202,6 +207,21 @@ greenmart/
 - **Certification**: Maintain certification text (subject to admin verification/revocation); notified when certification is verified or rejected with reason
 - **Notifications**: Receive live new-order notifications via Socket.io; notifications persist in MongoDB and survive refresh/login; category filters, mark-as-read/delete, pagination
 
+### Crop Management
+
+- Create, list, view, update, and delete crops owned by the farmer
+- Each crop is tied to the registering farmer
+
+### Harvest Management
+
+- Create, list, view, update, and delete harvests owned by the farmer
+- Update harvest availability (quantity and sale status)
+
+### Inventory Adjustments
+
+- Record stock increases/decreases for products and harvests
+- View adjustment history per item and across all items
+
 ### Admin Features
 
 - **Dashboard**: View totals and charts (sales, orders, users, products)
@@ -217,6 +237,10 @@ greenmart/
 - **Reports**: Export reports as CSV
 - **Settings**: Configure delivery charge and product categories
 - **Live Feed**: Real-time new-order feed via Socket.io
+- **Sales Reports**: View farmer sales overview (revenue, orders, products sold, quantity)
+- **PDF Invoices**: Generate and download order invoices as PDF
+- **Contact Form**: Customers submit support requests; admins are notified
+- **Admin Audit Log**: Track admin actions for accountability
 
 ---
 
@@ -397,6 +421,13 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 | View dashboard analytics | no | own earnings/stats | all totals/charts |
 | View notifications | own | own | all (Admin Notifications page) |
 | Export CSV reports | no | no | yes |
+| Manage crops | no | own only | all |
+| Manage harvests | no | own only | all |
+| Inventory adjustments | no | own only | all |
+| Sales reports | no | own sales | all |
+| PDF invoices | own orders | no | all |
+| Contact/support form | yes | yes | notified |
+| Admin audit log | no | no | yes |
 
 ### Important Security Notes
 
@@ -477,9 +508,9 @@ npm run dev      # http://127.0.0.1:5000
 
 ```bash
 cd client
-# Create client/.env manually (no .env.example ships with the project):
-# VITE_API_URL=http://127.0.0.1:5000/api
-# VITE_SOCKET_URL=http://127.0.0.1:5000
+cp .env.example .env
+# VITE_API_URL=http://localhost:5000/api
+# VITE_SOCKET_URL=http://localhost:5000
 npm install
 npm run dev
 ```
@@ -488,6 +519,33 @@ npm run dev
 - **Backend**: http://127.0.0.1:5000
 
 > If `localhost` refuses the connection, use `http://127.0.0.1:5173` for the frontend and `http://127.0.0.1:5000` for the backend. `localhost` may resolve to IPv6 (`::1`) while the servers listen on IPv4 (`0.0.0.0`).
+
+---
+
+## Development Workflow
+
+### Typical development loop
+
+1. **Start the backend** — from `server/`: `npm run dev` (uses `nodemon`, watches `src/`).
+2. **Start the frontend** — from `client/`: `npm run dev` (Vite dev server with hot reload).
+3. **Seed data** — `npm run seed:admin` creates the first admin; `npm run seed` seeds demo development data (requires `SEED_PASSWORD`, refused in production).
+4. **Run tests** — backend: `cd server && npm test` (Jest, `mongodb-memory-server`); frontend: `cd client && npm run test` (Vitest).
+5. **Build for production** — frontend: `cd client && npm run build` (outputs to `dist/`).
+6. **Lint/typecheck** — there is no separate lint script; run tests to verify behavior.
+
+### Seed commands (run from `server/`)
+
+| Command | Purpose |
+|---|---|
+| `npm run seed:admin` | Create the first administrator (safe to rerun; does not overwrite existing admin) |
+| `npm run seed` | Seed development demo data (requires `SEED_PASSWORD`; refuses production) |
+| `npm run seed:reset` | Remove and replace demo data only (does not reset admin password) |
+
+### Environment workflow
+
+- Copy `server/.env.example` → `server/.env` and fill in `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+- Copy `client/.env.example` → `client/.env` and set `VITE_API_URL`, `VITE_SOCKET_URL`.
+- Never commit `.env` files (covered by `.gitignore`).
 
 ---
 
