@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
-import productApi from "../../api/productApi.js";
+import offerApi from "../../api/offerApi.js";
 import categoryApi from "../../api/categoryApi.js";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { fetchWishlist, toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
@@ -44,7 +44,8 @@ export default function CustomerOffers() {
   const dispatch = useDispatch();
   const { user, token } = useSelector((state) => state.auth);
   const wishlist = useSelector((state) => state.wishlist);
-  const [offers, setOffers] = useState([]);
+  const [activeOffers, setActiveOffers] = useState([]);
+  const [upcomingOffers, setUpcomingOffers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState("");
@@ -55,7 +56,7 @@ export default function CustomerOffers() {
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
-  const [onlyActive, setOnlyActive] = useState(true);
+  const [tab, setTab] = useState("active");
   const [addingId, setAddingId] = useState("");
   const [serverTime, setServerTime] = useState(null);
   const offersRef = useRef(null);
@@ -89,24 +90,26 @@ export default function CustomerOffers() {
     let active = true;
     setLoading(true);
     setError("");
-    productApi.storefrontOffers()
+    offerApi.list()
       .then(({ data }) => {
-        if (active) setOffers(Array.isArray(data?.items) ? data.items : []);
+        if (!active) return;
+        const serverTime = data.serverTime;
+        const activeList = Array.isArray(data?.active) ? data.active.filter((o) => o.effectiveStatus === "Active") : [];
+        const upcomingList = Array.isArray(data?.upcoming) ? data.upcoming.filter((o) => o.effectiveStatus === "Scheduled") : [];
+        setActiveOffers(activeList);
+        setUpcomingOffers(upcomingList);
+        setServerTime(serverTime);
       })
       .catch((requestError) => {
         if (active) {
-          setOffers([]);
-          setError(requestError?.message || "Couldn't load current farmer offers.");
+          setActiveOffers([]);
+          setUpcomingOffers([]);
+          setError(requestError?.message || "Couldn't load offers.");
         }
       })
       .finally(() => {
         if (active) setLoading(false);
       });
-    productApi.serverTime()
-      .then(({ data }) => {
-        if (active) setServerTime(data.serverTime);
-      })
-      .catch(() => { /* server time is optional */ });
     return () => { active = false; };
   }, [retry]);
 
@@ -116,28 +119,24 @@ export default function CustomerOffers() {
     }
   }, [dispatch, token, user?.role, wishlist.loaded, wishlist.loading]);
 
-  const eligibleOffers = useMemo(
-    () => offers.filter((offer) => ["Active", "Scheduled"].includes(offer.effectiveStatus)),
-    [offers]
-  );
+  const currentOffers = tab === "active" ? activeOffers : upcomingOffers;
 
   const availableCategories = useMemo(
     () => categories.length
       ? categories
-      : [...new Set(eligibleOffers.map((offer) => offer.product?.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [categories, eligibleOffers]
+      : [...new Set(currentOffers.map((offer) => offer.product?.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    [categories, currentOffers]
   );
 
   const visibleOffers = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    const filtered = eligibleOffers.filter((offer) => {
+    const filtered = currentOffers.filter((offer) => {
       const product = offer.product || {};
       const farmerName = offer.farmer?.name || product.farmer?.name || "";
       const searchable = `${offer.title || ""} ${offer.description || ""} ${product.name || ""} ${farmerName}`.toLocaleLowerCase();
       return (!type || offer.type === type)
         && (!category || product.category === category)
-        && (!query || searchable.includes(query))
-        && (!onlyActive || offer.effectiveStatus === "Active");
+        && (!query || searchable.includes(query));
     });
 
     return filtered.sort((left, right) => {
@@ -146,7 +145,7 @@ export default function CustomerOffers() {
       if (sort === "discount_desc") return Number(right.discountPercent) - Number(left.discountPercent);
       return new Date(right.createdAt || right.startDate) - new Date(left.createdAt || left.startDate);
     });
-  }, [eligibleOffers, type, category, search, onlyActive, sort]);
+  }, [currentOffers, type, category, search, sort, tab]);
 
   const shopDeals = () => {
     offersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -216,7 +215,24 @@ export default function CustomerOffers() {
         </div>
       </section>
 
-      <section aria-label="Offer filters" className="flex flex-col gap-2.5 rounded-xl border border-[#E6ECE4] bg-white/80 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex gap-2 border-b border-[#E6ECE4] pb-2 mb-3">
+        <button
+          type="button"
+          onClick={() => setTab("active")}
+          className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "active" ? "bg-[#16803C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
+        >
+          Active Offers ({activeOffers.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("upcoming")}
+          className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "upcoming" ? "bg-[#C2410C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
+        >
+          Coming Soon ({upcomingOffers.length})
+        </button>
+      </div>
+
+      <section aria-label="Offer filters" className="flex flex-wrap gap-2.5 rounded-xl border border-[#E6ECE4] bg-white/80 p-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5">
           {OFFER_TYPES.map((offerType) => (
             <button
@@ -235,6 +251,50 @@ export default function CustomerOffers() {
             </button>
           ))}
         </div>
+        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap">
+          <label className="relative min-w-[145px] flex-1 sm:w-[185px] sm:flex-none">
+            <span className="sr-only">Search offers</span>
+            <Search aria-hidden="true" className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#91A09B]" />
+            <input
+              type="search"
+              aria-label="Search offers"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search farmer or product"
+              className="h-8 w-full rounded-full border border-[#E0E7E1] bg-white pl-8 pr-2.5 text-[10px] outline-none focus:border-[#16803C] sm:text-[11px]"
+            />
+          </label>
+          <label className="relative min-w-[140px] flex-1 sm:w-[165px] sm:flex-none">
+            <span className="sr-only">Filter product category</span>
+            <select
+              aria-label="Filter product category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              disabled={categoriesLoading}
+              className="h-10 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[11px] text-[#526258] outline-none focus:border-[#16803C] disabled:cursor-wait disabled:bg-gray-50 sm:h-8 sm:text-[11px]"
+            >
+              <option value="">All Categories</option>
+              {categoriesLoading && <option value="" disabled>Loading categories…</option>}
+              {availableCategories.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#738078]" />
+          </label>
+          <label className="relative min-w-[120px] flex-1 sm:w-[150px] sm:flex-none">
+            <span className="sr-only">Sort offers</span>
+            <select
+              aria-label="Sort offers"
+              value={sort}
+              onChange={(event) => setSort(event.target.value)}
+              className="h-8 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[10px] text-[#526258] outline-none focus:border-[#16803C] sm:text-[11px]"
+            >
+              <option value="newest">Sort: Newest</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="discount_desc">Highest Discount</option>
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#738078]" />
+          </label>
+        </div>
       </section>
 
       <section
@@ -246,66 +306,25 @@ export default function CustomerOffers() {
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-[#1E3326] sm:text-base">Offers from Local Farmers</h2>
+            <h2 className="text-sm font-bold text-[#1E3326] sm:text-base">{tab === "active" ? "Active Offers from Local Farmers" : "Upcoming Offers from Local Farmers"}</h2>
             <p className="mt-0.5 text-[10px] text-[#718078] sm:text-[11px]">
               {loading ? "Finding fresh deals…" : `${visibleOffers.length} ${visibleOffers.length === 1 ? "offer" : "offers"} available`}
             </p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap">
-            <label className="relative min-w-[145px] flex-1 sm:w-[185px] sm:flex-none">
-              <span className="sr-only">Search offers</span>
-              <Search aria-hidden="true" className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#91A09B]" />
-              <input
-                type="search"
-                aria-label="Search offers"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search farmer or product"
-                className="h-8 w-full rounded-full border border-[#E0E7E1] bg-white pl-8 pr-2.5 text-[10px] outline-none focus:border-[#16803C] sm:text-[11px]"
-              />
-            </label>
-            <label className="relative min-w-[140px] flex-1 sm:w-[165px] sm:flex-none">
-              <span className="sr-only">Filter product category</span>
-              <select
-                aria-label="Filter product category"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                disabled={categoriesLoading}
-                className="h-10 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[11px] text-[#526258] outline-none focus:border-[#16803C] disabled:cursor-wait disabled:bg-gray-50 sm:h-8 sm:text-[11px]"
+            {tab === "active" && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={false}
+                className="inline-flex h-10 shrink-0 items-center justify-between gap-2 rounded-full bg-[#EAF6ED] px-3 text-[11px] font-semibold text-[#355840] sm:h-8"
               >
-                <option value="">All Categories</option>
-                {categoriesLoading && <option value="" disabled>Loading categories…</option>}
-                {availableCategories.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-              <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#738078]" />
-            </label>
-            <label className="relative min-w-[120px] flex-1 sm:w-[150px] sm:flex-none">
-              <span className="sr-only">Sort offers</span>
-              <select
-                aria-label="Sort offers"
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-                className="h-8 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[10px] text-[#526258] outline-none focus:border-[#16803C] sm:text-[11px]"
-              >
-                <option value="newest">Sort: Newest</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-                <option value="discount_desc">Highest Discount</option>
-              </select>
-              <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#738078]" />
-            </label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={onlyActive}
-              onClick={() => setOnlyActive((value) => !value)}
-              className="inline-flex h-10 shrink-0 items-center justify-between gap-2 rounded-full bg-[#EAF6ED] px-3 text-[11px] font-semibold text-[#355840] sm:h-8"
-            >
-              Only Active
-              <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${onlyActive ? "bg-[#16803C]" : "bg-[#AAB6AD]"}`}>
-                <span className={`absolute left-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${onlyActive ? "translate-x-[16px]" : "translate-x-[2px]"}`} />
-              </span>
-            </button>
+                Only Active
+                <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors bg-[#AAB6AD]`}>
+                  <span className="absolute left-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform translate-x-[2px]" />
+                </span>
+              </button>
+            )}
           </div>
         </div>
         {categoriesError && (
@@ -337,8 +356,10 @@ export default function CustomerOffers() {
         ) : (
           <div className="rounded-xl border border-[#E6ECE4] bg-white px-5 py-10 text-center">
             <Leaf aria-hidden="true" className="mx-auto h-8 w-8 text-[#8BAF83]" />
-            <p className="mt-2 text-sm font-semibold text-[#40544D]">{offers.length ? "No offers match your filters." : "No farmer offers are available right now."}</p>
-            <p className="mt-1 text-xs text-[#778681]">{eligibleOffers.length ? "Try another search or offer type." : "Check back soon for fresh deals from local farmers."}</p>
+            <p className="mt-2 text-sm font-semibold text-[#40544D]">
+              {tab === "active" ? "No active offers available right now." : "No upcoming offers at the moment."}
+            </p>
+            <p className="mt-1 text-xs text-[#778681]">{tab === "active" ? "Check back soon for fresh deals from local farmers." : "Check back later for new upcoming offers."}</p>
           </div>
         )}
       </section>
@@ -392,7 +413,7 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           <span className="text-[13px] font-bold leading-4 text-[#16803C] sm:text-sm">{formatCurrency(price)}</span>
           <span className="text-[9px] text-[#939B94] line-through">{formatCurrency(originalPrice)}</span>
-          <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D] sm:text-[9px]">{discountLabel}</span>
+          <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{discountLabel}</span>
         </div>
         <p className="mt-0.5 text-[8px] text-[#879187]">per {product.unit || "unit"}{minimumQuantity > 1 ? ` · min ${minimumQuantity}` : ""}</p>
 
@@ -423,7 +444,7 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
           <Link
             to={`/product/${getId(product)}`}
             aria-label={`View ${product.name}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#DDE6DE] text-[#55705B] hover:bg-[#F3F8F3]"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#DDE6De] text-[#55705B] hover:bg-[#F3F8F3]"
           >
             <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>

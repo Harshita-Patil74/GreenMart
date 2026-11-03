@@ -50,6 +50,7 @@ router.use("/wishlist", wishlist);
 router.use("/addresses", address);
 router.use("/contact", contact);
 router.use("/admin/offers", require("./adminOfferRoutes"));
+router.use("/offers/customer", require("./customerOfferRoutes"));
 router.use("/admin", admin);
 router.use("/settings", settings);
 module.exports = router;

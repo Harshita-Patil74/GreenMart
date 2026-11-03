@@ -1,14 +1,14 @@
 import React from "react";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import CustomerOffers from "./CustomerOffers.jsx";
-import productApi from "../../api/productApi.js";
+import offerApi from "../../api/offerApi.js";
 import categoryApi from "../../api/categoryApi.js";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 
-vi.mock("../../api/productApi.js", () => ({
-  default: { storefrontOffers: vi.fn(), serverTime: vi.fn() },
+vi.mock("../../api/offerApi.js", () => ({
+  default: { list: vi.fn() },
 }));
 vi.mock("../../api/categoryApi.js", () => ({
   default: { list: vi.fn() },
@@ -29,7 +29,7 @@ vi.mock("../../features/wishlist/wishlistSlice.js", async (importOriginal) => {
   };
 });
 
-const offers = [
+const activeOffers = [
   {
     _id: "offer-mango",
     title: "Mango Harvest Deal",
@@ -82,6 +82,9 @@ const offers = [
     },
     farmer: { _id: "farmer-tomato", name: "Tomato Farm" },
   },
+];
+
+const upcomingOffers = [
   {
     _id: "offer-future",
     title: "Future Greens Deal",
@@ -93,6 +96,7 @@ const offers = [
     offerPrice: 40,
     minimumQuantity: 1,
     minimumAmount: 0,
+    startDate: "2026-12-01T00:00:00.000Z",
     endDate: "2026-12-10T00:00:00.000Z",
     createdAt: "2026-10-28T00:00:00.000Z",
     effectiveStatus: "Scheduled",
@@ -113,8 +117,13 @@ const offers = [
 describe("Customer Offers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    productApi.storefrontOffers.mockResolvedValue({ data: { items: offers } });
-    productApi.serverTime.mockResolvedValue({ data: { serverTime: new Date().toISOString() } });
+    offerApi.list.mockResolvedValue({
+      data: {
+        active: activeOffers,
+        upcoming: upcomingOffers,
+        serverTime: new Date().toISOString(),
+      },
+    });
     categoryApi.list.mockResolvedValue({
       data: [
         { _id: "fruits", name: "Fruits" },
@@ -146,10 +155,26 @@ describe("Customer Offers", () => {
     expect(screen.getByRole("img", { name: "Alphonso Mango" })).toHaveAttribute("src", expect.stringContaining("/uploads/mango.jpg"));
     expect(screen.getByText(/100/)).toBeInTheDocument();
     expect(screen.getByText("17% OFF")).toBeInTheDocument();
+  });
+
+  it("shows Active Offers tab by default and Coming Soon tab", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+    expect(screen.getByRole("button", { name: "Active Offers (2)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Coming Soon (1)" })).toBeInTheDocument();
     expect(screen.queryByText("Fresh Greens")).not.toBeInTheDocument();
   });
 
-  it("filters offers by type, product category, search, active toggle and sort", async () => {
+  it("switches to Coming Soon tab", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    expect(screen.getByText("Fresh Greens")).toBeInTheDocument();
+    expect(screen.queryByText("Alphonso Mango")).not.toBeInTheDocument();
+    expect(screen.queryByText("Organic Tomatoes")).not.toBeInTheDocument();
+  });
+
+  it("filters offers by type, product category, search and sort", async () => {
     renderPage();
     await screen.findByText("Alphonso Mango");
 
@@ -157,6 +182,7 @@ describe("Customer Offers", () => {
     expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
     expect(screen.queryByText("Alphonso Mango")).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "All Offers" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Filter product category" }), { target: { value: "Vegetables" } });
     fireEvent.change(screen.getByRole("searchbox", { name: "Search offers" }), { target: { value: "Tomato Farm" } });
     expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
@@ -181,7 +207,7 @@ describe("Customer Offers", () => {
     expect(screen.queryByText("Organic Tomatoes")).not.toBeInTheDocument();
 
     fireEvent.change(categoryFilter, { target: { value: "Grains & Pulses" } });
-    expect(screen.getByText("No offers match your filters.")).toBeInTheDocument();
+    expect(await screen.findByText("No active offers available right now.")).toBeInTheDocument();
     fireEvent.change(categoryFilter, { target: { value: "" } });
     expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
     expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
@@ -190,18 +216,6 @@ describe("Customer Offers", () => {
     expect(screen.queryByText("Alphonso Mango")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search offers" }), { target: { value: "" } });
-    const activeSwitch = screen.getByRole("switch", { name: "Only Active" });
-    expect(activeSwitch).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(activeSwitch);
-    expect(activeSwitch).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByText("Fresh Greens")).toBeInTheDocument();
-    const switchTrack = activeSwitch.querySelector("span");
-    expect(switchTrack).toHaveClass("bg-[#AAB6AD]");
-    expect(switchTrack.firstElementChild).toHaveClass("left-0", "translate-x-[2px]");
-    fireEvent.click(activeSwitch);
-    expect(activeSwitch).toHaveAttribute("aria-checked", "true");
-    expect(activeSwitch.querySelector("span")).toHaveClass("bg-[#16803C]");
-    expect(activeSwitch.querySelector("span").firstElementChild).toHaveClass("translate-x-[16px]");
     fireEvent.change(screen.getByRole("combobox", { name: "Sort offers" }), { target: { value: "price_asc" } });
     expect(screen.getByRole("combobox", { name: "Sort offers" })).toHaveValue("price_asc");
   });
@@ -212,27 +226,41 @@ describe("Customer Offers", () => {
 
     const mangoCard = screen.getByRole("img", { name: "Alphonso Mango" }).closest("article");
     fireEvent.click(within(mangoCard).getByRole("button", { name: "Add to Cart" }));
-    await waitFor(() => expect(addItem).toHaveBeenCalledWith(offers[0].product));
+    await waitFor(() => expect(addItem).toHaveBeenCalledWith(activeOffers[0].product));
 
     fireEvent.click(within(mangoCard).getByRole("button", { name: "Add Alphonso Mango to wishlist" }));
-    await waitFor(() => expect(toggleWishlist).toHaveBeenCalledWith(offers[0].product));
+    await waitFor(() => expect(toggleWishlist).toHaveBeenCalledWith(activeOffers[0].product));
   });
 
-  it("shows an empty state when no offers are available", async () => {
-    productApi.storefrontOffers.mockResolvedValueOnce({ data: { items: [] } });
+  it("shows an empty state when no active offers are available", async () => {
+    offerApi.list.mockResolvedValueOnce({ data: { active: [], upcoming: [], serverTime: new Date().toISOString() } });
     renderPage();
 
-    expect(await screen.findByText("No farmer offers are available right now.")).toBeInTheDocument();
+    expect(await screen.findByText("No active offers available right now.")).toBeInTheDocument();
+  });
+
+  it("shows an empty state when no upcoming offers are available", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    expect(screen.getByText("Fresh Greens")).toBeInTheDocument();
+
+    offerApi.list.mockResolvedValueOnce({ data: { active: activeOffers, upcoming: [], serverTime: new Date().toISOString() } });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (0)" }));
+    expect(await screen.findByText("No upcoming offers at the moment.")).toBeInTheDocument();
   });
 
   it("never renders pending or rejected offers returned unexpectedly by the offers API", async () => {
-    productApi.storefrontOffers.mockResolvedValueOnce({
+    offerApi.list.mockResolvedValueOnce({
       data: {
-        items: [
-          ...offers,
-          { ...offers[0], _id: "pending-offer", title: "Pending offer", effectiveStatus: "Pending" },
-          { ...offers[0], _id: "rejected-offer", title: "Rejected offer", effectiveStatus: "Rejected" },
+        active: [
+          ...activeOffers,
+          { ...activeOffers[0], _id: "pending-offer", title: "Pending offer", effectiveStatus: "Pending" },
+          { ...activeOffers[0], _id: "rejected-offer", title: "Rejected offer", effectiveStatus: "Rejected" },
         ],
+        upcoming: [],
+        serverTime: new Date().toISOString(),
       },
     });
     renderPage();
@@ -243,16 +271,16 @@ describe("Customer Offers", () => {
   });
 
   it("shows an error state and retries the offers request", async () => {
-    productApi.storefrontOffers
+    offerApi.list
       .mockRejectedValueOnce(new Error("Offers are temporarily unavailable."))
-      .mockResolvedValueOnce({ data: { items: offers } });
+      .mockResolvedValueOnce({ data: { active: activeOffers, upcoming: upcomingOffers, serverTime: new Date().toISOString() } });
     renderPage();
 
     expect(await screen.findByText("Offers are temporarily unavailable.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
     expect(await screen.findByText("Alphonso Mango")).toBeInTheDocument();
-    expect(productApi.storefrontOffers).toHaveBeenCalledTimes(2);
+    expect(offerApi.list).toHaveBeenCalledTimes(2);
   });
 
   it("shows category loading and an explicit fallback when category loading fails", async () => {

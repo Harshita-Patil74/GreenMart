@@ -3,12 +3,14 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 import CustomerDashboard from "./CustomerDashboard.jsx";
 
-vi.mock("../../api/productApi.js", () => ({ default: { storefront: vi.fn(), storefrontOffers: vi.fn() } }));
+vi.mock("../../api/productApi.js", () => ({ default: { storefront: vi.fn() } }));
+vi.mock("../../api/offerApi.js", () => ({ default: { list: vi.fn() } }));
 vi.mock("../../api/orderApi.js", () => ({ default: { mine: vi.fn() } }));
 vi.mock("../../api/addressApi.js", () => ({ default: { list: vi.fn() } }));
 vi.mock("../../api/farmerApi.js", () => ({ default: { list: vi.fn() } }));
 
 import productApi from "../../api/productApi.js";
+import offerApi from "../../api/offerApi.js";
 import orderApi from "../../api/orderApi.js";
 import addressApi from "../../api/addressApi.js";
 import farmerApi from "../../api/farmerApi.js";
@@ -42,7 +44,7 @@ describe("Customer Dashboard page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     productApi.storefront.mockResolvedValue({ data: { items: mockProducts, total: 2 } });
-    productApi.storefrontOffers.mockResolvedValue({ data: { items: mockOffers } });
+    offerApi.list.mockResolvedValue({ data: { active: mockOffers, upcoming: [], serverTime: new Date().toISOString() } });
     orderApi.mine.mockResolvedValue({ data: [] });
     addressApi.list.mockResolvedValue({ data: [] });
     farmerApi.list.mockResolvedValue({ data: [] });
@@ -62,8 +64,9 @@ describe("Customer Dashboard page", () => {
     expect(await screen.findByRole("heading", { name: "Fresh Deals from Our Farmers" })).toBeInTheDocument();
     expect(screen.getByText("Discover fresh organic products at special prices.")).toBeInTheDocument();
     expect(screen.getByText("Green Valley Farm")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View All Offers/ })).toHaveAttribute("href", "/customer/offers");
-    expect(productApi.storefrontOffers).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole("link", { name: /View All Offers/ }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: /View All Offers/ })[0]).toHaveAttribute("href", "/customer/offers");
+    expect(offerApi.list).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: /Fresh Organic Products/i })).toHaveClass("text-white");
     expect(productApi.storefront).toHaveBeenCalledWith({ limit: 5, inStock: "true" });
     await waitFor(() => expect(screen.getAllByText("Organic Tomatoes")).toHaveLength(2));

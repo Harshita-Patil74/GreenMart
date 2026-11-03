@@ -6,6 +6,7 @@ import { ArrowRight, BadgePercent, CalendarDays, Heart, Package, ShoppingBag, Wa
 import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import productApi from "../../api/productApi";
+import offerApi from "../../api/offerApi";
 import orderApi from "../../api/orderApi";
 import { fetchWishlist } from "../../features/wishlist/wishlistSlice.js";
 import { addItem, fetchCart } from "../../features/cart/cartSlice.js";
@@ -28,6 +29,10 @@ export default function CustomerDashboard() {
   const [featuredOffers, setFeaturedOffers] = useState([]);
   const [featuredOffersLoading, setFeaturedOffersLoading] = useState(true);
   const [featuredOffersError, setFeaturedOffersError] = useState("");
+  const [activeOffers, setActiveOffers] = useState([]);
+  const [upcomingOffers, setUpcomingOffers] = useState([]);
+  const [offersLoading, setOffersLoading] = useState(true);
+  const [offersError, setOffersError] = useState("");
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState(null);
@@ -76,9 +81,26 @@ export default function CustomerDashboard() {
     }
   };
 
+  const loadOffers = async () => {
+    setOffersLoading(true);
+    setOffersError("");
+    try {
+      const { data } = await offerApi.list();
+      setActiveOffers(Array.isArray(data?.active) ? data.active : []);
+      setUpcomingOffers(Array.isArray(data?.upcoming) ? data.upcoming : []);
+    } catch (requestError) {
+      setActiveOffers([]);
+      setUpcomingOffers([]);
+      setOffersError(requestError?.message || "Couldn't load offers.");
+    } finally {
+      setOffersLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFeatured();
     loadFeaturedOffers();
+    loadOffers();
     loadOrders();
     if (user?.role === "customer" && token && token !== "demo-token") dispatch(fetchWishlist());
   }, [dispatch, token, user?.role]);
@@ -187,6 +209,62 @@ export default function CustomerDashboard() {
         </section>
       )}
 
+      <section className="rounded-xl border border-[#E8EEEA] bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Offers &amp; Discounts</h2>
+            <p className="mt-0.5 text-[10px] text-gray-500">Current and upcoming offers from GreenMart farmers.</p>
+          </div>
+          <Link to="/customer/offers" className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold text-[#16803C] hover:text-[#0F6A3A]">
+            View All Offers <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        <div className="flex gap-2 border-b border-gray-100 pb-2 mb-3">
+          <button type="button" className="px-3 py-1.5 rounded-md bg-[#16803C] text-[10px] font-semibold text-white">
+            Active ({activeOffers.length})
+          </button>
+          <button type="button" className="px-3 py-1.5 rounded-md border border-gray-200 text-[10px] font-semibold text-gray-600 bg-white">
+            Coming Soon ({upcomingOffers.length})
+          </button>
+        </div>
+
+        {offersError ? (
+          <p role="alert" className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700">{offersError}</p>
+        ) : offersLoading ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((key) => <div key={key} className="h-56 animate-pulse rounded-lg bg-gray-50" />)}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-[10px] font-semibold text-[#16803C] mb-2 uppercase tracking-wider">Active Offers</h3>
+              {activeOffers.length ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {activeOffers.map((offer) => (
+                    <DashboardOfferCard key={offer._id} offer={offer} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-center text-gray-500 py-4">No active offers available right now.</p>
+              )}
+            </div>
+            <div>
+              <h3 className="text-[10px] font-semibold text-[#C2410C] mb-2 uppercase tracking-wider">Coming Soon</h3>
+              {upcomingOffers.length ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {upcomingOffers.map((offer) => (
+                    <DashboardOfferCard key={offer._id} offer={offer} upcoming />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-center text-gray-500 py-4">No upcoming offers at the moment.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div><h2 className="text-sm font-semibold text-gray-900">Recommended for You</h2><p className="mt-0.5 text-[10px] text-gray-500">Fresh picks from GreenMart farmers.</p></div>
@@ -257,6 +335,59 @@ function FeaturedOfferCard({ offer, onAdd }) {
           </button>
         </div>
       </div>
+    </article>
+  );
+}
+
+function DashboardOfferCard({ offer, upcoming }) {
+  const product = offer.product || {};
+  const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
+  const unit = product.unit || "unit";
+  const productId = product._id;
+  const savingLabel = offer.discountType === "Percentage"
+    ? `${offer.discountPercent}% OFF`
+    : `Save ${formatCurrency(offer.discountAmount)}`;
+  const requiredQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
+
+  return (
+    <article className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#E5EBE5] bg-white p-2.5">
+      <div className="relative h-20 overflow-hidden rounded-[8px] bg-[#F0F3EF] mb-2">
+        <ImageWithFallback
+          src={getImageUrl(product.images?.[0])}
+          alt={product.name || "Offer product"}
+          className="h-full w-full object-cover"
+        />
+        <span className="absolute left-1 top-1 inline-flex items-center gap-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white">
+          <BadgePercent aria-hidden="true" className="h-2.5 w-2.5" /> {offer.type}
+        </span>
+        {upcoming && (
+          <span className="absolute right-1 top-1 rounded-full bg-[#C2410C] px-2 py-0.5 text-[9px] font-semibold text-white">
+            Coming Soon
+          </span>
+        )}
+        {!upcoming && (
+          <span className="absolute right-1 top-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white">
+            Active
+          </span>
+        )}
+      </div>
+      <Link to={`/product/${productId}`} className="line-clamp-1 text-xs font-semibold text-[#22352B] hover:text-[#16803C] mb-1">
+        {product.name}
+      </Link>
+      <p className="mt-0 truncate text-[9px] text-[#7A877F] mb-1.5">{farmerName}</p>
+      <div className="flex flex-wrap items-baseline gap-x-1.5 mb-1.5">
+        <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.offerPrice)} / {unit}</span>
+        <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)}</span>
+        <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{savingLabel}</span>
+      </div>
+      {requiredQuantity > 1 && <p className="mt-0 text-[9px] leading-3 text-[#71817D] mb-1.5">At {requiredQuantity}+ {unit}</p>}
+      <p className="mt-0 flex items-center gap-1 text-[9px] text-[#71817D] mb-1.5">
+        <CalendarDays aria-hidden="true" className="h-3 w-3 shrink-0" />
+        {upcoming ? `Starts ${new Date(offer.startDate).toLocaleDateString("en-IN")}` : `Ends ${new Date(offer.endDate).toLocaleDateString("en-IN")}`}
+      </p>
+      <Link to={`/product/${productId}`} className="inline-flex h-7 items-center justify-center rounded-md border border-[#DDE8DF] text-[10px] font-semibold text-[#176B3B] w-full">
+        View Product
+      </Link>
     </article>
   );
 }
