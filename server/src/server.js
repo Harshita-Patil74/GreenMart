@@ -25,10 +25,12 @@ async function main() {
 }
 main().catch(async (error) => {
   console.error("Server startup failed:", error.message);
+  if (error.stack) console.error("Stack trace:", error.stack);
   try {
     await mongoose.disconnect();
   } catch (cleanupError) {
     console.error("MongoDB cleanup failed during startup:", cleanupError.name || "Error");
+    if (cleanupError.stack) console.error("Cleanup stack trace:", cleanupError.stack);
   }
   process.exitCode = 1;
 });
