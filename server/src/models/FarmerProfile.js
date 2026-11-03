@@ -33,6 +33,7 @@ const FarmerProfileSchema = new mongoose.Schema({
   address: String,
   location: { lat: Number, lng: Number },
   photo: String,
+  photoPublicId: String,
   certification: { body: String, number: String, verifiedByAdmin: { type: Boolean, default: false }, verifiedAt: Date, rejectedByAdmin: { type: Boolean, default: false }, rejectedAt: Date, rejectionReason: String },
   certificateName: { type: String, trim: true },
   certificateNumber: { type: String, trim: true },

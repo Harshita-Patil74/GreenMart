@@ -50,7 +50,7 @@ exports.users = asyncHandler(async (req,res) => {
 exports.farmers = asyncHandler(async (req, res) => {
   const farmers = await FarmerProfile.find()
     .select("user farmName certification verificationStatus changeRequestInstructions verificationHistory submittedAt description address category photo certificateDocument certificateName certificateNumber createdAt")
-    .populate("user", "_id name email accountActivated")
+    .populate("user", "_id name email phone accountActivated")
     .sort({ createdAt: -1 });
   res.json(farmers);
 });

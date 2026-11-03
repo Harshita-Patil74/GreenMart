@@ -26,10 +26,15 @@ exports.updateLocation = asyncHandler(async (req,res) => {
 });
 exports.updateMe = asyncHandler(async (req,res) => {
   const allowed = {};
-  for (const field of ["farmName", "category", "description", "address", "photo", "certificateName", "certificateNumber"]) {
+  for (const field of ["farmName", "category", "description", "address", "certificateName", "certificateNumber"]) {
     if (req.body[field] !== undefined) allowed[field] = req.body[field];
   }
-  if (req.file) allowed.photo = `/uploads/farms/${req.file.filename}`;
+  if (req.file) {
+    const { uploadFileWithPublicId, deleteFile } = require("../services/cloudinaryUpload");
+    const { secure_url, public_id } = await uploadFileWithPublicId(req.file.path, "greenmart/farms");
+    allowed.photo = secure_url;
+    allowed.photoPublicId = public_id;
+  }
   const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, allowed, { new: true, upsert: true, runValidators: true });
   res.json(p);
 });
@@ -74,9 +79,9 @@ exports.resubmitApplication = asyncHandler(async (req,res) => {
 
 exports.uploadCertificate = asyncHandler(async (req,res) => {
   if (!req.file) return res.status(400).json({ message: "No file" });
-  const { uploadFile } = require("../services/cloudinaryUpload");
-  const url = await uploadFile(req.file.path, "greenmart/certificates");
-  const fp = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, { certificateDocument: { url, publicId: "" } }, { new: true, upsert: true });
+  const { uploadFileWithPublicId } = require("../services/cloudinaryUpload");
+  const { secure_url, public_id } = await uploadFileWithPublicId(req.file.path, "greenmart/certificates");
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, { certificateDocument: { url: secure_url, publicId: public_id } }, { new: true, upsert: true });
   res.json(fp);
 });
 

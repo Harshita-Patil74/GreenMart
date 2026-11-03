@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import adminApi from "../../api/adminApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
+import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import toast from "react-hot-toast";
 import { isRegistrationEmailValid, normalizeEmail } from "../../utils/authValidation.js";
 
@@ -66,12 +67,12 @@ const requestChanges=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!
         <div><span className="font-semibold">Farm Address:</span> {viewFarmer.address || viewFarmer.farmAddress || "—"}</div>
         <div><span className="font-semibold">Category:</span> {viewFarmer.category || viewFarmer.farmCategory || "—"}</div>
         <div><span className="font-semibold">Description:</span> {viewFarmer.description || viewFarmer.about || "—"}</div>
-        <div><span className="font-semibold">Certificate Name:</span> {viewFarmer.certification?.body || viewFarmer.certificateName || "Not provided"}</div>
-        <div><span className="font-semibold">Certificate Number:</span> {viewFarmer.certification?.number || viewFarmer.certificateNumber || "Not provided"}</div>
+        <div><span className="font-semibold">Certificate Name:</span> {viewFarmer.certificateName || viewFarmer.certification?.body || "Not provided"}</div>
+        <div><span className="font-semibold">Certificate Number:</span> {viewFarmer.certificateNumber || viewFarmer.certification?.number || "Not provided"}</div>
         { (viewFarmer.certificateDocument?.url || viewFarmer.photo) && (
           <div className="space-y-2">
             {viewFarmer.certificateDocument?.url && <div><a href={viewFarmer.certificateDocument.url} target="_blank" rel="noreferrer" className="text-primary underline text-[10px]">View certificate</a></div>}
-            {viewFarmer.photo && <img src={viewFarmer.photo} alt="Farm" className="h-24 w-36 rounded border object-cover" />}
+            {viewFarmer.photo && <ImageWithFallback src={viewFarmer.photo} alt="Farm" className="h-24 w-36 rounded border object-cover" />}
           </div>
         )}
         <div><span className="font-semibold">Status:</span> {isResubmitted(viewFarmer)?"Resubmitted":viewFarmer.certification?.verifiedByAdmin ? "Verified" : viewFarmer.certification?.rejectedByAdmin ? "Rejected" : viewFarmer.verificationStatus || "Pending"}</div>

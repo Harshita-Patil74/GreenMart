@@ -1,4 +1,4 @@
-jest.mock("../src/services/cloudinaryUpload", () => ({ uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/avatar.png") }));
+jest.mock("../src/services/cloudinaryUpload", () => ({ uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/avatar.png"), uploadFileWithPublicId: jest.fn().mockResolvedValue({ secure_url: "https://res.cloudinary.com/test/image/upload/v1/farm.png", public_id: "test/farm" }), deleteFile: jest.fn().mockResolvedValue({ result: "ok" }) }));
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
@@ -157,14 +157,13 @@ describe("Authenticated profile image uploads", () => {
       .attach("photo", pngHeader, { filename: "farm.png", contentType: "image/png" });
 
     expect(response.status).toBe(200);
-    expect(response.body.photo).toMatch(/^\/uploads\/farms\//);
-    trackUpload(response.body.photo);
+    expect(response.body.photo).toMatch(/^https:\/\/res\.cloudinary\.com\/test\/image\/upload\//);
     const profile = await FarmerProfile.findOne({ user: farmerId });
     expect(profile.photo).toBe(response.body.photo);
+    expect(profile.photoPublicId).toBeDefined();
 
     const retrievedProfile = await request(app).get(`/api/farmers/${farmerId}`);
     expect(retrievedProfile.body.photo).toBe(response.body.photo);
-    expect((await request(app).get(response.body.photo)).status).toBe(200);
 
     const updateWithoutPhoto = await request(app)
       .put("/api/farmers/me")
