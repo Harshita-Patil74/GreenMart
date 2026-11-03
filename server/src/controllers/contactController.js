@@ -18,7 +18,17 @@ exports.send = asyncHandler(async (req,res) => {
         resourceType: "Contact",
       });
     }
-    res.json({ message: "Contact message sent." });
+  if (req.user && req.user._id) {
+    await createNotification({
+      userId: req.user._id,
+      type: "supportRequestSubmitted",
+      category: "support",
+      title: "Support request submitted",
+      message: "Your support request has been submitted. We will get back to you soon.",
+      resourceType: "Contact",
+      eventKey: `support:submitted:${req.user._id}:${Date.now()}`,
+    });
+  }
   } catch (error) {
     if (error?.code === "EMAIL_DISABLED") {
       return res.status(503).json({ message: "Email functionality is currently unavailable." });

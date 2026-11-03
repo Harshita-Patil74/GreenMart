@@ -162,6 +162,19 @@ exports.create = asyncHandler(async (req,res) => {
       resourceId: p._id,
     });
   }
+  // Notify the farmer when an admin created the product on their behalf
+  if (req.user.role === "admin" && String(farmerId) !== String(req.user._id)) {
+    await createNotification({
+      userId: farmerId,
+      type: "productCreatedByAdmin",
+      category: "products",
+      title: "New product added",
+      message: `The administrator added ${data.name} to your farm products.`,
+      resourceType: "Product",
+      resourceId: p._id,
+      eventKey: `product:created-admin:${p._id}`,
+    });
+  }
   res.status(201).json(p);
 });
 exports.update = asyncHandler(async (req,res) => {
@@ -267,6 +280,19 @@ exports.update = asyncHandler(async (req,res) => {
         }
       }
     }
+  }
+  // Notify the owning farmer when an admin edits their product
+  if (req.user.role === "admin" && String(updated.farmer) !== String(req.user._id)) {
+    await createNotification({
+      userId: updated.farmer,
+      type: "productUpdatedByAdmin",
+      category: "products",
+      title: "Product updated",
+      message: `The administrator updated ${updated.name}.`,
+      resourceType: "Product",
+      resourceId: updated._id,
+      eventKey: `product:updated-admin:${updated._id}`,
+    });
   }
   res.json(updated);
 });

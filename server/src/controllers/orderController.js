@@ -49,6 +49,18 @@ exports.create = asyncHandler(async (req,res) => {
     orderId: order._id,
     orderNumber: order.orderNumber,
   });
+  if (order.paymentStatus === "Paid" || order.paymentStatus === "Completed") {
+    await createNotification({
+      userId: req.user._id,
+      type: "paymentSuccess",
+      category: "payments",
+      title: "Payment successful",
+      message: `Payment of ${order.total} for order #${order.orderNumber} was successful.`,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      eventKey: `payment:success:${order._id}`,
+    });
+  }
   emitToUser(req.user._id, "order:created", order);
   emitToAdmins("order:created", order);
   // notify farmers

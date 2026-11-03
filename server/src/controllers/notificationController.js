@@ -19,6 +19,8 @@ const TYPE_CATEGORY_MAP = {
   offerUpdatedByAdmin: "offers",
   newProductAdmin: "products",
   productDeletedAdmin: "products",
+  productCreatedByAdmin: "products",
+  productUpdatedByAdmin: "products",
   stockAlert: "inventory",
   backInStock: "inventory",
   newReviewAdmin: "products",
@@ -31,6 +33,11 @@ const TYPE_CATEGORY_MAP = {
   passwordChanged: "account",
   accountSecurity: "account",
   systemNotification: "account",
+  wishlistAdded: "wishlist",
+  wishlistRemoved: "wishlist",
+  profileUpdated: "account",
+  supportRequestSubmitted: "support",
+  paymentSuccess: "payments",
 };
 
 exports.list = asyncHandler(async (req, res) => {

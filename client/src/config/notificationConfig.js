@@ -24,6 +24,8 @@ export const NOTIFICATION_TYPE_ICONS = {
   offerUpdatedByAdmin: Tag,
   newProductAdmin: PackagePlus,
   productDeletedAdmin: Package,
+  productCreatedByAdmin: PackagePlus,
+  productUpdatedByAdmin: Package,
   stockAlert: AlertTriangle,
   newReviewAdmin: Star,
   newMessage: MessageCircle,
@@ -42,6 +44,11 @@ export const NOTIFICATION_TYPE_ICONS = {
   farmerAccountActivated: UserCheck,
   farmerCertificationSubmitted: FileText,
   wishlistOffer: Tag,
+  wishlistAdded: Heart,
+  wishlistRemoved: Heart,
+  profileUpdated: User,
+  supportRequestSubmitted: FileText,
+  paymentSuccess: CreditCard,
 };
 
 const TYPE_COLORS = {
@@ -141,6 +148,8 @@ export const TYPE_TO_CATEGORY = {
   offerUpdatedByAdmin: "offers",
   newProductAdmin: "products",
   productDeletedAdmin: "products",
+  productCreatedByAdmin: "products",
+  productUpdatedByAdmin: "products",
   stockAlert: "inventory",
   backInStock: "inventory",
   newReviewAdmin: "products",
@@ -153,6 +162,11 @@ export const TYPE_TO_CATEGORY = {
   passwordChanged: "account",
   accountSecurity: "account",
   systemNotification: "account",
+  wishlistAdded: "wishlist",
+  wishlistRemoved: "wishlist",
+  profileUpdated: "account",
+  supportRequestSubmitted: "support",
+  paymentSuccess: "payments",
 };
 
 export function normalizeCategory(notification) {

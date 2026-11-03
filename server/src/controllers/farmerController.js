@@ -24,7 +24,7 @@ exports.updateLocation = asyncHandler(async (req,res) => {
 });
 exports.updateMe = asyncHandler(async (req,res) => {
   const allowed = {};
-  for (const field of ["farmName", "category", "description", "address", "photo"]) {
+  for (const field of ["farmName", "category", "description", "address", "photo", "certificateName", "certificateNumber"]) {
     if (req.body[field] !== undefined) allowed[field] = req.body[field];
   }
   if (req.file) allowed.photo = `/uploads/farms/${req.file.filename}`;

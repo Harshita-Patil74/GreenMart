@@ -34,6 +34,8 @@ const FarmerProfileSchema = new mongoose.Schema({
   location: { lat: Number, lng: Number },
   photo: String,
   certification: { body: String, number: String, verifiedByAdmin: { type: Boolean, default: false }, verifiedAt: Date, rejectedByAdmin: { type: Boolean, default: false }, rejectedAt: Date, rejectionReason: String },
+  certificateName: { type: String, trim: true },
+  certificateNumber: { type: String, trim: true },
   landVerificationStatus: { type: String, enum: ["Not Submitted", "Pending Review", "Approved", "Rejected"], default: "Not Submitted" },
   landReviewRemarks: String,
   landReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },

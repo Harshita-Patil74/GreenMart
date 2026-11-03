@@ -29,7 +29,7 @@ export default function FarmerProfilePage() {
   const { user } = useSelector((state) => state.auth);
   const userId = user?._id || user?.id;
   const [activeTab, setActiveTab] = useState(tabs[0]);
-  const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "" });
+  const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "", certificateName: "", certificateNumber: "" });
   const [personal, setPersonal] = useState({ name: user?.name || "", email: user?.email || "", phone: getIndianPhoneDigits(user?.phone), avatar: user?.avatar || "" });
   const [avatarFile, setAvatarFile] = useState(null);
   const [farmPhotoFile, setFarmPhotoFile] = useState(null);
@@ -90,6 +90,8 @@ export default function FarmerProfilePage() {
           category: data.category || "",
           description: data.description || "",
           photo: data.photo || "",
+          certificateName: data.certificateName || "",
+          certificateNumber: data.certificateNumber || "",
         });
       }
     } catch (requestError) {
@@ -142,10 +144,14 @@ export default function FarmerProfilePage() {
 
   const saveFarm = async (event) => {
     event.preventDefault();
+    if (farm.certificateName.trim() && !farm.certificateNumber.trim()) {
+      toast.error("Certificate number is required when a certificate name is provided.");
+      return;
+    }
     setSavingFarm(true);
     try {
       const updates = new FormData();
-      for (const field of ["farmName", "address", "category", "description"]) updates.append(field, farm[field]);
+      for (const field of ["farmName", "address", "category", "description", "certificateName", "certificateNumber"]) updates.append(field, (farm[field] || "").trim());
       if (farmPhotoFile) updates.append("photo", farmPhotoFile);
       const { data } = await farmerApi.updateMe(updates);
       setFarm((current) => ({ ...current, ...data }));
@@ -226,6 +232,8 @@ export default function FarmerProfilePage() {
               <Field label="Farm Name" value={farm.farmName} onChange={(event) => setFarm({ ...farm, farmName: event.target.value })} required />
               <Field label="Farm Address" value={farm.address} onChange={(event) => setFarm({ ...farm, address: event.target.value })} />
               <Field label="Farm Category" value={farm.category} onChange={(event) => setFarm({ ...farm, category: event.target.value })} />
+              <Field label="Certificate Name" value={farm.certificateName} onChange={(event) => setFarm({ ...farm, certificateName: event.target.value })} placeholder="e.g. Organic Farming Certificate" />
+              <Field label="Certificate Number" value={farm.certificateNumber} onChange={(event) => setFarm({ ...farm, certificateNumber: event.target.value })} placeholder="e.g. OFC2026KA5724" />
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-[#65756F]">About your farm</span>
                 <textarea value={farm.description} onChange={(event) => setFarm({ ...farm, description: event.target.value })} rows={4} className="w-full resize-y rounded-md border border-[#DCE5E1] p-2.5 text-xs outline-none focus:border-[#16885A]" />
