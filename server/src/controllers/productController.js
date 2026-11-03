@@ -1,12 +1,57 @@
+const fs = require('fs');
 const Product = require("../models/Product");
 const User = require("../models/User");
 const Offer = require("../models/Offer");
 const FarmerProfile = require("../models/FarmerProfile");
 const Wishlist = require("../models/Wishlist");
 const { asyncHandler } = require("../utils/asyncHandler");
-const { uploadFile } = require("../services/cloudinaryUpload");
+const { uploadFileWithPublicId, deleteFile } = require("../services/cloudinaryUpload");
 const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 const { attachProductOffers, getEffectiveStatus, money } = require("../services/offerService");
+
+const MAX_IMAGES = 6;
+
+function parseRemoveImages(body) {
+  if (!body.removeImages) return [];
+  try {
+    const parsed = JSON.parse(body.removeImages);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function uploadImagesWithTracking(files, folder) {
+  const uploaded = [];
+  for (const file of files) {
+    const result = await uploadFileWithPublicId(file.path, folder);
+    uploaded.push({ secure_url: result.secure_url, public_id: result.public_id, localPath: file.path });
+  }
+  return uploaded;
+}
+
+async function cleanupUploads(uploaded) {
+  await Promise.all(uploaded.map((u) => deleteFile(u.public_id).catch(() => {})));
+}
+
+function extractPublicId(secureUrl) {
+  try {
+    const url = new URL(secureUrl);
+    const path = url.pathname;
+    const parts = path.split("/");
+    const uploadIdx = parts.indexOf("upload");
+    if (uploadIdx === -1) return null;
+    let start = uploadIdx + 1;
+    if (start < parts.length && /^v\d+$/.test(parts[start])) start++;
+    const publicIdParts = parts.slice(start);
+    if (!publicIdParts.length) return null;
+    const last = publicIdParts[publicIdParts.length - 1];
+    publicIdParts[publicIdParts.length - 1] = last.replace(/\.[^/.]+$/, "");
+    return publicIdParts.join("/");
+  } catch {
+    return null;
+  }
+}
 
 async function listProducts(req, res, activeOnly) {
   const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12 } = req.query;
@@ -146,36 +191,50 @@ exports.create = asyncHandler(async (req,res) => {
     seasonalAvailability: req.body.seasonalAvailability,
     isOrganic: req.body.isOrganic,
     farmer: farmerId,
-    images: req.files ? await Promise.all(req.files.map(f=>uploadFile(f.path, "greenmart/products"))) : [],
+    images: [],
   };
-  const p = await Product.create(data);
-  // Notify all admins about the new product
-  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
-  for (const admin of admins) {
-    await createNotification({
-      userId: admin._id,
-      type: "newProductAdmin",
-      category: "products",
-      title: "New product added",
-      message: `A farmer has added ${data.name} to the marketplace.`,
-      resourceType: "Product",
-      resourceId: p._id,
-    });
+  let uploaded = [];
+  if (req.files && req.files.length) {
+    if (req.files.length > MAX_IMAGES) {
+      await Promise.all(req.files.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+      return res.status(400).json({ message: `Maximum ${MAX_IMAGES} images allowed per product.` });
+    }
+    uploaded = await uploadImagesWithTracking(req.files, "greenmart/products");
+    data.images = uploaded.map((u) => u.secure_url);
   }
-  // Notify the farmer when an admin created the product on their behalf
-  if (req.user.role === "admin" && String(farmerId) !== String(req.user._id)) {
-    await createNotification({
-      userId: farmerId,
-      type: "productCreatedByAdmin",
-      category: "products",
-      title: "New product added",
-      message: `The administrator added ${data.name} to your farm products.`,
-      resourceType: "Product",
-      resourceId: p._id,
-      eventKey: `product:created-admin:${p._id}`,
-    });
+  try {
+    const p = await Product.create(data);
+    // Notify all admins about the new product
+    const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+    for (const admin of admins) {
+      await createNotification({
+        userId: admin._id,
+        type: "newProductAdmin",
+        category: "products",
+        title: "New product added",
+        message: `A farmer has added ${data.name} to the marketplace.`,
+        resourceType: "Product",
+        resourceId: p._id,
+      });
+    }
+    // Notify the farmer when an admin created the product on their behalf
+    if (req.user.role === "admin" && String(farmerId) !== String(req.user._id)) {
+      await createNotification({
+        userId: farmerId,
+        type: "productCreatedByAdmin",
+        category: "products",
+        title: "New product added",
+        message: `The administrator added ${data.name} to your farm products.`,
+        resourceType: "Product",
+        resourceId: p._id,
+        eventKey: `product:created-admin:${p._id}`,
+      });
+    }
+    res.status(201).json(p);
+  } catch (createError) {
+    await cleanupUploads(uploaded);
+    throw createError;
   }
-  res.status(201).json(p);
 });
 exports.update = asyncHandler(async (req,res) => {
   const p = await Product.findById(req.params.id);
@@ -209,92 +268,118 @@ exports.update = asyncHandler(async (req,res) => {
     }
   }
   if (req.files && req.files.length) {
-    set.images = await Promise.all(req.files.map(f=>uploadFile(f.path, "greenmart/products")));
+    if (req.files.length > MAX_IMAGES) {
+      await Promise.all(req.files.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+      return res.status(400).json({ message: `Maximum ${MAX_IMAGES} images allowed per product.` });
+    }
   }
+  // Compute target images array: start with existing, apply removals, then append new uploads
+  let targetImages = Array.isArray(p.images) ? [...p.images] : [];
+  const removeUrls = parseRemoveImages(req.body);
+  const removedPublicIds = removeUrls.map((url) => extractPublicId(url)).filter(Boolean);
+  targetImages = targetImages.filter((img) => !removeUrls.includes(img));
+  let newUploads = [];
+  if (req.files && req.files.length) {
+    newUploads = await uploadImagesWithTracking(req.files, "greenmart/products");
+    targetImages = [...targetImages, ...newUploads.map((u) => u.secure_url)];
+    if (targetImages.length > MAX_IMAGES) targetImages = targetImages.slice(0, MAX_IMAGES);
+  }
+  if (targetImages.length) set.images = targetImages;
   // Targeted update: only fields explicitly provided are sent to MongoDB.
   // Legacy products with a null description are never touched, so stock-only
   // updates pass validation without modifying unrelated fields.
-  const updated = await Product.findByIdAndUpdate(req.params.id, { $set: set }, { new: true, runValidators: true });
-  if (!updated) return res.status(404).json({ message: "Not found" });
-  // Notify admins of important product updates
-  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
-  // Stock transition to low stock or out of stock
-  if (set.stock !== undefined) {
-    const newStock = Number(updated.stock);
-    const threshold = Number(updated.lowStockThreshold || 0);
-    const wasLowOrOut = Number(oldStock) <= threshold;
-    const isLowOrOut = newStock <= threshold;
-    if (!wasLowOrOut && isLowOrOut) {
-      const title = newStock === 0 ? "Product out of stock" : "Product low stock";
-      const message = newStock === 0
-        ? `${updated.name} is now out of stock.`
-        : `${updated.name} has reached its low-stock threshold (${newStock} remaining).`;
-      for (const admin of admins) {
-        await createNotification({
-          userId: admin._id,
-          type: "stockAlert",
-          category: "inventory",
-          title,
-          message,
-          resourceType: "Product",
-          resourceId: updated._id,
-          eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}`,
-        });
-      }
-      // Notify the owning farmer of low stock or out of stock on their product
-      const farmerId = String(updated.farmer || updated.product?.farmer || "");
-      if (farmerId && farmerId !== "") {
-        await createNotification({
-          userId: farmerId,
-          type: "stockAlert",
-          category: "inventory",
-          title,
-          message: `Your ${updated.name} ${newStock === 0 ? "is now out of stock." : `has reached its low-stock threshold (${newStock} remaining).`}`,
-          resourceType: "Product",
-          resourceId: updated._id,
-          icon: "AlertTriangle",
-          priority: newStock === 0 ? "high" : "normal",
-          actionUrl: `/farmer/inventory/${updated._id}`,
-          eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}:farmer:${farmerId}`,
-        });
-      }
+  try {
+    const updated = await Product.findByIdAndUpdate(req.params.id, { $set: set }, { new: true, runValidators: true });
+    if (!updated) {
+      await cleanupUploads(newUploads);
+      await Promise.all(removedPublicIds.map((pid) => deleteFile(pid).catch(() => {})));
+      return res.status(404).json({ message: "Not found" });
     }
-    // Notify wishlist customers when a previously out-of-stock product is back in stock
-    if (Number(oldStock) === 0 && newStock > 0) {
-      const wishlists = await Wishlist.find({ products: updated._id }).populate("user", "_id name email");
-      for (const wishlist of wishlists) {
-        if (wishlist.user) {
+    // Delete removed images from Cloudinary only after successful DB update
+    await Promise.all(removedPublicIds.map((pid) => deleteFile(pid).catch(() => {})));
+    // Notify admins of important product updates
+    const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+    // Stock transition to low stock or out of stock
+    if (set.stock !== undefined) {
+      const newStock = Number(updated.stock);
+      const threshold = Number(updated.lowStockThreshold || 0);
+      const wasLowOrOut = Number(oldStock) <= threshold;
+      const isLowOrOut = newStock <= threshold;
+      if (!wasLowOrOut && isLowOrOut) {
+        const title = newStock === 0 ? "Product out of stock" : "Product low stock";
+        const message = newStock === 0
+          ? `${updated.name} is now out of stock.`
+          : `${updated.name} has reached its low-stock threshold (${newStock} remaining).`;
+        for (const admin of admins) {
           await createNotification({
-            userId: wishlist.user._id,
-            type: "backInStock",
+            userId: admin._id,
+            type: "stockAlert",
             category: "inventory",
-            title: "Product back in stock",
-            message: `${updated.name} is back in stock.`,
+            title,
+            message,
             resourceType: "Product",
             resourceId: updated._id,
-            actionUrl: `/product/${updated._id}`,
-            icon: "PackageCheck",
-            priority: "normal",
-            eventKey: `${EVENT_KEY_PREFIXES.backInStock}:${updated._id}:${wishlist.user._id}`,
+            eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}`,
+          });
+        }
+        const farmerId = String(updated.farmer || updated.product?.farmer || "");
+        if (farmerId && farmerId !== "") {
+          await createNotification({
+            userId: farmerId,
+            type: "stockAlert",
+            category: "inventory",
+            title,
+            message: `Your ${updated.name} ${newStock === 0 ? "is now out of stock." : `has reached its low-stock threshold (${newStock} remaining).`}`,
+            resourceType: "Product",
+            resourceId: updated._id,
+            icon: "AlertTriangle",
+            priority: newStock === 0 ? "high" : "normal",
+            actionUrl: `/farmer/inventory/${updated._id}`,
+            eventKey: `${EVENT_KEY_PREFIXES.stockAlert}:${updated._id}:farmer:${farmerId}`,
           });
         }
       }
+      // Notify wishlist customers when a previously out-of-stock product is back in stock
+      if (Number(oldStock) === 0 && newStock > 0) {
+        const wishlists = await Wishlist.find({ products: updated._id }).populate("user", "_id name email");
+        for (const wishlist of wishlists) {
+          if (wishlist.user) {
+            await createNotification({
+              userId: wishlist.user._id,
+              type: "backInStock",
+              category: "inventory",
+              title: "Product back in stock",
+              message: `${updated.name} is back in stock.`,
+              resourceType: "Product",
+              resourceId: updated._id,
+              actionUrl: `/product/${updated._id}`,
+              icon: "PackageCheck",
+              priority: "normal",
+              eventKey: `${EVENT_KEY_PREFIXES.backInStock}:${updated._id}:${wishlist.user._id}`,
+            });
+          }
+        }
+      }
     }
+    // Notify the owning farmer when an admin edits their product
+    if (req.user.role === "admin" && String(updated.farmer) !== String(req.user._id)) {
+      await createNotification({
+        userId: updated.farmer,
+        type: "productUpdatedByAdmin",
+        category: "products",
+        title: "Product updated",
+        message: `The administrator updated ${updated.name}.`,
+        resourceType: "Product",
+        resourceId: updated._id,
+        eventKey: `product:updated-admin:${updated._id}`,
+      });
+    }
+    res.json(updated);
+  } catch (updateError) {
+    await cleanupUploads(newUploads);
+    await Promise.all(removedPublicIds.map((pid) => deleteFile(pid).catch(() => {})));
+    throw updateError;
   }
-  // Notify the owning farmer when an admin edits their product
-  if (req.user.role === "admin" && String(updated.farmer) !== String(req.user._id)) {
-    await createNotification({
-      userId: updated.farmer,
-      type: "productUpdatedByAdmin",
-      category: "products",
-      title: "Product updated",
-      message: `The administrator updated ${updated.name}.`,
-      resourceType: "Product",
-      resourceId: updated._id,
-      eventKey: `product:updated-admin:${updated._id}`,
-    });
-  }
-  res.json(updated);
 });
 exports.remove = asyncHandler(async (req,res) => {
   const p = await Product.findById(req.params.id);
@@ -302,7 +387,16 @@ exports.remove = asyncHandler(async (req,res) => {
   if (req.user.role !== "admin" && String(p.farmer) !== String(req.user._id)) return res.status(403).json({ message: "Forbidden" });
   const productName = p.name;
   const productId = p._id;
+  const imageUrls = Array.isArray(p.images) ? p.images : [];
+  const publicIdsToDelete = imageUrls.map((url) => extractPublicId(url)).filter(Boolean);
   await p.deleteOne();
+  // Delete Cloudinary images only if no other product still references them
+  for (const publicId of publicIdsToDelete) {
+    const stillReferenced = await Product.exists({ images: new RegExp(publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) });
+    if (!stillReferenced) {
+      await deleteFile(publicId).catch(() => {});
+    }
+  }
   // Notify all admins about the deleted product
   const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
   for (const admin of admins) {

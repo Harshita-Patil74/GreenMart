@@ -5,7 +5,8 @@ import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import toast from "react-hot-toast";
 import productApi from "../../api/productApi";
-import getImageUrl from "../../utils/imageUrl";
+import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
+import { getImageUrl } from "../../utils/imageUrl";
 import { formatCurrency, getStatusClasses, unwrapList } from "./farmerUtils";
 
 const PAGE_SIZE = 6;
@@ -146,7 +147,7 @@ export default function MyProducts() {
                   {visibleProducts.map((product) => (
                     <tr key={product._id} className="h-[68px] hover:bg-[#FBFCFC]">
                       <td className="px-4 py-3">
-                        <img src={getImageUrl(product.images?.[0])} alt={product.name} className="h-11 w-11 rounded-md border border-[#E9EFEC] object-cover" />
+                        <ImageWithFallback src={getImageUrl(product.images?.[0])} alt={product.name} className="h-11 w-11 rounded-md border border-[#E9EFEC] object-cover" />
                       </td>
                       <td className="px-4 py-3 text-xs font-medium text-[#263834]">{product.name}</td>
                       <td className="px-4 py-3 text-xs text-[#74827E]">{product.category || "—"}</td>

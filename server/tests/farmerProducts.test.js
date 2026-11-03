@@ -1,4 +1,8 @@
-jest.mock("../src/services/cloudinaryUpload", () => ({ uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/1793626981530-0.2128969748416666.png") }));
+jest.mock("../src/services/cloudinaryUpload", () => ({
+  uploadFile: jest.fn().mockResolvedValue("https://res.cloudinary.com/test/image/upload/v1/1793626981530-0.2128969748416666.png"),
+  uploadFileWithPublicId: jest.fn().mockResolvedValue({ secure_url: "https://res.cloudinary.com/test/image/upload/v1/1793626981530-0.2128969748416666.png", public_id: "test/public_id" }),
+  deleteFile: jest.fn().mockResolvedValue({ result: "ok" }),
+}));
 
 jest.resetModules();
 

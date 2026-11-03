@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 
 const PAGE_SIZE = 10;
 const EMPTY_DRAFT = { name: "", category: "", price: "", stock: "", lowStockThreshold: "5", unit: "kg", description: "", farmer: "" };
+const MAX_IMAGES = 6;
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
@@ -25,7 +26,10 @@ export default function AdminProducts() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [existingImages, setExistingImages] = useState([]);
+  const [existingToRemove, setExistingToRemove] = useState(new Set());
   const [imageFiles, setImageFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState({});
   const [savingForm, setSavingForm] = useState(false);
   const [error, setError] = useState(null);
 
@@ -42,6 +46,8 @@ export default function AdminProducts() {
     farmerApi.list().then(({ data }) => setFarmers(Array.isArray(data) ? data : [])).catch((requestError) => setError(requestError?.message || "Couldn't load farmer options."));
   }, [search, category, status, page]);
 
+  const totalImageCount = () => existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).length + imageFiles.length;
+
   const openDialog = (product = null) => {
     setEditingProduct(product);
     setDraft(product ? {
@@ -54,9 +60,43 @@ export default function AdminProducts() {
       description: product.description || "",
       farmer: "",
     } : { ...EMPTY_DRAFT });
+    setExistingImages(product && Array.isArray(product.images) ? product.images.filter(Boolean) : []);
+    setExistingToRemove(new Set());
     setImageFiles([]);
+    setPreviewUrls({});
     setDialogOpen(true);
   };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    const invalid = files.find((f) => !validTypes.includes(f.type));
+    if (invalid) { toast.error("Only JPEG, PNG, and WebP images are supported."); e.target.value = ""; return; }
+    const oversized = files.find((f) => f.size > 5 * 1024 * 1024);
+    if (oversized) { toast.error("Each image must be 5 MB or smaller."); e.target.value = ""; return; }
+    if (totalImageCount() + files.length > MAX_IMAGES) { toast.error(`Maximum ${MAX_IMAGES} images per product.`); e.target.value = ""; return; }
+    const newPreviews = {};
+    files.forEach((f) => { newPreviews[f.name + f.size] = URL.createObjectURL(f); });
+    setPreviewUrls((prev) => ({ ...prev, ...newPreviews }));
+    setImageFiles((current) => [...current, ...files]);
+    e.target.value = "";
+  };
+
+  const removeNewFile = (index) => {
+    const file = imageFiles[index];
+    if (file) URL.revokeObjectURL(previewUrls[file.name + file.size] || "");
+    setImageFiles((current) => current.filter((_, i) => i !== index));
+    setPreviewUrls((prev) => { const next = { ...prev }; delete next[file.name + file.size]; return next; });
+  };
+
+  const toggleExistingRemove = (url) => {
+    setExistingToRemove((prev) => { const next = new Set(prev); if (next.has(url)) next.delete(url); else next.add(url); return next; });
+  };
+
+  const allDisplayImages = [
+    ...existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).map((url) => ({ url, source: "existing" })),
+    ...imageFiles.map((file) => ({ url: previewUrls[file.name + file.size] || URL.createObjectURL(file), source: "new", file })),
+  ];
 
   const saveProduct = async (event) => {
     event.preventDefault();
@@ -66,6 +106,7 @@ export default function AdminProducts() {
     });
     if (editingProduct) {
       if (draft.farmer) formData.set("farmer", draft.farmer);
+      if (existingToRemove.size > 0) formData.append("removeImages", JSON.stringify([...existingToRemove]));
     }
     imageFiles.forEach((file) => formData.append("images", file));
     setSavingForm(true);
@@ -142,7 +183,25 @@ export default function AdminProducts() {
           <label className="text-xs text-gray-600">Minimum stock<input required min="0" type="number" value={draft.lowStockThreshold} onChange={e => setDraft(d => ({ ...d, lowStockThreshold: e.target.value }))} className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"/></label>
           {!editingProduct && <label className="text-xs text-gray-600 sm:col-span-2">Farmer<select required value={draft.farmer} onChange={e => setDraft(d => ({ ...d, farmer: e.target.value }))} className="mt-1 h-9 w-full rounded-lg border bg-white px-3 text-xs"><option value="">Select farmer</option>{farmers.map(f => <option key={f.user?._id || f.user} value={f.user?._id || f.user}>{f.user?.name || f.farmName} · {f.farmName}</option>)}</select></label>}
           <label className="text-xs text-gray-600 sm:col-span-2">Description<textarea value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} rows="3" className="mt-1 w-full rounded-lg border p-2 text-xs"/></label>
-          <label className="text-xs text-gray-600 sm:col-span-2">Product images<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e => setImageFiles(Array.from(e.target.files || []).slice(0, 6))} className="mt-1 block w-full text-xs"/></label>
+          <label className="text-xs text-gray-600 sm:col-span-2">Product images</label>
+          <div className="flex flex-wrap gap-2 mb-2 sm:col-span-2">
+            {allDisplayImages.length === 0 && <p className="text-xs text-gray-400">No images yet. Upload up to {MAX_IMAGES} images.</p>}
+            {allDisplayImages.map((img, idx) => {
+              const isExisting = img.source === "existing";
+              const isRemoved = isExisting && existingToRemove.has(img.url);
+              if (isRemoved) return null;
+              return (
+                <div key={isExisting ? `existing-${idx}` : `new-${idx}`} className="relative group">
+                  <ImageWithFallback src={getImageUrl(img.url)} alt={draft.name} className="h-20 w-20 rounded-md object-cover border border-gray-200" />
+                  <button type="button" onClick={isExisting ? () => toggleExistingRemove(img.url) : () => removeNewFile(idx)} className="absolute -top-1 -right-1 rounded-full bg-red-600 text-white h-5 w-5 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Remove image">×</button>
+                </div>
+              );
+            })}
+          </div>
+          <label className="text-xs text-gray-600 sm:col-span-2">Add more images<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleFileChange} className="mt-1 block w-full text-xs" disabled={totalImageCount() >= MAX_IMAGES || savingForm}/></label>
+          {!editingProduct && totalImageCount() === 0 && <p className="text-xs text-red-600 mt-1 sm:col-span-2">At least one image is required for new products.</p>}
+          {totalImageCount() >= MAX_IMAGES && <p className="text-xs text-gray-500 mt-1 sm:col-span-2">Maximum {MAX_IMAGES} images per product reached.</p>}
+          <p className="text-xs text-gray-500 mt-1 sm:col-span-2">Up to {MAX_IMAGES} images. JPG, JPEG, PNG, WEBP (max 5 MB each). First image is the cover.</p>
         </div>
         <div className="flex justify-end gap-2"><button type="button" onClick={() => setDialogOpen(false)} className="h-9 rounded-lg border px-4 text-xs">Cancel</button><button disabled={savingForm || (!editingProduct && !farmers.length)} className="h-9 rounded-lg bg-primary px-4 text-xs font-semibold text-white disabled:opacity-50">{savingForm ? "Saving..." : editingProduct ? "Save Changes" : "Add Product"}</button></div>
       </form>

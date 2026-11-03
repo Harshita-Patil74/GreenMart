@@ -115,20 +115,30 @@ export default function ProductDetail() {
     <div className="gm-container space-y-5 py-6 pb-16">
       <BackButton fallback="/shop" />
       <div className="grid gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2 md:p-5">
-        <div className="space-y-3">
-          <div className="flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-            {mainImage ? <ImageWithFallback src={getImageUrl(mainImage)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
-          </div>
-          {images.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {images.map((img, idx) => (
-                <button key={idx} type="button" onClick={() => setActiveImage(idx)} className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border ${idx === activeImage ? "border-primary ring-2 ring-primary/30" : "border-gray-200"}`}>
-                  <ImageWithFallback src={getImageUrl(img)} alt={`${product.name} ${idx + 1}`} className="h-full w-full object-cover" />
-                </button>
-              ))}
+          <div className="space-y-3">
+            <div className="relative flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
+              {mainImage ? <ImageWithFallback src={getImageUrl(mainImage)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
+              {images.length > 1 && (
+                <>
+                  <button type="button" onClick={() => setActiveImage((prev) => (prev === 0 ? images.length - 1 : prev - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-gray-600 hover:bg-white transition hover:shadow-sm disabled:opacity-30 disabled:pointer-events-none" aria-label="Previous image">
+                    <span className="text-xl font-bold leading-none">&lt;</span>
+                  </button>
+                  <button type="button" onClick={() => setActiveImage((prev) => (prev === images.length - 1 ? 0 : prev + 1))} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-gray-600 hover:bg-white transition hover:shadow-sm disabled:opacity-30 disabled:pointer-events-none" aria-label="Next image">
+                    <span className="text-xl font-bold leading-none">&gt;</span>
+                  </button>
+                </>
+              )}
             </div>
-          )}
-        </div>
+            {images.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {images.map((img, idx) => (
+                  <button key={idx} type="button" onClick={() => setActiveImage(idx)} className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border ${idx === activeImage ? "border-primary ring-2 ring-primary/30" : "border-gray-200"}`}>
+                    <ImageWithFallback src={getImageUrl(img)} alt={`${product.name} ${idx + 1}`} className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         <div className="flex flex-col">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{product.category}</p>
           <h1 className="mt-1 text-xl font-heading font-bold text-gray-900">{product.name}</h1>
