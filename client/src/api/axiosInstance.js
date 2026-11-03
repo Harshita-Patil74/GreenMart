@@ -1,13 +1,24 @@
 import axios from "axios";
 import { tokenStorage } from "../utils/tokenStorage";
+import { showError, closeAlert } from "../utils/alertUtils";
 const instance = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api", withCredentials: true });
 
 let refreshing = false;
 let queue = [];
+let sessionExpired = false;
 
 function processQueue(error, token) {
   queue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
   queue = [];
+}
+
+function handleSessionExpiry() {
+  if (sessionExpired) return;
+  sessionExpired = true;
+  closeAlert();
+  tokenStorage.clear();
+  showError("Session expired", "Your session has expired. Please log in again to continue.");
+  setTimeout(() => { window.location.href = "/login"; }, 1500);
 }
 
 instance.interceptors.request.use((cfg) => {
@@ -34,11 +45,16 @@ instance.interceptors.response.use(
         throw new Error("refresh failed");
       } catch (e) {
         processQueue(e, null);
-        tokenStorage.clear();
-        window.location.href = "/login";
+        handleSessionExpiry();
         return Promise.reject(e);
       } finally {
         refreshing = false;
+      }
+    }
+    if (err.response?.status === 401) {
+      // Not a refresh-related 401 (e.g. login/refresh endpoints themselves) — clear session
+      if (!original.url?.includes("/auth/login") && !original.url?.includes("/auth/refresh")) {
+        handleSessionExpiry();
       }
     }
     const normalized = {

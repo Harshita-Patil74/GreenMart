@@ -9,6 +9,7 @@ import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
 import toast from "react-hot-toast";
 import { Search, X, Download, ArrowRight } from "lucide-react";
+import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
 
 const statuses = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Cancelled"];
 const statusAliases = {
@@ -47,6 +48,23 @@ export default function MyOrders() {
       toast.error(e?.response?.data?.message || "Failed to download invoice");
     } finally {
       setDownloading((d) => ({ ...d, [order._id]: false }));
+    }
+  };
+
+  const cancelOrder = async (order) => {
+    const cancellable = ["Order Placed", "Packed", "Out for Delivery"];
+    if (!cancellable.includes(order.status)) {
+      showError("Cannot cancel", `Orders with status "${order.status}" cannot be cancelled.`);
+      return;
+    }
+    const confirmed = await showConfirm("Cancel order?", `Are you sure you want to cancel order #${order.orderNumber}?`);
+    if (!confirmed.isConfirmed) return;
+    try {
+      await orderApi.updateStatus(order._id, { status: "Cancelled", reason: "Cancelled by customer" });
+      await loadOrders();
+      showSuccess("Cancelled", `Order #${order.orderNumber} has been cancelled.`);
+    } catch (e) {
+      showError("Cancel failed", e?.message || "Couldn't cancel the order.");
     }
   };
 
@@ -165,6 +183,11 @@ export default function MyOrders() {
                         <ArrowRight className="h-3 w-3" /> Track
                       </Link>
                       <Link to={`/orders/${order._id}`} className="ml-3 font-medium text-gray-500 hover:text-primary">Details</Link>
+                      {["Order Placed", "Packed", "Out for Delivery"].includes(order.status) && (
+                        <button onClick={() => cancelOrder(order)} disabled={downloading[order._id]} className="ml-3 inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 hover:text-red-800">
+                          Cancel
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

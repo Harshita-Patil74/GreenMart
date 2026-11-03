@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const User = require("../models/User");
 const FarmerProfile = require("../models/FarmerProfile");
 const bcrypt = require("bcryptjs");
@@ -80,10 +81,11 @@ exports.login = async (req,res) => {
   }
   if (user.status === "blocked") return res.status(403).json({ message: "Account blocked" });
   const token = signToken(user);
-  // Issue refresh token (hashed in DB, sent as httpOnly cookie)
+  // Issue refresh token (hashed in DB, sent as httpOnly cookie) with family tracking
   const refreshToken = randomToken();
+  const family = crypto.randomBytes(16).toString("hex");
   const RefreshToken = require("../models/RefreshToken");
-  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(refreshToken), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(refreshToken), family, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
   res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
   res.json({ token, user: await authUserPayload(user) });
 };
@@ -97,14 +99,36 @@ exports.refresh = async (req, res) => {
   for (const r of records) {
     if (await bcrypt.compare(token, r.tokenHash)) { matched = r; break; }
   }
-  if (!matched) return res.status(401).json({ message: "Invalid refresh token" });
+  if (!matched) {
+    // Refresh-token reuse detected: revoke the entire family
+    const allRecords = await RefreshToken.find({ revoked: false });
+    for (const r of allRecords) {
+      if (await bcrypt.compare(token, r.tokenHash)) {
+        await RefreshToken.deleteMany({ family: r.family });
+        break;
+      }
+    }
+    res.clearCookie("refreshToken", { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", path: "/" });
+    return res.status(401).json({ message: "Refresh token reused or invalid. Please log in again." });
+  }
   const user = await User.findById(matched.user);
-  if (!user || user.status === "blocked") return res.status(401).json({ message: "User not authorized" });
-  // rotate
+  if (!user || user.status === "blocked") {
+    matched.revoked = true;
+    await matched.save();
+    res.clearCookie("refreshToken", { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", path: "/" });
+    return res.status(401).json({ message: "User not authorized" });
+  }
+  if (user.accountActivated === false) {
+    matched.revoked = true;
+    await matched.save();
+    res.clearCookie("refreshToken", { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", path: "/" });
+    return res.status(403).json({ message: "Account activation is required." });
+  }
+  // rotate: revoke old, issue new in same family
   matched.revoked = true;
   await matched.save();
   const newRefresh = randomToken();
-  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(newRefresh), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(newRefresh), family: matched.family, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
   res.cookie("refreshToken", newRefresh, { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
   const accessToken = signToken(user);
   res.json({ token: accessToken, user: await authUserPayload(user) });
@@ -115,8 +139,13 @@ exports.logout = async (req, res) => {
   if (token) {
     const RefreshToken = require("../models/RefreshToken");
     const records = await RefreshToken.find({ revoked: false });
+    let family = null;
     for (const r of records) {
-      if (await bcrypt.compare(token, r.tokenHash)) { r.revoked = true; await r.save(); }
+      if (await bcrypt.compare(token, r.tokenHash)) { r.revoked = true; await r.save(); family = r.family; break; }
+    }
+    // Revoke all tokens in the same family
+    if (family) {
+      await RefreshToken.updateMany({ family, revoked: false }, { revoked: true });
     }
   }
   res.clearCookie("refreshToken", { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", path: "/" });

@@ -18,6 +18,10 @@ export function showDeleteConfirm(itemName) {
   return confirmAction({ title: "Delete " + itemName + "?", text: "This action cannot be undone.", confirmText: "Delete", icon: "warning" });
 }
 
+export function showConfirm(title, text) {
+  return Swal.fire({ title, text, icon: "question", showCancelButton: true, confirmButtonText: "Yes", cancelButtonText: "Cancel", ...base });
+}
+
 export function showSuccess(title, text) {
   return Swal.fire({ title, text, icon: "success", ...base });
 }
@@ -42,4 +46,4 @@ export function closeAlert() {
   Swal.close();
 }
 
-export default { confirmAction, showDeleteConfirm, showSuccess, showError, showWarning, showInfo, showLoading, closeAlert };
+export default { confirmAction, showDeleteConfirm, showConfirm, showSuccess, showError, showWarning, showInfo, showLoading, closeAlert };

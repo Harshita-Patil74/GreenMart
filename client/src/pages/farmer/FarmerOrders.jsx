@@ -6,6 +6,7 @@ import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { useSelector } from "react-redux";
 import { LoaderCircle, Search } from "lucide-react";
 import SearchBar from "../../components/common/SearchBar.jsx";
+import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
 
 const filters = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Delivery Failed", "Cancelled"];
 const nextActions = {
@@ -42,7 +43,10 @@ export default function FarmerOrders() {
     if (updatingOrder) return;
     const action = (nextActions[order.status] || []).find((item) => item.status === status);
     if (!action) return;
-    if (action.confirm && !window.confirm(action.confirm)) return;
+    if (action.confirm) {
+      const confirmed = await showConfirm(action.confirm, `This will change the order status to "${status}".`);
+      if (!confirmed.isConfirmed) return;
+    }
     if (status === "Delivery Failed" && !reason.trim()) {
       setStatusError("Enter a reason for the failed delivery.");
       return;
@@ -54,8 +58,10 @@ export default function FarmerOrders() {
       setOrders((current) => current.map((item) => item._id === order._id ? data : item));
       setFailureOrder("");
       setFailureReason("");
+      showSuccess("Status updated", `Order ${order.orderNumber} is now ${status}.`);
     } catch (requestError) {
       setStatusError(requestError?.message || "Couldn't update the order status.");
+      showError("Update failed", requestError?.message || "Couldn't update the order status.");
     } finally {
       setUpdatingOrder("");
     }
