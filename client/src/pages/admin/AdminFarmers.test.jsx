@@ -11,6 +11,7 @@ vi.mock("../../api/adminApi.js", () => ({
     createFarmer: vi.fn(),
     verifyFarmer: vi.fn(),
     rejectFarmer: vi.fn(),
+    requestFarmerChanges: vi.fn(),
   },
 }));
 describe("Admin farmer management", () => {
@@ -30,6 +31,7 @@ describe("Admin farmer management", () => {
         certification: { body: "Organic", number: "CERT-123", verifiedByAdmin: true, rejectedByAdmin: false },
       },
     });
+    adminApi.requestFarmerChanges.mockResolvedValue({});
   });
 
   it("verifies the selected farmer through the admin API and updates the list", async () => {
@@ -136,4 +138,114 @@ describe("Admin farmer management", () => {
     expect(screen.getByText("OFC2026KA5724")).toBeInTheDocument();
     expect(screen.getByText("Not provided")).toBeInTheDocument();
     expect(screen.getAllByText("Pending")).toHaveLength(2);
+  });
+
+  it("displays Resubmitted badge for a farmer who resubmitted after changes", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-resubmit",
+        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
+        farmName: "Resubmitted Farm",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        changeRequestInstructions: "",
+        submittedAt: "2026-03-01T00:00:00.000Z",
+        verificationHistory: [
+          { action: "Changes Requested", admin: "admin-1", timestamp: "2026-02-01T00:00:00.000Z", reason: "Fix certificate" },
+          { action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" },
+        ],
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
+    expect(await screen.findByText("Resubmitted")).toBeInTheDocument();
+  });
+
+  it("shows resubmitted farmer in Pending tab only", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-resubmit",
+        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
+        farmName: "Resubmitted Farm",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    expect(await screen.findByText("Pending (1)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pending (1)" }));
+    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
+  });
+
+  it("does not show resubmitted farmer in Verified or Rejected tabs", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-resubmit",
+        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
+        farmName: "Resubmitted Farm",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    expect(await screen.findByText("Verified (0)")).toBeInTheDocument();
+    expect(await screen.findByText("Rejected (0)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Verified (0)" }));
+    expect(screen.queryByText("Resubmitted Farmer")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pending (1)" }));
+    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
+  });
+
+  it("displays latest farm and certificate details in View Details for resubmitted farmer", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-resubmit",
+        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
+        farmName: "Resubmitted Farm",
+        farmAddress: "123 Farm Road",
+        category: "Vegetables",
+        description: "Fresh organic vegetables",
+        certification: { body: "Organic Cert", number: "ORG-2026", verifiedByAdmin: false, rejectedByAdmin: false },
+        certificateDocument: { url: "https://example.com/cert.pdf", publicId: "cert" },
+        photo: "/uploads/farms/photo.jpg",
+        verificationStatus: "Pending",
+        changeRequestInstructions: "",
+        submittedAt: "2026-03-01T00:00:00.000Z",
+        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    await screen.findByText("Resubmitted Farmer");
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+    expect(screen.getByText("Farmer Details")).toBeInTheDocument();
+    expect(screen.getByText("123 Farm Road")).toBeInTheDocument();
+    expect(screen.getByText("Fresh organic vegetables")).toBeInTheDocument();
+  });
+
+  it("offers Verify, Reject, and Request Changes actions for resubmitted farmers", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-resubmit",
+        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
+        farmName: "Resubmitted Farm",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    adminApi.verifyFarmer.mockResolvedValueOnce({ data: { certification: { verifiedByAdmin: true } } });
+    adminApi.rejectFarmer.mockResolvedValueOnce({ data: { certification: { rejectedByAdmin: true } } });
+    adminApi.requestFarmerChanges.mockResolvedValueOnce({ data: { changeRequestInstructions: "Fix docs" } });
+    renderWithStore(<AdminFarmers />);
+    await screen.findByText("Resubmitted Farmer");
+    expect(screen.getByRole("button", { name: "Verify" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request Changes" })).toBeInTheDocument();
   });

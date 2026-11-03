@@ -49,15 +49,25 @@ exports.updateProfile = asyncHandler(async (req,res) => {
 exports.resubmitApplication = asyncHandler(async (req,res) => {
   const fp = await FarmerProfile.findOne({ user: req.user._id });
   if (!fp) return res.status(404).json({ message: "Profile not found" });
+  // Accept optional updated farm details from the request body
+  const updatableFields = ["farmName","category","description","address","certificateName","certificateNumber","photo"];
+  for (const field of updatableFields) {
+    if (req.body[field] !== undefined) fp[field] = req.body[field];
+  }
+  // Reset certification decision flags so the farmer appears in Pending for admin review
+  fp.certification.verifiedByAdmin = false;
+  fp.certification.rejectedByAdmin = false;
+  fp.certification.rejectionReason = "";
+  fp.certification.rejectedAt = undefined;
   fp.verificationStatus = "Pending";
   fp.changeRequestInstructions = "";
   fp.submittedAt = new Date();
   fp.verificationHistory.push({ action: "Resubmitted", timestamp: new Date() });
   await fp.save();
-  // notify admins
+  // notify admins with correct farmer reference
   const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
   for (const admin of admins) {
-    await createNotification({ userId: admin._id, type: "farmerResubmitted", category: "farmers", title: "Farmer resubmitted", message: "A farmer resubmitted their application.", resourceType: "FarmerProfile", resourceId: fp._id, eventKey: `farmer:resubmitted:${fp.user}:${Date.now()}` });
+    await createNotification({ userId: admin._id, type: "farmerResubmitted", category: "farmers", title: "Farmer resubmitted", message: `Farmer ${fp.farmName || "a farmer"} resubmitted their application for verification.`, resourceType: "FarmerProfile", resourceId: fp._id, actionUrl: `/admin/farmers/${fp.user}`, eventKey: `farmer:resubmitted:${fp.user}:${fp.submittedAt.getTime()}` });
   }
   res.json(fp);
 });
