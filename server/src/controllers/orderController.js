@@ -39,6 +39,10 @@ function farmerOrderView(order, farmerId) {
 }
 
 exports.create = asyncHandler(async (req,res) => {
+  const address = req.body.address || {};
+  if (!address.name || !address.line1 || !address.city || !address.phone) {
+    return res.status(400).json({ message: "A valid delivery address is required." });
+  }
   const order = await orderService.createOrder(req.user._id, req.body);
   await createNotification({
     userId: req.user._id,

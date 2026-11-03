@@ -54,7 +54,7 @@ export default function ProductForm({ initial, onSubmit }) {
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Product Images</label>
-        <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, 5))} />
+        <input type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, 6))} />
       </div>
       <Button type="submit">Save Product</Button>
     </form>

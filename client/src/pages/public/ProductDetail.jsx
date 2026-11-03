@@ -19,6 +19,7 @@ export default function ProductDetail() {
   const { user } = useSelector((state) => state.auth);
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
+  const [activeImage, setActiveImage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reviewError, setReviewError] = useState(null);
@@ -103,7 +104,8 @@ export default function ProductDetail() {
 
   const farmer = product.farmer;
   const farmerId = farmer?._id || farmer?.id || farmer;
-  const image = product.images?.[0];
+  const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const mainImage = images[activeImage] || images[0];
   const outOfStock = Number(product.stock) <= 0;
   const canReview = Boolean(user?.role === "customer");
 
@@ -111,8 +113,19 @@ export default function ProductDetail() {
     <div className="gm-container space-y-5 py-6 pb-16">
       <BackButton fallback="/shop" />
       <div className="grid gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2 md:p-5">
-        <div className="flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
-          {image ? <ImageWithFallback src={getImageUrl(image)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
+        <div className="space-y-3">
+          <div className="flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
+            {mainImage ? <ImageWithFallback src={getImageUrl(mainImage)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
+          </div>
+          {images.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {images.map((img, idx) => (
+                <button key={idx} type="button" onClick={() => setActiveImage(idx)} className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border ${idx === activeImage ? "border-primary ring-2 ring-primary/30" : "border-gray-200"}`}>
+                  <ImageWithFallback src={getImageUrl(img)} alt={`${product.name} ${idx + 1}`} className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-col">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{product.category}</p>

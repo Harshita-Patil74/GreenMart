@@ -80,7 +80,47 @@ exports.login = async (req,res) => {
   }
   if (user.status === "blocked") return res.status(403).json({ message: "Account blocked" });
   const token = signToken(user);
+  // Issue refresh token (hashed in DB, sent as httpOnly cookie)
+  const refreshToken = randomToken();
+  const RefreshToken = require("../models/RefreshToken");
+  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(refreshToken), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
   res.json({ token, user: await authUserPayload(user) });
+};
+
+exports.refresh = async (req, res) => {
+  const token = req.cookies?.refreshToken;
+  if (!token) return res.status(401).json({ message: "No refresh token" });
+  const RefreshToken = require("../models/RefreshToken");
+  const records = await RefreshToken.find({ revoked: false, expiresAt: { $gt: new Date() } });
+  let matched = null;
+  for (const r of records) {
+    if (await bcrypt.compare(token, r.tokenHash)) { matched = r; break; }
+  }
+  if (!matched) return res.status(401).json({ message: "Invalid refresh token" });
+  const user = await User.findById(matched.user);
+  if (!user || user.status === "blocked") return res.status(401).json({ message: "User not authorized" });
+  // rotate
+  matched.revoked = true;
+  await matched.save();
+  const newRefresh = randomToken();
+  await RefreshToken.create({ user: user._id, tokenHash: await hashToken(newRefresh), expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+  res.cookie("refreshToken", newRefresh, { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000, path: "/" });
+  const accessToken = signToken(user);
+  res.json({ token: accessToken, user: await authUserPayload(user) });
+};
+
+exports.logout = async (req, res) => {
+  const token = req.cookies?.refreshToken;
+  if (token) {
+    const RefreshToken = require("../models/RefreshToken");
+    const records = await RefreshToken.find({ revoked: false });
+    for (const r of records) {
+      if (await bcrypt.compare(token, r.tokenHash)) { r.revoked = true; await r.save(); }
+    }
+  }
+  res.clearCookie("refreshToken", { httpOnly: true, secure: env.nodeEnv === "production", sameSite: "lax", path: "/" });
+  res.json({ message: "Logged out" });
 };
 
 exports.me = async (req,res) => { res.json(req.user); };

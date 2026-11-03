@@ -80,9 +80,24 @@ export default function Checkout() {
   const total = subtotal > 0 && deliveryCharge != null ? subtotal - discount + deliveryCharge : 0;
   const selectedAddress = addresses.find((address) => address._id === selectedAddressId);
 
-  const saveNewAddress = async (event) => {
-    event.preventDefault();
-    setSavingAddress(true);
+const [addressErrors, setAddressErrors] = useState({});
+
+const validateAddress = (addr) => {
+  const errors = {};
+  if (!addr.name?.trim()) errors.name = "Recipient name is required.";
+  if (!addr.phone?.trim()) errors.phone = "Please enter a valid phone number.";
+  else if (!/^\+?\d[\d\s-]{7,}$/.test(addr.phone.trim())) errors.phone = "Please enter a valid phone number.";
+  if (!addr.line1?.trim()) errors.line1 = "Street address is required.";
+  if (!addr.city?.trim()) errors.city = "City is required.";
+  return errors;
+};
+
+const saveNewAddress = async (event) => {
+  event.preventDefault();
+  const errors = validateAddress(addressForm);
+  setAddressErrors(errors);
+  if (Object.keys(errors).length) return;
+  setSavingAddress(true);
     setAddressError(null);
     try {
       const { data } = await addressApi.create(addressForm);
@@ -121,7 +136,7 @@ export default function Checkout() {
       return;
     }
     if (!selectedAddress) {
-      setError("Choose or add a delivery address.");
+      setError("Please add a delivery address before continuing.");
       setAddressFormOpen(true);
       return;
     }
@@ -199,7 +214,8 @@ export default function Checkout() {
                 ].map(([key, label]) => (
                   <label key={key} className="text-[10px] font-medium text-gray-600">
                     {label}
-                    <input required value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none" />
+                    <input required value={addressForm[key]} onChange={(event) => { setAddressForm((current) => ({ ...current, [key]: event.target.value })); setAddressErrors((e) => ({ ...e, [key]: undefined })); }} className={`mt-1 h-8 w-full rounded-md border bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none ${addressErrors[key] ? "border-red-500" : "border-gray-200"}`} />
+                    {addressErrors[key] && <span className="mt-0.5 block text-[10px] text-red-600">{addressErrors[key]}</span>}
                   </label>
                 ))}
                 <div className="flex gap-2 sm:col-span-2">

@@ -68,6 +68,8 @@ const loginSchema = z.object({
 });
 router.post("/register", validate(registrationSchema), c.register);
 router.post("/login", validate(loginSchema), c.login);
+router.post("/refresh", c.refresh);
+router.post("/logout", c.logout);
 router.get("/me", auth, c.me);
 router.post("/forgot-password", validate(forgotPasswordSchema), c.forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), c.resetPassword);

@@ -8,12 +8,14 @@ const isClientOriginAllowed = require("./config/isClientOriginAllowed");
 const routes = require("./routes");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
+const cookieParser = require("cookie-parser");
 const app = express();
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({
   origin: (origin, callback) => callback(null, isClientOriginAllowed(origin, env.clientUrl, env.nodeEnv)),
   credentials: true,
 }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(rateLimit({ windowMs: 15*60*1000, max: env.nodeEnv === "development" ? 3000 : 300 }));
 app.get("/", (req, res) => res.json({ status: "ok", service: "GreenMart API" }));
