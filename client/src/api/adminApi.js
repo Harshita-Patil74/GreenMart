@@ -13,5 +13,6 @@ export default {
   resendFarmerActivation: (id) => api.post(`/admin/farmers/${id}/activation`),
   verifyFarmer: (id) => api.patch(`/admin/farmers/${id}/verify`),
   rejectFarmer: (id, reason) => api.patch(`/admin/farmers/${id}/reject`, { reason }),
+  requestFarmerChanges: (id, instructions) => api.patch(`/admin/farmers/${id}/request-changes`, { instructions }),
   updateSettings: (data) => api.put("/settings", data),
 };

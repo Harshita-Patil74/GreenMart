@@ -7,6 +7,8 @@ export default {
   updateLocation: (d) => api.put("/farmers/me/location", d),
   profile: () => api.get("/farmers/profile"),
   updateProfile: (d) => api.put("/farmers/profile", d),
+  resubmitApplication: () => api.post("/farmers/resubmit-application"),
+  uploadCertificate: (d) => api.post("/farmers/profile/certificate", d),
   uploadLandDocument: (file) => { const fd = new FormData(); fd.append("document", file); return api.post("/farmers/profile/land-document", fd); },
   downloadLandDocument: () => api.get("/farmers/profile/land-document", { responseType: "blob" }),
   removeLandDocument: () => api.delete("/farmers/profile/land-document"),

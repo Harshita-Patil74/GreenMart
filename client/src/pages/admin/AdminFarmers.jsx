@@ -16,6 +16,7 @@ export default function AdminFarmers() {
   const isCreateFarmerFormValid = form.name.trim().length > 0
     && isRegistrationEmailValid(form.email);
   const [activationLink,setActivationLink]=useState("");
+const [viewFarmer,setViewFarmer]=useState(null);
   const load=async()=>{setLoading(true);setError(null);try{const {data}=await adminApi.farmers();setFarmers(Array.isArray(data)?data:[]);}catch(e){setError(e?.message||"Couldn't load farmer profiles.");}finally{setLoading(false);}};
   useEffect(()=>{load();},[]);
   const createFarmer=async(e)=>{e.preventDefault(); if(!isCreateFarmerFormValid){toast.error("Enter a name and a valid lowercase email address.");return;} setCreating(true); try{ const {data}=await adminApi.createFarmer({name:form.name.trim(),email:normalizeEmail(form.email),phone:form.phone,farmName:form.farmName,farmAddress:form.farmAddress,farmCategory:form.farmCategory,about:form.about,certificationName:form.certificationName.trim(),certificateNumber:form.certificateNumber.trim()}); setActivationLink(data?.activationLink||""); toast.success(data?.message||"Farmer created. Activation instructions were sent by email."); setShowForm(false); setForm({name:"",email:"",phone:"",farmName:"",farmAddress:"",farmCategory:"",about:"",certificationName:"",certificateNumber:""}); await load(); } catch(err){ toast.error(err?.message||err?.response?.data?.message||"Failed to create farmer."); } finally{setCreating(false);} };
@@ -24,6 +25,7 @@ export default function AdminFarmers() {
   const filtered=useMemo(()=>farmers.filter(f=>tab==="All"||(tab==="Pending"?(!isVerified(f)&&!isRejected(f)):(tab==="Verified"?isVerified(f):isRejected(f)))),[farmers,tab]);
   const verify=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;setSaving(String(id));setError(null);try{const {data}=await adminApi.verifyFarmer(id);setFarmers(list=>list.map(item=>String(item.user?._id||item.user)===String(id)?{...item,...data}:item));}catch(e){setError(e?.message||"Couldn't verify this farmer.");}finally{setSaving("");}};
   const reject=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;if(!window.confirm("Reject this farmer application?"))return;const reason=window.prompt("Rejection reason (optional):")||"";setSaving(String(id));setError(null);try{const {data}=await adminApi.rejectFarmer(id,reason);setFarmers(list=>list.map(item=>String(item.user?._id||item.user)===String(id)?{...item,...data}:item));}catch(e){setError(e?.message||"Couldn't reject this farmer.");}finally{setSaving("");}};
+const requestChanges=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;const instructions=window.prompt("Correction instructions (required):");if(!instructions||!instructions.trim())return;setSaving(String(id));setError(null);try{const {data}=await adminApi.requestFarmerChanges(id,instructions.trim());setFarmers(list=>list.map(item=>String(item.user?._id||item.user)===String(id)?{...item,...data}:item));toast.success("Changes requested.");}catch(e){setError(e?.message||"Couldn't request changes.");}finally{setSaving("");}};
   const resendActivation=async(farmer)=>{const id=farmer.user?._id||farmer.user;if(!id)return;setSaving(String(id));setError(null);try{const {data}=await adminApi.resendFarmerActivation(id);setActivationLink(data?.activationLink||"");toast.success(data?.message||"Activation link sent.");}catch(e){setError(e?.message||"Couldn't resend the activation link.");}finally{setSaving("");}};
   if(error&&!farmers.length)return <ErrorState message={error} onRetry={load}/>;
   return <div className="space-y-4 pb-10"><BackButton fallback="/admin/dashboard" /><header className="flex items-center justify-between"><div><h1 className="text-xl font-heading font-bold text-gray-900">Farmer Verification</h1><p className="mt-1 text-xs text-gray-500">Review farmer profiles and verify submitted certifications.</p></div><button onClick={()=>setShowForm(true)} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white">Add Farmer</button></header>
@@ -42,7 +44,51 @@ export default function AdminFarmers() {
     </form>}{error&&<p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
     <div className="flex gap-2">{["Pending","Verified","Rejected","All"].map(item=><button key={item} onClick={()=>setTab(item)} className={`rounded-lg px-3 py-2 text-xs ${tab===item?"bg-primary text-white":"border bg-white text-gray-600"}`}>{item} ({item==="Pending"?farmers.filter(f=>!isVerified(f)&&!isRejected(f)).length:item==="Verified"?farmers.filter(f=>isVerified(f)).length:item==="Rejected"?farmers.filter(f=>isRejected(f)).length:farmers.length})</button>)}</div>
     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr className="bg-gray-50 text-[10px] uppercase text-gray-500"><th className="px-3 py-3">Farmer</th><th className="px-3 py-3">Farm Name</th><th className="px-3 py-3">Certification</th><th className="px-3 py-3">Submitted</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead><tbody className="divide-y divide-gray-100">
-      {loading?<tr><td colSpan="6" className="p-8 text-center text-gray-500">Loading farmer profiles...</td></tr>:filtered.map(f=>{const decisionRecorded=isVerified(f)||isRejected(f);const certificationBody=f.certification?.body;const certificationNumber=f.certification?.number;const userId=String(f.user?._id||f.user);return <tr key={f._id}><td className="px-3 py-3 font-medium">{f.user?.name||"Farmer"}<div className="text-[10px] text-gray-400">{f.user?.email||""}</div></td><td className="px-3 py-3">{f.farmName}</td><td className="px-3 py-3">{certificationBody?(<><div className="font-medium">{certificationBody}</div>{certificationNumber&&<div className="text-[10px] text-gray-400">{certificationNumber}</div>}</>):"Not provided"}</td><td className="px-3 py-3 text-gray-500">{f.createdAt?new Date(f.createdAt).toLocaleDateString("en-US"):"—"}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] ${isVerified(f)?"bg-emerald-50 text-emerald-700":isRejected(f)?"bg-red-50 text-red-700":"bg-amber-50 text-amber-700"}`}>{isVerified(f)?"Verified":isRejected(f)?"Rejected":"Pending"}</span>{f.user?.accountActivated===false&&<div className="mt-1 text-[10px] text-gray-500">Account: activation pending</div>}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2">{!decisionRecorded&&<><button disabled={saving===userId} onClick={()=>verify(f)} className="rounded bg-primary px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{saving===userId?"Saving...":"Verify"}</button><button disabled={saving===userId} onClick={()=>reject(f)} className="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">Reject</button></>}{f.user?.accountActivated===false&&<button disabled={saving===userId} onClick={()=>resendActivation(f)} className="rounded border px-3 py-1.5 text-[10px] font-semibold text-gray-700 disabled:opacity-50">Resend activation</button>}</div></td></tr>})}
+      {loading?<tr><td colSpan="6" className="p-8 text-center text-gray-500">Loading farmer profiles...</td></tr>:filtered.map(f=>{const decisionRecorded=isVerified(f)||isRejected(f);const certificationBody=f.certification?.body;const certificationNumber=f.certification?.number;const userId=String(f.user?._id||f.user);return <tr key={f._id}><td className="px-3 py-3 font-medium">{f.user?.name||"Farmer"}<div className="text-[10px] text-gray-400">{f.user?.email||""}</div></td><td className="px-3 py-3">{f.farmName}</td><td className="px-3 py-3">{certificationBody?(<><div className="font-medium">{certificationBody}</div>{certificationNumber&&<div className="text-[10px] text-gray-400">{certificationNumber}</div>}</>):"Not provided"}</td><td className="px-3 py-3 text-gray-500">{f.createdAt?new Date(f.createdAt).toLocaleDateString("en-US"):"—"}</td><td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[10px] ${isVerified(f)?"bg-emerald-50 text-emerald-700":isRejected(f)?"bg-red-50 text-red-700":"bg-amber-50 text-amber-700"}`}>{isVerified(f)?"Verified":isRejected(f)?"Rejected":"Pending"}</span>{f.user?.accountActivated===false&&<div className="mt-1 text-[10px] text-gray-500">Account: activation pending</div>}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-2"><button onClick={()=>setViewFarmer(f)} className="rounded border px-3 py-1.5 text-[10px] font-semibold text-gray-700">View Details</button>{!decisionRecorded&&<><button disabled={saving===userId} onClick={()=>verify(f)} className="rounded bg-primary px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{saving===userId?"Saving...":"Verify"}</button><button disabled={saving===userId} onClick={()=>reject(f)} className="rounded bg-red-600 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">Reject</button><button disabled={saving===userId} onClick={()=>requestChanges(f)} className="rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-[10px] font-semibold text-amber-700 disabled:opacity-50">Request Changes</button></>}{f.user?.accountActivated===false&&<button disabled={saving===userId} onClick={()=>resendActivation(f)} className="rounded border px-3 py-1.5 text-[10px] font-semibold text-gray-700 disabled:opacity-50">Resend activation</button>}</div></td></tr>})}
       {!loading&&!filtered.length&&<tr><td colSpan="6" className="p-8 text-center text-gray-500">No farmer profiles in this view.</td></tr>}</tbody></table></div></section>
+{viewFarmer && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setViewFarmer(null)}>
+    <div className="max-h-[80vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-900">Farmer Details</h2>
+        <button onClick={() => setViewFarmer(null)} className="text-xs text-gray-500 hover:text-gray-700">Close</button>
+      </div>
+      <div className="space-y-2 text-xs">
+        <div><span className="font-semibold">Name:</span> {viewFarmer.user?.name || "—"}</div>
+        <div><span className="font-semibold">Email:</span> {viewFarmer.user?.email || "—"}</div>
+        <div><span className="font-semibold">Phone:</span> {viewFarmer.user?.phone || viewFarmer.phone || "—"}</div>
+        <div><span className="font-semibold">Farm Name:</span> {viewFarmer.farmName || "—"}</div>
+        <div><span className="font-semibold">Farm Address:</span> {viewFarmer.address || viewFarmer.farmAddress || "—"}</div>
+        <div><span className="font-semibold">Category:</span> {viewFarmer.category || viewFarmer.farmCategory || "—"}</div>
+        <div><span className="font-semibold">Description:</span> {viewFarmer.description || viewFarmer.about || "—"}</div>
+        <div><span className="font-semibold">Certificate Name:</span> {viewFarmer.certification?.body || viewFarmer.certificateName || "Not provided"}</div>
+        <div><span className="font-semibold">Certificate Number:</span> {viewFarmer.certification?.number || viewFarmer.certificateNumber || "Not provided"}</div>
+        { (viewFarmer.certificateDocument?.url || viewFarmer.photo) && (
+          <div className="space-y-2">
+            {viewFarmer.certificateDocument?.url && <div><a href={viewFarmer.certificateDocument.url} target="_blank" rel="noreferrer" className="text-primary underline text-[10px]">View certificate</a></div>}
+            {viewFarmer.photo && <img src={viewFarmer.photo} alt="Farm" className="h-24 w-36 rounded border object-cover" />}
+          </div>
+        )}
+        <div><span className="font-semibold">Status:</span> {viewFarmer.certification?.verifiedByAdmin ? "Verified" : viewFarmer.certification?.rejectedByAdmin ? "Rejected" : viewFarmer.verificationStatus || "Pending"}</div>
+        <div><span className="font-semibold">Submitted:</span> {viewFarmer.submittedAt || viewFarmer.createdAt ? new Date(viewFarmer.submittedAt || viewFarmer.createdAt).toLocaleString() : "—"}</div>
+        {viewFarmer.changeRequestInstructions && <div><span className="font-semibold">Change Instructions:</span> {viewFarmer.changeRequestInstructions}</div>}
+        {viewFarmer.verificationHistory?.length ? (
+          <div>
+            <span className="font-semibold">History:</span>
+            <ul className="mt-1 space-y-1">
+              {viewFarmer.verificationHistory.map((h, i) => (
+                <li key={i} className="rounded border border-gray-100 bg-gray-50 p-2">
+                  <div className="font-medium">{h.action}</div>
+                  <div className="text-[10px] text-gray-500">{h.timestamp ? new Date(h.timestamp).toLocaleString() : ""}</div>
+                  {h.reason && <div className="text-[10px] text-gray-600">{h.reason}</div>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  </div>
+)}
 </div>;
 }

@@ -9,6 +9,8 @@ const { uploadLand } = require("../middleware/upload");
 router.get("/", c.list);
 router.get("/profile", auth, role("farmer"), c.getProfile);
 router.put("/profile", auth, role("farmer"), c.updateProfile);
+router.post("/resubmit-application", auth, role("farmer"), c.resubmitApplication);
+router.post("/profile/certificate", auth, role("farmer"), uploadLand.single("certificate"), c.uploadCertificate);
 router.post("/profile/land-document", auth, role("farmer"), uploadLand.single("document"), c.uploadLandDocument);
 router.get("/profile/land-document", auth, role("farmer"), c.downloadLandDocument);
 router.delete("/profile/land-document", auth, role("farmer"), c.removeLandDocument);

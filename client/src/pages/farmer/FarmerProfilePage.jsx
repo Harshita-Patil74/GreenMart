@@ -29,10 +29,11 @@ export default function FarmerProfilePage() {
   const { user } = useSelector((state) => state.auth);
   const userId = user?._id || user?.id;
   const [activeTab, setActiveTab] = useState(tabs[0]);
-  const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "", certificateName: "", certificateNumber: "" });
+  const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "", certificateName: "", certificateNumber: "", certificateDocument: null, verificationStatus: "", changeRequestInstructions: "" });
   const [personal, setPersonal] = useState({ name: user?.name || "", email: user?.email || "", phone: getIndianPhoneDigits(user?.phone), avatar: user?.avatar || "" });
   const [avatarFile, setAvatarFile] = useState(null);
   const [farmPhotoFile, setFarmPhotoFile] = useState(null);
+const [certificateFile, setCertificateFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
   const [farmPhotoPreview, setFarmPhotoPreview] = useState("");
   const [loading, setLoading] = useState(true);
@@ -92,6 +93,9 @@ export default function FarmerProfilePage() {
           photo: data.photo || "",
           certificateName: data.certificateName || "",
           certificateNumber: data.certificateNumber || "",
+          certificateDocument: data.certificateDocument || null,
+          verificationStatus: data.verificationStatus || "",
+          changeRequestInstructions: data.changeRequestInstructions || "",
         });
       }
     } catch (requestError) {
@@ -229,11 +233,23 @@ export default function FarmerProfilePage() {
           {activeTab === "Farm Details" && (
             <form onSubmit={saveFarm} className="max-w-2xl space-y-3 rounded-lg border border-[#E7EEEC] bg-white p-4 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
               <h2 className="text-xs font-semibold text-[#344640]">Farm Details</h2>
+              {farm.verificationStatus && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Status: {farm.verificationStatus}
+                  {farm.changeRequestInstructions && <div className="mt-1 text-[11px]">Instructions: {farm.changeRequestInstructions}</div>}
+                </div>
+              )}
               <Field label="Farm Name" value={farm.farmName} onChange={(event) => setFarm({ ...farm, farmName: event.target.value })} required />
               <Field label="Farm Address" value={farm.address} onChange={(event) => setFarm({ ...farm, address: event.target.value })} />
               <Field label="Farm Category" value={farm.category} onChange={(event) => setFarm({ ...farm, category: event.target.value })} />
               <Field label="Certificate Name" value={farm.certificateName} onChange={(event) => setFarm({ ...farm, certificateName: event.target.value })} placeholder="e.g. Organic Farming Certificate" />
               <Field label="Certificate Number" value={farm.certificateNumber} onChange={(event) => setFarm({ ...farm, certificateNumber: event.target.value })} placeholder="e.g. OFC2026KA5724" />
+              <label className="block">
+                <span className="mb-1 block text-[10px] font-medium text-[#65756F]">Certificate Document</span>
+                {farm.certificateDocument?.url && <a href={farm.certificateDocument.url} target="_blank" rel="noreferrer" className="mb-1 block text-[10px] text-primary underline">View current certificate</a>}
+                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => setCertificateFile(e.target.files?.[0] || null)} className="w-full rounded-md border border-[#DCE5E1] px-2 py-1.5 text-xs" />
+                {certificateFile && <button type="button" onClick={async () => { const fd = new FormData(); fd.append("certificate", certificateFile); try { const { data } = await farmerApi.uploadCertificate(fd); setFarm((c) => ({ ...c, certificateDocument: data.certificateDocument })); setCertificateFile(null); toast.success("Certificate uploaded."); } catch (e) { toast.error("Upload failed."); } }} className="mt-1 h-8 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white">Upload Certificate</button>}
+              </label>
               <label className="block">
                 <span className="mb-1 block text-[10px] font-medium text-[#65756F]">About your farm</span>
                 <textarea value={farm.description} onChange={(event) => setFarm({ ...farm, description: event.target.value })} rows={4} className="w-full resize-y rounded-md border border-[#DCE5E1] p-2.5 text-xs outline-none focus:border-[#16885A]" />
@@ -244,6 +260,7 @@ export default function FarmerProfilePage() {
                 {farm.photo && <img src={farmPhotoPreview} alt="Farm" className="mt-2 h-24 w-36 rounded-md border border-[#DDEDE5] object-cover" />}
               </label>
               <button type="submit" disabled={savingFarm} className="h-8 w-full rounded-md bg-[#07814E] text-xs font-semibold text-white hover:bg-[#066B42] disabled:opacity-60">{savingFarm ? "Saving…" : "Save Farm Details"}</button>
+              <button type="button" onClick={async () => { try { await farmerApi.resubmitApplication(); toast.success("Application resubmitted."); loadProfile(); } catch (e) { toast.error("Resubmit failed."); } }} className="h-8 w-full rounded-md border border-[#07814E] text-xs font-semibold text-[#07814E] hover:bg-[#E8F5EE]">Resubmit Application</button>
             </form>
           )}
 

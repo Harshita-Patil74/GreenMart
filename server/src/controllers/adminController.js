@@ -127,7 +127,7 @@ exports.updateUser = asyncHandler(async (req,res) => {
   res.json(updated);
 });
 exports.verifyFarmer = asyncHandler(async (req,res) => {
-  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": true, "certification.verifiedAt": new Date(), "certification.rejectedByAdmin": false, "certification.rejectionReason": "" }, { new: true });
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": true, "certification.verifiedAt": new Date(), "certification.rejectedByAdmin": false, "certification.rejectionReason": "", verificationStatus: "Verified", $push: { verificationHistory: { action: "Verified", admin: req.user._id, timestamp: new Date() } } }, { new: true });
   if (!fp) return res.status(404).json({ message: "Farmer profile not found" });
   await recordAdminAction(req.user._id, "farmer.certification.verified", fp.user);
   // Notify all admins about farmer verification
@@ -159,7 +159,7 @@ exports.verifyFarmer = asyncHandler(async (req,res) => {
 });
 exports.rejectFarmer = asyncHandler(async (req,res) => {
   const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0,500) : "";
-  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": false, "certification.rejectedByAdmin": true, "certification.rejectedAt": new Date(), "certification.rejectionReason": reason }, { new: true });
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { "certification.verifiedByAdmin": false, "certification.rejectedByAdmin": true, "certification.rejectedAt": new Date(), "certification.rejectionReason": reason, verificationStatus: "Rejected", $push: { verificationHistory: { action: "Rejected", admin: req.user._id, timestamp: new Date(), reason } } }, { new: true });
   if (!fp) return res.status(404).json({ message: "Farmer profile not found" });
   await recordAdminAction(req.user._id, "farmer.certification.rejected", fp.user);
   // Notify all admins about farmer rejection
@@ -257,6 +257,15 @@ exports.createFarmer = asyncHandler(async (req,res) => {
     activationLink,
     activationEmailSent: emailSent,
   });
+});
+
+exports.requestFarmerChanges = asyncHandler(async (req,res) => {
+  const instructions = typeof req.body?.instructions === "string" ? req.body.instructions.trim().slice(0,1000) : "";
+  if (!instructions) return res.status(400).json({ message: "Correction instructions are required." });
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.params.id }, { verificationStatus: "Changes Requested", changeRequestInstructions: instructions, $push: { verificationHistory: { action: "Changes Requested", admin: req.user._id, timestamp: new Date(), reason: instructions } } }, { new: true });
+  if (!fp) return res.status(404).json({ message: "Farmer profile not found" });
+  await createNotification({ userId: fp.user, type: "farmerChangesRequested", category: "certifications", title: "Changes requested", message: instructions, eventKey: `farmer:changes:${fp.user}:${Date.now()}` });
+  res.json(fp);
 });
 
 exports.resendFarmerActivation = asyncHandler(async (req, res) => {

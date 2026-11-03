@@ -36,6 +36,7 @@ router.post("/farmers", auth, role("admin"), validate(z.object(createFarmerSchem
 router.post("/farmers/:id/activation", auth, role("admin"), c.resendFarmerActivation);
 router.patch("/farmers/:id/verify", auth, role("admin"), c.verifyFarmer);
 router.patch("/farmers/:id/reject", auth, role("admin"), c.rejectFarmer);
+router.patch("/farmers/:id/request-changes", auth, role("admin"), c.requestFarmerChanges);
 router.get("/farmers/:farmerId/land-review", auth, role("admin"), c.getLandReview);
 router.put("/farmers/:farmerId/land-review", auth, role("admin"), c.updateLandReview);
 module.exports = router;

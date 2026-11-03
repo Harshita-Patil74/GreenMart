@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const FarmerProfile = require("../models/FarmerProfile");
 const Product = require("../models/Product");
+const User = require("../models/User");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { haversine } = require("../utils/haversine");
+const { createNotification } = require("../services/notificationService");
 
 exports.list = asyncHandler(async (req,res) => {
   const profiles = await FarmerProfile.find()
@@ -42,6 +44,29 @@ exports.updateProfile = asyncHandler(async (req,res) => {
   for (const f of allowed) if (req.body[f] !== undefined) update[f] = req.body[f];
   const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, update, { new: true, upsert: true, runValidators: true }).populate("user","name email avatar");
   res.json(p);
+});
+
+exports.resubmitApplication = asyncHandler(async (req,res) => {
+  const fp = await FarmerProfile.findOne({ user: req.user._id });
+  if (!fp) return res.status(404).json({ message: "Profile not found" });
+  fp.verificationStatus = "Pending";
+  fp.changeRequestInstructions = "";
+  fp.verificationHistory.push({ action: "Resubmitted", timestamp: new Date() });
+  await fp.save();
+  // notify admins
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
+  for (const admin of admins) {
+    await createNotification({ userId: admin._id, type: "farmerResubmitted", category: "farmers", title: "Farmer resubmitted", message: "A farmer resubmitted their application.", resourceType: "FarmerProfile", resourceId: fp._id, eventKey: `farmer:resubmitted:${fp.user}:${Date.now()}` });
+  }
+  res.json(fp);
+});
+
+exports.uploadCertificate = asyncHandler(async (req,res) => {
+  if (!req.file) return res.status(400).json({ message: "No file" });
+  const { uploadFile } = require("../services/cloudinaryUpload");
+  const url = await uploadFile(req.file.path, "greenmart/certificates");
+  const fp = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, { certificateDocument: { url, publicId: "" } }, { new: true, upsert: true });
+  res.json(fp);
 });
 
 exports.uploadLandDocument = async (req,res) => { if (!req.file) return res.status(400).json({ message: 'No file' }); const p = await FarmerProfile.findOne({ user: req.user._id }); if (!p) return res.status(404).json({ message: 'Profile not found' }); p.landDocument = { originalName: req.file.originalname, filename: req.file.filename, mimetype: req.file.mimetype, size: req.file.size, uploadedAt: new Date() }; await p.save(); res.json(p); };

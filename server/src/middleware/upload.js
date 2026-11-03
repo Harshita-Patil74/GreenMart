@@ -13,6 +13,7 @@ const LAND_TYPES = {
   "application/pdf": ".pdf",
   "image/jpeg": ".jpg",
   "image/png": ".png",
+  "image/webp": ".webp",
 };
 
 function makeUploader(subdir) {
