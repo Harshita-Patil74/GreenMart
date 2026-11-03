@@ -104,7 +104,9 @@ export default function ProductDetail() {
 
   const farmer = product.farmer;
   const farmerId = farmer?._id || farmer?.id || farmer;
-  const images = Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  const images = Array.isArray(product.images) && product.images.length
+    ? product.images.filter(Boolean)
+    : (product.image ? [product.image] : []);
   const mainImage = images[activeImage] || images[0];
   const outOfStock = Number(product.stock) <= 0;
   const canReview = Boolean(user?.role === "customer");

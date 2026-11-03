@@ -23,7 +23,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
 
   const productId = product._id || product.id;
   const wished = wishlist.items.some((item) => (item._id || item.id || item.product?._id) === productId);
-  const displayImage = product.images?.[0] || "/images/placeholder.svg";
+  const displayImage = product.images?.[0] || product.image || "/images/placeholder.svg";
   const unit = product.unit || "kg";
   const outOfStock = product.stock === 0;
   const offer = product.offer;

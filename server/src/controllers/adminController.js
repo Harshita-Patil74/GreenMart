@@ -204,17 +204,31 @@ exports.createFarmer = asyncHandler(async (req,res) => {
     }
     throw error;
   }
+  const { uploadFile } = require("../services/cloudinaryUpload");
+  let certificateDocument, farmPhotoUrl;
+  if (req.files?.certificate?.[0]) {
+    const url = await uploadFile(req.files.certificate[0].path, "greenmart/certificates");
+    certificateDocument = { url, publicId: "" };
+  }
+  if (req.files?.farmPhoto?.[0]) {
+    farmPhotoUrl = await uploadFile(req.files.farmPhoto[0].path, "greenmart/farms");
+  }
   await FarmerProfile.create({
     user: user._id,
     farmName: farmName || name+" Farm",
     address: farmAddress,
     category: farmCategory,
     description: about,
+    photo: farmPhotoUrl,
+    certificateName: certificationName || undefined,
+    certificateNumber: certificateNumber || undefined,
+    certificateDocument,
     certification: {
       body: certificationName || undefined,
       number: certificateNumber || undefined,
       verifiedByAdmin: false,
     },
+    submittedAt: new Date(),
   });
   await recordAdminAction(req.user._id, "farmer.account.created", user._id);
   const activationLink = await issueFarmerActivation(user);

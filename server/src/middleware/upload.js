@@ -76,6 +76,7 @@ function makeUploader(subdir) {
   return {
     single: (...args) => wrap(uploader.single(...args)),
     array: (...args) => wrap(uploader.array(...args)),
+    fields: (...args) => wrap(uploader.fields(...args)),
   };
 }
 function makeLandUploader(subdir) {
@@ -96,6 +97,6 @@ function makeLandUploader(subdir) {
     error.status = 400;
     cb(error);
   }});
-  return { single: (name) => uploader.single(name) };
+  return { single: (name) => uploader.single(name), fields: (fields) => uploader.fields(fields) };
 }
 module.exports = { makeUploader, uploadProduct: makeUploader("products"), uploadAvatar: makeUploader("avatars"), uploadFarm: makeUploader("farms"), uploadLand: makeLandUploader("land") };

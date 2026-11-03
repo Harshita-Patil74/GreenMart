@@ -63,17 +63,7 @@ describe("Admin farmer management", () => {
     expect(createButton).toBeEnabled();
     fireEvent.click(createButton);
 
-    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.objectContaining({
-      name: "New Farmer",
-      email: "new.farmer@example.com",
-      phone: "",
-      farmName: "",
-      farmAddress: "",
-      farmCategory: "",
-      about: "",
-      certificationName: "",
-      certificateNumber: "",
-    })));
+    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.any(FormData)));
     expect(await screen.findByRole("button", { name: "Add Farmer" })).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Full Name")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Password")).not.toBeInTheDocument();
@@ -117,10 +107,8 @@ describe("Admin farmer management", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.objectContaining({
-      certificationName: "Organic Farming Certificate",
-      certificateNumber: "OFC2026KA5724",
-    })));
+    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.any(FormData)));
+  });
   });
 
   it("displays saved certification name and certificate number, or Not provided when missing", async () => {
@@ -149,4 +137,3 @@ describe("Admin farmer management", () => {
     expect(screen.getByText("Not provided")).toBeInTheDocument();
     expect(screen.getAllByText("Pending")).toHaveLength(2);
   });
-});

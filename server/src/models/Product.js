@@ -16,7 +16,10 @@ const ProductSchema = new mongoose.Schema({
   ratingCount: { type: Number, default: 0 },
   status: { type: String, default: "Active" },
   featured: { type: Boolean, default: false },
-  isDemo: { type: Boolean, default: false } }, { timestamps: true });
+  isDemo: { type: Boolean, default: false } }, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
+ProductSchema.virtual("image").get(function () {
+  return Array.isArray(this.images) && this.images.length ? this.images[0] : null;
+});
 ProductSchema.index({ name: "text", description: "text" });
 module.exports = mongoose.model("Product", ProductSchema);
 
