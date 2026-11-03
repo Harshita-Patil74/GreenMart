@@ -7,13 +7,17 @@ export const haversine = (a,b) => {
 };
 export const CATEGORIES = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others"];
 export const STATUS_COLORS = {
-  "Delivered": "bg-green-100 text-green-700",
-  "In Transit": "bg-blue-100 text-blue-700",
-  "Shipped": "bg-blue-100 text-blue-700",
-  "Pending": "bg-orange-100 text-orange-700",
-  "Processing": "bg-amber-100 text-amber-700",
-  "In Progress": "bg-amber-100 text-amber-700",
-  "Active": "bg-green-100 text-green-700",
-  "Low Stock": "bg-red-100 text-red-700",
-  "Reorder": "bg-orange-100 text-orange-700",
+  "Order Placed": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Pending": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Packed": "bg-[#EDE9FE] text-[#6D28D9]",
+  "Out for Delivery": "bg-[#FFEDD5] text-[#C2410C]",
+  "Delivered": "bg-[#DCFCE7] text-[#15803D]",
+  "Delivery Failed": "bg-[#FEE2E2] text-[#B91C1C]",
+  "Cancelled": "bg-[#F3F4F6] text-[#4B5563]",
+  "In Transit": "bg-[#DBEAFE] text-[#1D4ED8]",
+  "Shipped": "bg-[#FFEDD5] text-[#C2410C]",
+  "Processing": "bg-[#EDE9FE] text-[#6D28D9]",
+  "Active": "bg-[#DCFCE7] text-[#15803D]",
+  "Low Stock": "bg-[#FEE2E2] text-[#B91C1C]",
+  "Reorder": "bg-[#FFEDD5] text-[#C2410C]",
 };

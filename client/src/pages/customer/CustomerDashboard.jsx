@@ -11,6 +11,7 @@ import { fetchWishlist } from "../../features/wishlist/wishlistSlice.js";
 import { addItem, fetchCart } from "../../features/cart/cartSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { ChatAssistant } from "../../components/assistant/ChatAssistant.jsx";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { formatCurrency } from "../../utils/constants.js";
 import { getImageUrl } from "../../utils/imageUrl.js";
 
@@ -135,15 +136,13 @@ export default function CustomerDashboard() {
               <table className="w-full min-w-[380px] text-left text-[10px]">
                 <thead><tr className="bg-gray-50 text-[9px] font-semibold uppercase tracking-wide text-gray-500"><th className="px-3 py-2">Order ID</th><th className="px-3 py-2">Date</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Total</th></tr></thead>
                 <tbody className="divide-y divide-gray-100">{orders.slice(0, 3).map((order) => {
-                  const status = String(order.status || "Unknown");
-                  const statusTone = status.toLowerCase().includes("deliver") ? "bg-emerald-100 text-emerald-700" : status.toLowerCase().includes("ship") ? "bg-blue-100 text-blue-700" : status.toLowerCase().includes("cancel") ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700";
-                  return <tr key={order._id}>
-                    <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-900">#{order.orderNumber}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) : "—"}</td>
-                    <td className="px-3 py-2.5"><Link to={`/track-order/${order._id}`} className={`inline-flex rounded-full px-2 py-1 text-[9px] font-semibold ${statusTone}`}>{status}</Link></td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-gray-900">{formatCurrency(order.total || 0)}</td>
-                  </tr>;
-                })}</tbody>
+                return <tr key={order._id}>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-gray-900">#{order.orderNumber}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) : "—"}</td>
+                  <td className="px-3 py-2.5"><Link to={`/track-order/${order._id}`} className="inline-flex items-center gap-1"><OrderStatusBadge status={order.status} /><ArrowRight className="ml-1 h-3 w-3" /></Link></td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right font-semibold text-gray-900">{formatCurrency(order.total || 0)}</td>
+                </tr>;
+              })}</tbody>
               </table>
             </div>
           ) : <div className="p-6 text-center text-xs text-gray-500">No orders yet. <Link to="/shop" className="font-semibold text-primary">Explore the shop</Link></div>}

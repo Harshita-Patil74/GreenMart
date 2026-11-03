@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { Clock3, MapPin, PackageCheck, Search, Truck } from "lucide-react";
 import orderApi from "../../api/orderApi";
 import OrderStepper from "../../components/orders/OrderStepper.jsx";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { formatCurrency } from "../../utils/constants.js";
@@ -75,14 +76,14 @@ export default function TrackOrder() {
                   <p className="text-[10px] uppercase tracking-wide text-gray-400">Order number</p>
                   <h2 className="mt-1 text-sm font-bold text-gray-900">#{order.orderNumber}</h2>
                 </div>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-800">{order.status}</span>
+                <OrderStatusBadge status={order.status} />
               </div>
                 {(order.items || []).some((item) => item.fulfillmentStatus || item.deliveryFailureReason) && (
                   <ul className="mt-3 space-y-2 border-t border-gray-100 pt-3">
                     {(order.items || []).map((item, index) => (
                       <li key={item._id || item.product || index} className="text-xs text-gray-600">
                         <span className="font-medium text-gray-800">{item.name || "Product"}</span>
-                        <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px]">{item.fulfillmentStatus || order.status}</span>
+                        <span className="ml-2"><OrderStatusBadge status={item.fulfillmentStatus || order.status} /></span>
                         {item.deliveryFailureReason && <p className="mt-1 text-red-700">Delivery attempt failed: {item.deliveryFailureReason}</p>}
                         {item.fulfillmentHistory?.length > 1 && (
                           <ol className="mt-1 space-y-0.5 pl-2 text-[10px] text-gray-500">

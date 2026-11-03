@@ -5,6 +5,7 @@ import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { formatCurrency } from "../../utils/constants.js";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
 import toast from "react-hot-toast";
 import { Search, X, Download, ArrowRight } from "lucide-react";
@@ -136,7 +137,6 @@ export default function MyOrders() {
               {filteredOrders.map((order) => {
                 const items = order.items || [];
                 const itemNames = items.map((item) => item.name).filter(Boolean);
-                const badge = order.status === "Delivered" ? "bg-emerald-50 text-emerald-700" : order.status === "Cancelled" ? "bg-red-50 text-red-700" : order.status === "Out for Delivery" || order.status === "Packed" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700";
                 return (
                   <tr key={order._id} className="hover:bg-gray-50/60">
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">#{order.orderNumber}</td>
@@ -156,7 +156,7 @@ export default function MyOrders() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{formatCurrency(order.total || 0)}</td>
-                    <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold ${badge}`}>{order.status}</span></td>
+                    <td className="px-4 py-3"><OrderStatusBadge status={order.status} /></td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <button onClick={() => downloadInvoice(order)} disabled={downloading[order._id]} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline disabled:opacity-50">
                         <Download className="h-3 w-3" /> {downloading[order._id] ? "Downloading..." : "Download Invoice"}

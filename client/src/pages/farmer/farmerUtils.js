@@ -25,15 +25,18 @@ export const getOrderStatus = (status) => {
 };
 
 export const getStatusClasses = (status) => {
-  const value = String(status || "").toLowerCase();
-  if (value.includes("cancel")) return "border-red-200 bg-red-50 text-red-700";
-  if (value.includes("deliver")) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (value.includes("ship") || value.includes("out for")) return "border-blue-200 bg-blue-50 text-blue-700";
-  if (value.includes("pack")) return "border-violet-200 bg-violet-50 text-violet-700";
-  if (value === "inactive") return "border-slate-200 bg-slate-50 text-slate-600";
-  if (value.includes("active") || value.includes("in stock")) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (value.includes("out of stock")) return "border-red-200 bg-red-50 text-red-700";
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  const key = String(status || "").trim();
+  const colorMap = {
+    "Order Placed": "border-blue-200 bg-[#DBEAFE] text-[#1D4ED8]",
+    Pending: "border-blue-200 bg-[#DBEAFE] text-[#1D4ED8]",
+    Packed: "border-purple-200 bg-[#EDE9FE] text-[#6D28D9]",
+    "Out for Delivery": "border-orange-200 bg-[#FFEDD5] text-[#C2410C]",
+    Shipped: "border-orange-200 bg-[#FFEDD5] text-[#C2410C]",
+    Delivered: "border-green-200 bg-[#DCFCE7] text-[#15803D]",
+    "Delivery Failed": "border-red-200 bg-[#FEE2E2] text-[#B91C1C]",
+    Cancelled: "border-gray-200 bg-[#F3F4F6] text-[#4B5563]",
+  };
+  return colorMap[key] ?? "border-gray-200 bg-[#F3F4F6] text-[#4B5563]";
 };
 
 export const formatCurrency = (amount) =>

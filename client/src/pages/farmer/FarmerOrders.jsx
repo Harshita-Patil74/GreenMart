@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import BackButton from "../../components/common/BackButton.jsx";
 import orderApi from "../../api/orderApi";
-import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, getStatusClasses, unwrapList } from "./farmerUtils";
+import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { useSelector } from "react-redux";
 import { LoaderCircle, Search } from "lucide-react";
 import SearchBar from "../../components/common/SearchBar.jsx";
@@ -146,7 +147,7 @@ export default function FarmerOrders() {
                       <td className="px-3 py-2.5 text-[#52615D]">{order.address?.name || order.user?.name || "Customer"}</td>
                       <td className="max-w-[190px] px-3 py-2.5 text-[#52615D]">{items.map((item) => `${item.name || item.product?.name || "Product"} × ${item.quantity || 0}`).join(", ")}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-[#344640]">{formatCurrency(getOrderAmount(order, farmerId))}</td>
-                      <td className="px-3 py-2.5"><span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusClasses(order.status)}`}>{order.status}</span></td>
+                      <td className="px-3 py-2.5"><OrderStatusBadge status={order.status} /></td>
                       <td className="px-3 py-2.5 text-right"><button type="button" aria-expanded={expandedOrder === order._id} onClick={() => setExpandedOrder(expandedOrder === order._id ? "" : order._id)} className="inline-flex h-6 items-center rounded border border-[#B9D9CC] px-2.5 text-[10px] font-medium text-[#087449] hover:bg-[#F1F8F4]">{expandedOrder === order._id ? "Hide" : "View"}</button></td>
                     </tr>
                     {expandedOrder === order._id && (

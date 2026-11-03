@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { formatCurrency } from "../../utils/constants.js";
 
 const PAGE_SIZE = 10;
@@ -119,9 +120,9 @@ const [toastMsg, setToastMsg] = useState("");
                     {(o.items || []).map((item) => item.name).filter(Boolean).join(", ") || "N/A"}
                   </td>
                   <td className="px-3 py-3 font-semibold">{formatCurrency(o.total || 0)}</td>
-                  <td className="px-3 py-3">
-                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] text-emerald-700">{o.status}</span>
-                  </td>
+<td className="px-3 py-3">
+  <OrderStatusBadge status={o.status} />
+</td>
                   <td className="px-3 py-3">
                     <Link to={`/orders/${o._id}`} className="font-semibold text-primary hover:underline">View</Link>
                     <button onClick={() => { setModalOrder(o); setNewStatus(getInitialStatus(o.status)); setReason(""); }} className="ml-2 text-xs text-blue-600">Update</button>

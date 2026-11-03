@@ -7,6 +7,7 @@ import orderApi from "../../api/orderApi";
 import productApi from "../../api/productApi";
 import getImageUrl from "../../utils/imageUrl";
 import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
+import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import BottomNavigation from "../../components/layout/BottomNavigation.jsx";
 
 function salesSeries(orders, farmerId, days) {
@@ -159,7 +160,7 @@ export default function FarmerDashboard() {
                   <tr key={order._id}>
                     <td className="px-3 py-2 font-medium text-[#455650]">{order.orderNumber || `#${String(order._id || "").slice(-7)}`}</td>
                     <td className="px-2 py-2 text-[#75837E]">{formatDate(order.createdAt, { day: "numeric", month: "short" })}</td>
-                    <td className="px-2 py-2"><span className="rounded-full bg-[#E9F6EF] px-1.5 py-0.5 text-[9px] font-semibold text-[#168254]">{getOrderStatus(order.status)}</span></td>
+                    <td className="px-2 py-2"><OrderStatusBadge status={order.status} className="text-[9px] px-1.5 py-0.5" /></td>
                     <td className="px-3 py-2 text-right font-semibold text-[#44564F]">{formatCurrency(getOrderAmount(order, farmerId))}</td>
                   </tr>
                 ))}
