@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import productApi from "../../api/productApi";
 import farmerApi from "../../api/farmerApi";
+import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
+import { getImageUrl } from "../../utils/imageUrl.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import ProductManagementSection from "../../components/admin/ProductManagementSection.jsx";
