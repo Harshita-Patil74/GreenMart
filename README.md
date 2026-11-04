@@ -19,6 +19,7 @@ Tagline: **Fresh. Organic. Direct from Farmers.**
   - [Shared Features](#shared-features)
 - [Admin Offer Management](#admin-offer-management)
 - [Home Page Offers](#home-page-offers)
+- [Continuous Horizontal Carousel Animations](#continuous-horizontal-carousel-animations)
 - [Time-Based Offers & Scheduling](#time-based-offers--scheduling)
 - [Notification System](#notification-system)
 - [Roles & Permissions](#roles--permissions)
@@ -76,7 +77,7 @@ npm run dev      # http://127.0.0.1:5173
 
 | Layer | Technologies |
 |---|---|
-| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion |
+| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion (useMotionValue-driven ContinuousMarquee infinite horizontal carousels with responsive clamp() card widths, hover/focus pause, touch swipe pause/resume, and prefers-reduced-motion support) |
 | Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
 | AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
 | Image Storage | Multer handles incoming multipart/form-data file uploads and stores them temporarily on the local server (`server/uploads/`). Cloudinary (via its Node.js SDK) provides cloud-based image storage and delivery — uploaded files are streamed from local temp storage to Cloudinary, and Cloudinary URLs are persisted in MongoDB. |
@@ -144,7 +145,7 @@ greenmart/
 | `api/*.js` | API service modules per domain (authApi, productApi, orderApi, cartApi, userApi, adminApi, farmerApi, notificationApi, contactApi, messageApi, assistantApi, adminOffersApi, etc.) |
 | `app/store.js` | Redux Toolkit store configuration |
 | `features/*/slice.js` | Redux slices: auth, cart, products, orders, wishlist, notifications, assistant |
-| `components/common/*.jsx` | Shared UI components: Button, Input, Modal, Pagination, EmptyState, ErrorState, ImageWithFallback, Loader, Rating, etc. |
+| `components/common/*.jsx` | Shared UI components: Button, Input, Modal, Pagination, EmptyState, ErrorState, ImageWithFallback, Loader, Rating, ContinuousMarquee (infinite horizontal carousel), etc. |
 | `components/layout/*.jsx` | Layout shells: Navbar, Topbar, Sidebar, Footer, PublicNavigation, RoleNavigation, MobileNavigationDrawer |
 | `components/notifications/*.jsx` | NotificationBell |
 | `components/offers/*.jsx` | OfferCountdown (live countdown timers for scheduled offers) |
@@ -181,11 +182,12 @@ greenmart/
 
 - **Account**: Register/login as a customer, manage profile and saved addresses
 - **Shopping**: Browse products with search, filter (category, price), and farm origin details; view product detail pages with reviews
-- **Home Page Offers**: "Special Offers & Discounts" section below the hero shows approved, active product offers with real prices, images, dates, live countdown timers (hours:minutes:seconds), and a **View All Offers** link
+- **Home Page Offers**: "Special Offers & Discounts" section below the hero shows approved, active product offers with real prices, images, dates, live countdown timers (hours:minutes:seconds), and a **View All Offers** link. Offers scroll continuously right-to-left in an infinite horizontal marquee carousel that pauses on hover and supports touch swiping on mobile.
 - **Cart**: DB-persisted cart that survives across sessions/devices; quantity adjustment and removal
 - **Checkout**: Demo checkout with UPI / Card / Cash on Delivery payment options; delivery charge applied; offers revalidated and calculated by the backend using server time
 - **Offers**: Eligible, approved farmer promotions are priced by the server, shown in the shop/cart, and snapshotted on order items at checkout. Offers support scheduled start/end date and time; upcoming offers show a countdown until start, active offers show a countdown until expiry
-- **Featured Products**: Products with an eligible active offer show original price (strikethrough), discounted price, and a discount badge; products without offers keep their normal price
+- **Featured Products**: Products with an eligible active offer show original price (strikethrough), discounted price, and a discount badge; products without offers keep their normal price. Featured products scroll continuously right-to-left in an infinite horizontal marquee carousel that pauses on hover.
+- **Customer Dashboard**: Recommended products and Offers & Discounts (Active and Coming Soon tabs) scroll continuously right-to-left in independent infinite horizontal marquee carousels that pause on hover/focus and support touch swiping on mobile.
 - **Order Tracking**: Live order status tracking (Order Placed → Packed → Out for Delivery → Delivered) with Socket.io updates and farmer delivery location
 - **Wishlist**: Save products to a wishlist; notified when a wishlisted product comes back in stock
 - **Reviews**: Review products only after receiving them
@@ -289,7 +291,18 @@ Admin can edit any offer regardless of which farmer created it, via the **Edit O
 
 ## Home Page Offers
 
-The Home page now includes a **Special Offers & Discounts** section below the hero and before Featured Products.
+The Home page includes a **Special Offers & Discounts** section below the hero and before Featured Products. Both offers and featured products are displayed in continuous horizontal marquee carousel rows.
+
+### Continuous Carousel Behavior
+
+- Offer cards and product cards scroll continuously from right to left in an infinite marquee loop.
+- The card sequence is duplicated so the loop wraps seamlessly — no blank gaps or abrupt position resets.
+- Movement pauses on mouse hover and keyboard focus, and resumes when interaction ends.
+- On mobile, the carousel supports natural touch swiping; auto movement pauses while the user is actively touching/dragging and resumes after interaction ends.
+- Card widths are responsive (`clamp()`-based): roughly 1–2 cards on mobile (320–767px), 2–3 on tablets (768–1023px), and multiple cards on desktop (1024px+).
+- `overflow: hidden` is applied only to the carousel viewport — never to the entire page — so horizontal page overflow is prevented.
+- With `prefers-reduced-motion`, automatic movement is disabled and the row becomes a manually scrollable horizontal list.
+- All card interactions remain functional: product navigation, Add to Cart, Wishlist, and OfferCountdown timers are preserved.
 
 - Only offers that are `Approved`, active, not deactivated, within valid start/end dates/times, with an active available product belonging to the correct farmer, and valid discount configuration appear.
 - Pending, rejected, inactive, or expired offers never appear as active promotions.
@@ -299,6 +312,55 @@ The Home page now includes a **Special Offers & Discounts** section below the he
 - Featured Products cards show original price (strikethrough), discounted price, and discount badge when a product has an eligible offer; products without offers keep their normal price.
 - **View All Offers** link navigates to the existing Offers page.
 - Empty state: "No active offers available right now. Check back soon!"
+
+## Continuous Horizontal Carousel Animations
+
+GreenMart implements four independent continuous horizontal marquee carousel rows using Framer Motion (`^14.6.0`):
+
+| # | Section | Page | Content | Speed | Card Width (desktop) | Card Width (mobile min) |
+|---|---------|------|---------|-------|----------------------|-------------------------|
+| 1 | Offers & Discounts | Home | Active offers (`HomeOfferCard`) | 50 px/s | 260px | 170px |
+| 2 | Featured Products | Home | Products (`ProductCard`) | 40 px/s | 220px | 160px |
+| 3 | Offers & Discounts | Customer Dashboard | Active offers (`DashboardOfferCard`) | 50 px/s | 220px | 160px |
+| 4 | Offers & Discounts | Customer Dashboard | Coming Soon offers (`DashboardOfferCard`) | 40 px/s | 220px | 160px |
+| 5 | Recommended Products | Customer Dashboard | Recommended products (`ProductCard` compact) | 40 px/s | 200px | 150px |
+
+### Component
+
+`client/src/components/common/ContinuousMarquee.jsx` — a reusable infinite horizontal marquee component.
+
+**Props:**
+- `children` — React nodes to scroll (card components)
+- `speed` — pixels per second (default 60)
+- `gap` — gap between cards in px (default 24)
+- `itemWidth` — desktop card width fallback in px (default 220)
+- `minItemWidth` — mobile minimum card width in px (default 160)
+- `pauseOnHover` — pause on mouse enter (default true)
+- `pauseOnFocus` — pause on keyboard focus (default true)
+
+**Behavior:**
+- Duplicates the card sequence for seamless looping
+- Uses Framer Motion `useMotionValue` + `requestAnimationFrame` for smooth linear `translateX` movement (zero React re-renders during animation)
+- Track width re-measured via `ResizeObserver` so it adapts to responsive card widths
+- Pauses on hover/focus; resumes on leave/blur
+- Pauses during touch/drag, switches to `overflow-x: auto` for manual swiping, resumes and snaps back on release
+- `prefers-reduced-motion`: no auto movement, manually scrollable row, no duplicated nodes (`aria-hidden` on duplicates otherwise)
+- Cleans up animation frame and ResizeObserver on unmount
+
+### Preserved Functionality
+
+No backend/API changes were made. The following are untouched:
+- Product API, Offer API, and backend logic
+- Active and Coming Soon offer filtering
+- Offer countdown calculations
+- Offer approval and scheduling
+- Product recommendation logic
+- Product prices, stock, and discount calculations
+- Add to Cart and Wishlist interactions
+- Authentication and role permissions
+- Existing responsive layouts outside the specified sections
+
+No fake or hardcoded offers/products are added.
 
 ---
 
@@ -531,7 +593,8 @@ npm run dev
 3. **Seed data** — `npm run seed:admin` creates the first admin; `npm run seed` seeds demo development data (requires `SEED_PASSWORD`, refused in production).
 4. **Run tests** — backend: `cd server && npm test` (Jest, `mongodb-memory-server`); frontend: `cd client && npm run test` (Vitest).
 5. **Build for production** — frontend: `cd client && npm run build` (outputs to `dist/`).
-6. **Lint/typecheck** — there is no separate lint script; run tests to verify behavior.
+6. **Verify responsive carousels** — open Home page and Customer Dashboard at breakpoints 320px, 375px, 425px, 768px, 1024px, and 1440px; confirm cards move continuously, pause on hover/touch, swipe manually on mobile, and do not cause horizontal page overflow.
+7. **Lint/typecheck** — there is no separate lint script; run tests to verify behavior.
 
 ### Seed commands (run from `server/`)
 
@@ -609,7 +672,7 @@ Server tests run with `mongodb-memory-server` and include Socket.io integration 
 
 **Latest test results** (all green):
 - Backend: 25 suites, 248 tests passed
-- Frontend: 43 suites, 234 tests passed
+- Frontend: 45 suites, 286 tests passed
 - Production build (`npm run build`): succeeds
 
 ---
@@ -638,8 +701,8 @@ This project is private and intended for internal use. Do not distribute or publ
 
 ## Final Production Readiness Audit
 - Backend Jest: 25 suites / 248 tests passed
-- Frontend Vitest: 43 suites / 234 tests passed
-- Frontend production build: succeeded (`✓ built in 11.37s`)
+- Frontend Vitest: 45 suites / 286 tests passed
+- Frontend production build: succeeded
 - Backend startup: MongoDB connected; no startup errors
 - No new bugs discovered; no secrets exposed; no commits/pushes performed
 
@@ -662,6 +725,7 @@ This project is private and intended for internal use. Do not distribute or publ
 
 ## Recent Changes
 
+- Continuous horizontal marquee carousels added to Home Page (Offers & Discounts, Featured Products) and Customer Dashboard (Offers & Discounts Active/Coming Soon, Recommended Products) via `ContinuousMarquee.jsx`; responsive `clamp()` card widths, hover/focus pause, touch swipe pause/resume, `prefers-reduced-motion` support, seamless duplicated-card looping; all 286 frontend tests pass; production build succeeds.
 - Product detail page now displays full image gallery with legacy image fallback.
 - Admin Add Farmer supports certificate and farm photo uploads to Cloudinary.
 - SweetAlert2 alert utility expanded (showInfo, showDeleteConfirm, showLoading, closeAlert).
