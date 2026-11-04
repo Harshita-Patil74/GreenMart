@@ -19,21 +19,6 @@ const mockProducts = [
   { _id: "product-a", name: "Organic Tomatoes", price: 40, unit: "kg", category: "Vegetables", stock: 12, ratingAverage: 4.8, ratingCount: 12 },
   { _id: "product-b", name: "Fresh Spinach", price: 25, unit: "bunch", category: "Vegetables", stock: 8 },
 ];
-const mockOffers = [{
-  _id: "offer-a",
-  title: "Tomato Harvest Deal",
-  type: "Seasonal Offer",
-  discountType: "Percentage",
-  discountPercent: 20,
-  discountAmount: 8,
-  originalPrice: 40,
-  offerPrice: 32,
-  startDate: "2026-10-01T00:00:00.000Z",
-  endDate: "2026-11-30T00:00:00.000Z",
-  effectiveStatus: "Active",
-  product: { _id: "product-a", name: "Organic Tomatoes", price: 40, unit: "kg", stock: 12, images: ["/uploads/tomatoes.jpg"] },
-  farmer: { _id: "farmer-a", name: "Green Valley Farm" },
-}];
 
 describe("Customer Dashboard page", () => {
   const preloaded = {
@@ -44,7 +29,6 @@ describe("Customer Dashboard page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     productApi.storefront.mockResolvedValue({ data: { items: mockProducts, total: 2 } });
-    offerApi.list.mockResolvedValue({ data: { active: mockOffers, upcoming: [], serverTime: new Date().toISOString() } });
     orderApi.mine.mockResolvedValue({ data: [] });
     addressApi.list.mockResolvedValue({ data: [] });
     farmerApi.list.mockResolvedValue({ data: [] });
@@ -61,15 +45,10 @@ describe("Customer Dashboard page", () => {
     expect(screen.getByText(/Recent Orders/i)).toBeInTheDocument();
     expect(screen.getByText(/Recommended for You/i)).toBeInTheDocument();
     expect(screen.getByText("AI Shopping Assistant")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Fresh Deals from Our Farmers" })).toBeInTheDocument();
-    expect(screen.getByText("Discover fresh organic products at special prices.")).toBeInTheDocument();
-    expect(screen.getByText("Green Valley Farm")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: /View All Offers/ }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("link", { name: /View All Offers/ })[0]).toHaveAttribute("href", "/customer/offers");
-    expect(offerApi.list).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Fresh Deals from Our Farmers")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Fresh Organic Products/i })).toHaveClass("text-white");
     expect(productApi.storefront).toHaveBeenCalledWith({ limit: 5, inStock: "true" });
-    await waitFor(() => expect(screen.getAllByText("Organic Tomatoes")).toHaveLength(2));
+    await waitFor(() => expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument());
     expect(screen.getByText("Fresh Spinach")).toBeInTheDocument();
   });
 
