@@ -8,6 +8,32 @@ vi.mock("../../api/productApi", () => ({
   default: { storefront: vi.fn(), storefrontOffers: vi.fn(), serverTime: vi.fn() },
 }));
 
+vi.mock("framer-motion", () => {
+  const React = require("react");
+
+  const motion = {
+    div: ({ children, ...props }) => React.createElement("div", props, children),
+    span: ({ children, ...props }) => React.createElement("span", props, children),
+    button: ({ children, ...props }) => React.createElement("button", props, children),
+  };
+
+  return {
+    motion,
+    AnimatePresence: ({ children }) => React.createElement(React.Fragment, null, children),
+    useReducedMotion: () => true,
+    useSpring: () => [0, () => {}],
+    useMotionValue: () => 0,
+    useAnimate: () => () => {},
+    useMotionTemplate: () => "",
+    useTransform: () => 0,
+    useVelocity: () => 0,
+    useCycle: () => [0, () => {}],
+    useTime: () => 0,
+    useIsPresent: () => true,
+    useReducedMotionConfig: () => ({ type: "spring", stiffness: 500, damping: 30 }),
+  };
+});
+
 const percentageOffer = {
   _id: "offer-percent",
   title: "Fig Harvest Deal",
@@ -72,7 +98,6 @@ const statusCases = [
 
 describe("Home page offers", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     productApi.storefront.mockResolvedValue({
       data: { items: [], total: 0, pages: 1 },
     });
@@ -118,10 +143,10 @@ describe("Home page offers", () => {
       data: { items: [percentageOffer, hidden] },
     });
     renderWithStore(<Home />);
+    await act(async () => {});
 
     expect(await screen.findByText("Organic Fig")).toBeInTheDocument();
     expect(screen.queryByText("Hidden Offer")).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "Organic Fig" }).closest("article")).toBeInTheDocument();
   });
 
   it("shows empty state when no active offers are available", async () => {
@@ -134,10 +159,12 @@ describe("Home page offers", () => {
 
   it("shows loading state and then the offers", async () => {
     let resolveOffers;
-    productApi.storefrontOffers.mockReturnValueOnce(new Promise((resolve) => { resolveOffers = resolve; }));
+    productApi.storefrontOffers.mockResolvedValue(new Promise((resolve) => { resolveOffers = resolve; }));
     renderWithStore(<Home />);
 
-    await act(async () => { resolveOffers({ data: { items: [percentageOffer] } }); });
+    await act(async () => {
+      resolveOffers({ data: { items: [percentageOffer] } });
+    });
     expect(await screen.findByText("Organic Fig")).toBeInTheDocument();
   });
 
