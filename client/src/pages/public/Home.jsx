@@ -9,6 +9,7 @@ import { listDemoProducts, unwrapList } from "../../data/demoCatalog.js";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
+import ContinuousMarquee from "../../components/common/ContinuousMarquee.jsx";
 import {
   cardItemVariants,
   cardHover,
@@ -241,11 +242,11 @@ export default function Home() {
             ))}
           </div>
         ) : eligibleOffers.length ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+          <ContinuousMarquee speed={50} gap={20} itemWidth={260} minItemWidth={170}>
             {eligibleOffers.map((offer) => (
               <HomeOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
             ))}
-          </div>
+          </ContinuousMarquee>
         ) : (
           <p className="text-center text-gray-500 py-10 text-sm">
             No active offers available right now. Check back soon!
@@ -253,18 +254,18 @@ export default function Home() {
         )}
       </div>
 
-      <div className="gm-container pt-8">
+        <div className="gm-container pt-8">
         <div className="flex items-center justify-between mb-5">
           <h2 className="font-heading text-[20px] font-semibold text-[#1F2937]">Featured Products</h2>
           <Link to="/shop" className="text-[13px] font-medium text-primary hover:underline">
             View All →
           </Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160}>
           {products.map((p) => (
             <ProductCard key={p._id || p.id} product={p} />
           ))}
-        </div>
+        </ContinuousMarquee>
       </div>
     </div>
   );

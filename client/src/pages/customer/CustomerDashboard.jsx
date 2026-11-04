@@ -14,6 +14,7 @@ import ErrorState from "../../components/common/ErrorState.jsx";
 import { ChatAssistant } from "../../components/assistant/ChatAssistant.jsx";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
+import ContinuousMarquee from "../../components/common/ContinuousMarquee.jsx";
 import {
   formatCurrency,
   formatDate,
@@ -233,17 +234,11 @@ export default function CustomerDashboard() {
               <div>
                 <h3 className="text-[10px] font-semibold text-[#16803C] mb-2 uppercase tracking-wider">Active Offers</h3>
                 {activeOffers.length ? (
-                  <motion.div
-                    initial="hidden"
-                    animate={animate}
-                    variants={cardContainerVariants}
-                  >
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                      {activeOffers.map((offer) => (
-                        <DashboardOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
-                      ))}
-                    </div>
-                  </motion.div>
+                  <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+                    {activeOffers.map((offer) => (
+                      <DashboardOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
+                    ))}
+                  </ContinuousMarquee>
                 ) : (
                   <p className="text-[10px] text-center text-gray-500 py-4">No active offers available right now.</p>
                 )}
@@ -252,17 +247,11 @@ export default function CustomerDashboard() {
               <div>
                 <h3 className="text-[10px] font-semibold text-[#C2410C] mb-2 uppercase tracking-wider">Coming Soon</h3>
                 {upcomingOffers.length ? (
-                  <motion.div
-                    initial="hidden"
-                    animate={animate}
-                    variants={cardContainerVariants}
-                  >
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                      {upcomingOffers.map((offer) => (
-                        <DashboardOfferCard key={offer._id} offer={offer} upcoming serverTime={serverTime} />
-                      ))}
-                    </div>
-                  </motion.div>
+                  <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160}>
+                    {upcomingOffers.map((offer) => (
+                      <DashboardOfferCard key={offer._id} offer={offer} upcoming serverTime={serverTime} />
+                    ))}
+                  </ContinuousMarquee>
                 ) : (
                   <p className="text-[10px] text-center text-gray-500 py-4">No upcoming offers at the moment.</p>
                 )}
@@ -296,7 +285,9 @@ export default function CustomerDashboard() {
         >
           {featuredLoading ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">{[1, 2, 3, 4, 5].map((key) => <div key={key} className="h-36 animate-pulse rounded-lg bg-gray-50" />)}</div>
             : featuredError ? <ErrorState message={featuredError} onRetry={loadFeatured} />
-            : featured.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">{featured.map((product) => <ProductCard key={product._id} product={product} compact />)}</div>
+            : featured.length ? <ContinuousMarquee speed={40} gap={20} itemWidth={200} minItemWidth={150}>
+              {featured.map((product) => <ProductCard key={product._id} product={product} compact />)}
+            </ContinuousMarquee>
               : <p className="rounded-lg bg-gray-50 p-5 text-center text-xs text-gray-500">No products are available right now.</p>}
         </motion.div>
       </motion.div>

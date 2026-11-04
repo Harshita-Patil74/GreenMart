@@ -48,8 +48,10 @@ describe("Customer Dashboard page", () => {
     expect(screen.queryByText("Fresh Deals from Our Farmers")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Fresh Organic Products/i })).toHaveClass("text-white");
     expect(productApi.storefront).toHaveBeenCalledWith({ limit: 5, inStock: "true" });
-    await waitFor(() => expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument());
-    expect(screen.getByText("Fresh Spinach")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText("Organic Tomatoes").length).toBeGreaterThan(0)
+    );
+    expect(screen.getAllByText("Fresh Spinach").length).toBeGreaterThan(0);
   });
 
   it("renders an empty recent orders state when the account has no orders", async () => {
