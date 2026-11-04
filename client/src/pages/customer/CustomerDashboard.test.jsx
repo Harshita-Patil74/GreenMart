@@ -1,5 +1,5 @@
 import React from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 import CustomerDashboard from "./CustomerDashboard.jsx";
 
@@ -57,5 +57,37 @@ describe("Customer Dashboard page", () => {
     expect(screen.getByText(/Recent Orders/i)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText(/No orders yet/i)).toBeInTheDocument());
     expect(orderApi.mine).toHaveBeenCalled();
+  });
+
+  it("switches between Active and Coming Soon tabs", async () => {
+    renderWithStore(<CustomerDashboard />, preloaded);
+
+    // Both tabs exist with (0) count when no offers loaded
+    expect(screen.getByRole("button", { name: "Active (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Coming Soon (0)" })).toBeInTheDocument();
+
+    // Active tab is selected by default
+    expect(screen.getByRole("button", { name: "Active (0)" })).toHaveClass(/bg-\[#16803C\]/);
+    expect(screen.getByRole("button", { name: "Coming Soon (0)" })).not.toHaveClass(/bg-\[#16803C\]/);
+
+    // Switch to Coming Soon
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (0)" }));
+    expect(screen.getByRole("button", { name: "Coming Soon (0)" })).toHaveClass(/bg-\[#16803C\]/);
+    expect(screen.getByRole("button", { name: "Active (0)" })).not.toHaveClass(/bg-\[#16803C\]/);
+
+    // Switch back to Active
+    fireEvent.click(screen.getByRole("button", { name: "Active (0)" }));
+    expect(screen.getByRole("button", { name: "Active (0)" })).toHaveClass(/bg-\[#16803C\]/);
+    expect(screen.getByRole("button", { name: "Coming Soon (0)" })).not.toHaveClass(/bg-\[#16803C\]/);
+  });
+
+  it("uses smaller text size for tab labels", async () => {
+    renderWithStore(<CustomerDashboard />, preloaded);
+
+    const activeButton = screen.getByRole("button", { name: "Active (0)" });
+    const upcomingButton = screen.getByRole("button", { name: "Coming Soon (0)" });
+
+    expect(activeButton).toHaveClass("text-xs");
+    expect(upcomingButton).toHaveClass("text-xs");
   });
 });

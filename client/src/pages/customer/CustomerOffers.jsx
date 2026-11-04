@@ -57,6 +57,7 @@ export default function CustomerOffers() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [tab, setTab] = useState("active");
+  const [onlyActive, setOnlyActive] = useState(false);
   const [addingId, setAddingId] = useState("");
   const [serverTime, setServerTime] = useState(null);
   const offersRef = useRef(null);
@@ -136,7 +137,8 @@ export default function CustomerOffers() {
       const searchable = `${offer.title || ""} ${offer.description || ""} ${product.name || ""} ${farmerName}`.toLocaleLowerCase();
       return (!type || offer.type === type)
         && (!category || product.category === category)
-        && (!query || searchable.includes(query));
+        && (!query || searchable.includes(query))
+        && (!onlyActive || offer.effectiveStatus === "Active");
     });
 
     return filtered.sort((left, right) => {
@@ -145,7 +147,7 @@ export default function CustomerOffers() {
       if (sort === "discount_desc") return Number(right.discountPercent) - Number(left.discountPercent);
       return new Date(right.createdAt || right.startDate) - new Date(left.createdAt || left.startDate);
     });
-  }, [currentOffers, type, category, search, sort, tab]);
+  }, [currentOffers, type, category, search, sort, tab, onlyActive]);
 
   const shopDeals = () => {
     offersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -315,13 +317,14 @@ export default function CustomerOffers() {
             {tab === "active" && (
               <button
                 type="button"
+                onClick={() => setOnlyActive((prev) => !prev)}
                 role="switch"
-                aria-checked={false}
-                className="inline-flex h-10 shrink-0 items-center justify-between gap-2 rounded-full bg-[#EAF6ED] px-3 text-[11px] font-semibold text-[#355840] sm:h-8"
+                aria-checked={onlyActive}
+                className={`inline-flex h-10 shrink-0 items-center justify-between gap-2 rounded-full transition ${onlyActive ? "bg-[#16803C] px-3 text-[11px] font-semibold text-white" : "bg-[#EAF6ED] px-3 text-[11px] font-semibold text-[#355840]"} sm:h-8`}
               >
                 Only Active
-                <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors bg-[#AAB6AD]`}>
-                  <span className="absolute left-0 top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform translate-x-[2px]" />
+                <span className={`relative h-[18px] w-8 shrink-0 rounded-full transition-colors ${onlyActive ? "bg-[#16803C]" : "bg-[#AAB6AD]"}`}>
+                  <span className={`absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${onlyActive ? "translate-x-[2px]" : ""}`} />
                 </span>
               </button>
             )}

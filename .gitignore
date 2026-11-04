@@ -28,3 +28,6 @@ tools/
 /server/scripts/migrateImagesToCloudinary.js
 /server/tests/mockcheck.test.js
 /AdminOrders_previous.jsx
+
+# Private farmer document uploads
+/server/private/

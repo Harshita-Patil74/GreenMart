@@ -312,4 +312,91 @@ describe("Customer Offers", () => {
       "Vegetables",
     ]);
   });
+
+  it("enables Only Active filter and excludes upcoming offers", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+
+    // Enable Only Active on Active tab
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+    expect(screen.getByRole("switch", { name: "Only Active" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+    expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
+
+    // Switch to Coming Soon tab - Only Active is still enabled, Fresh Greens hidden
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    expect(screen.queryByText("Fresh Greens")).not.toBeInTheDocument();
+
+    // Switch back to Active tab to disable Only Active (button only renders on Active tab)
+    fireEvent.click(screen.getByRole("button", { name: "Active Offers (2)" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+    expect(screen.getByRole("switch", { name: "Only Active" })).toHaveAttribute("aria-checked", "false");
+
+    // Switch to Coming Soon - Fresh Greens appears with Only Active disabled
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    await screen.findByText("Fresh Greens");
+  });
+
+  it("keeps active offers visible and hides scheduled offers with Only Active enabled", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+    expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
+    expect(screen.queryByText("Fresh Greens")).not.toBeInTheDocument();
+  });
+
+  it("search and category filtering work together with Only Active", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search offers" }), { target: { value: "Mango" } });
+
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+    expect(screen.queryByText("Organic Tomatoes")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search offers" }), { target: { value: "" } });
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+    expect(screen.getByText("Organic Tomatoes")).toBeInTheDocument();
+  });
+
+  it("switches between Active and Coming Soon tabs correctly with Only Active", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+
+    // Enable Only Active on Active tab
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+    expect(screen.queryByText("Fresh Greens")).not.toBeInTheDocument();
+
+    // Switch to Coming Soon tab - Only Active persists, Fresh Greens hidden
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    expect(screen.queryByText("Fresh Greens")).not.toBeInTheDocument();
+
+    // Switch back to Active - Only Active state persists
+    fireEvent.click(screen.getByRole("button", { name: "Active Offers (2)" }));
+    expect(screen.getByRole("switch", { name: "Only Active" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Alphonso Mango")).toBeInTheDocument();
+
+    // Disable Only Active - switch to Coming Soon, Fresh Greens appears
+    fireEvent.click(screen.getByRole("switch", { name: "Only Active" }));
+    expect(screen.getByRole("switch", { name: "Only Active" })).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Coming Soon (1)" }));
+    await screen.findByText("Fresh Greens");
+  });
+
+  it("Only Active button is accessible and clickable", async () => {
+    renderPage();
+    await screen.findByText("Alphonso Mango");
+
+    const onlyActiveButton = screen.getByRole("switch", { name: "Only Active" });
+    expect(onlyActiveButton).toHaveAttribute("role", "switch");
+    expect(onlyActiveButton).not.toHaveAttribute("disabled");
+
+    fireEvent.click(onlyActiveButton);
+    expect(onlyActiveButton).toHaveAttribute("aria-checked", "true");
+  });
 });

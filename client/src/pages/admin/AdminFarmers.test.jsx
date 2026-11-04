@@ -249,3 +249,58 @@ describe("Admin farmer management", () => {
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request Changes" })).toBeInTheDocument();
   });
+
+  it("displays certificate name and number saved via certificateName/certificateNumber fields", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-cert-name",
+        user: { _id: "farmer-cert-name", name: "Certificate Farmer", email: "certname@example.test", accountActivated: false },
+        farmName: "Certificate Farm",
+        certificateName: "Organic Farming Certificate",
+        certificateNumber: "OFC2026KA5724",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    expect(await screen.findByText("Certificate Farmer")).toBeInTheDocument();
+    expect(screen.getByText("Organic Farming Certificate")).toBeInTheDocument();
+    expect(screen.getByText("OFC2026KA5724")).toBeInTheDocument();
+  });
+
+  it("shows View Certificate link when certificateDocument URL exists", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-cert-doc",
+        user: { _id: "farmer-cert-doc", name: "Doc Farmer", email: "certdoc@example.test", accountActivated: false },
+        farmName: "Doc Farm",
+        certificateName: "Organic Farming Certificate",
+        certificateNumber: "OFC2026KA5724",
+        certificateDocument: { url: "https://res.cloudinary.com/test/cert.pdf", publicId: "cert/123" },
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    await screen.findByText("Doc Farmer");
+    const viewCertButton = screen.getByRole("button", { name: "View Certificate" });
+    expect(viewCertButton).toBeInTheDocument();
+  });
+
+  it("shows Not provided when no certificate information exists", async () => {
+    adminApi.farmers.mockResolvedValueOnce({
+      data: [{
+        _id: "profile-nocert",
+        user: { _id: "farmer-nocert", name: "No Cert Farmer", email: "nocert@example.test", accountActivated: false },
+        farmName: "Plain Farm",
+        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
+        verificationStatus: "Pending",
+        createdAt: "2026-02-11T00:00:00.000Z",
+      }],
+    });
+    renderWithStore(<AdminFarmers />);
+    expect(await screen.findByText("No Cert Farmer")).toBeInTheDocument();
+    expect(screen.getByText("Not provided")).toBeInTheDocument();
+  });

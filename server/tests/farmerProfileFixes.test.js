@@ -146,6 +146,24 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
     });
   });
 
+  describe("Certificate document via Cloudinary", () => {
+    it("farmer uploads a certificate document and Cloudinary URL is saved", async () => {
+      const pdfHeader = Buffer.from("%PDF-1.4", "utf8");
+      const res = await request(app)
+        .post("/api/farmers/profile/certificate")
+        .set("Authorization", `Bearer ${farmerToken}`)
+        .attach("certificate", pdfHeader, { filename: "certificate.pdf", contentType: "application/pdf" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.certificateDocument.url).toMatch(/^https:\/\/res\.cloudinary\.com\/test\/image\/upload\//);
+      expect(res.body.certificateDocument.publicId).toBeDefined();
+
+      const profile = await FarmerProfile.findOne({ user: farmerId });
+      expect(profile.certificateDocument.url).toBe(res.body.certificateDocument.url);
+      expect(profile.certificateDocument.publicId).toBe(res.body.certificateDocument.publicId);
+    });
+  });
+
   describe("Admin farmers API", () => {
     it("returns the farmer phone number", async () => {
       const res = await request(app)

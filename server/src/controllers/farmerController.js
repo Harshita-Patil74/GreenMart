@@ -15,7 +15,7 @@ exports.list = asyncHandler(async (req,res) => {
 exports.get = asyncHandler(async (req,res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: "Farmer not found" });
   const p = await FarmerProfile.findOne({ user: req.params.id })
-    .select("user farmName category description address photo location certification.verifiedByAdmin")
+    .select("user farmName category description address photo location certification.verifiedByAdmin certificateName certificateNumber certificateDocument")
     .populate("user", "_id name avatar");
   if (!p) return res.status(404).json({ message: "Farmer not found" });
   res.json(p);

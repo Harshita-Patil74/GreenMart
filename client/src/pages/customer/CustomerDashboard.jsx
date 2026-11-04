@@ -168,14 +168,14 @@ export default function CustomerDashboard() {
           <button
             type="button"
             onClick={() => setTab("active")}
-            className={`px-3 py-1.5 rounded-md transition ${tab === "active" ? "bg-[#16803C] text-white" : "border border-gray-200 bg-white text-[#64716B]"}`}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${tab === "active" ? "bg-[#16803C] text-white" : "border border-gray-200 bg-white text-[#64716B]"}`}
           >
             Active ({activeOffers.length})
           </button>
           <button
             type="button"
             onClick={() => setTab("upcoming")}
-            className={`px-3 py-1.5 rounded-md transition ${tab === "upcoming" ? "bg-[#16803C] text-white" : "border border-gray-200 bg-white text-[#64716B]"}`}
+            className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${tab === "upcoming" ? "bg-[#16803C] text-white" : "border border-gray-200 bg-white text-[#64716B]"}`}
           >
             Coming Soon ({upcomingOffers.length})
           </button>
