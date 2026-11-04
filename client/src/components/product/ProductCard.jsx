@@ -2,11 +2,19 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Star } from "lucide-react";
 import { addItem } from "../../features/cart/cartSlice.js";
 import { fetchWishlist, toggleWishlist } from "../../features/wishlist/wishlistSlice.js";
 import ImageWithFallback from "../common/ImageWithFallback.jsx";
 import OfferCountdown from "../offers/OfferCountdown.jsx";
+import {
+  cardHover,
+  imageHover,
+  cardItemVariants,
+  wishlistButtonVariants,
+  addToCartButtonVariants,
+} from "../common/motionVariants.jsx";
 
 export default function ProductCard({ product, showWishlist = true, compact = false, serverTime }) {
   const dispatch = useDispatch();
@@ -14,6 +22,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
   const { user, token } = useSelector((state) => state.auth);
   const wishlist = useSelector((state) => state.wishlist);
   const [adding, setAdding] = React.useState(false);
+  const reducedMotion = useReducedMotion();
 
   React.useEffect(() => {
     if (user?.role === "customer" && token && token !== "demo-token") dispatch(fetchWishlist());
@@ -46,7 +55,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
       return;
     }
     if (!token || token === "demo-token") {
-      toast.error("Sign in to save products to your wishlist.");
+      toast.error("Sign in to save products to your cart.");
       return;
     }
     try {
@@ -71,24 +80,39 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
     }
   };
 
+  const animate = reducedMotion ? false : "visible";
+
   return (
-    <div
+    <motion.div
+      initial="hidden"
+      animate={animate}
+      variants={cardItemVariants}
+      whileHover={reducedMotion ? undefined : cardHover.hover}
+      whileTap={reducedMotion ? undefined : cardHover.tap}
       onClick={() => navigate(`/product/${productId}`)}
-      className={`group flex cursor-pointer flex-col overflow-hidden rounded-[14px] border border-[#EEF1EF] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition hover:shadow-card-hover ${compact ? "p-1.5" : "p-2.5"}`}
+      className={`flex cursor-pointer flex-col overflow-hidden rounded-[14px] border border-[#EEF1EF] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${compact ? "p-1.5" : "p-2.5"}`}
     >
-      <div className={`relative overflow-hidden rounded-[10px] bg-[#F6F7F6] ${compact ? "h-20 sm:h-24" : "h-[148px]"}`}>
-        <ImageWithFallback src={displayImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+      <motion.div
+        initial="hidden"
+        animate={animate}
+        variants={cardItemVariants}
+        whileHover={reducedMotion ? undefined : imageHover.hover}
+        className={`relative overflow-hidden rounded-[10px] bg-[#F6F7F6] ${compact ? "h-20 sm:h-24" : "h-[148px]"}`}
+      >
+        <ImageWithFallback src={displayImage} alt={product.name} className="w-full h-full object-cover" />
         {offer && <span className="absolute left-2 top-2 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white">{offerLabel}</span>}
         {showWishlist && (
-          <button
+          <motion.button
+            whileHover={reducedMotion ? undefined : wishlistButtonVariants.hover}
+            whileTap={reducedMotion ? undefined : wishlistButtonVariants.tap}
             onClick={handleWishlist}
             aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
             className={`absolute right-2 top-2 flex items-center justify-center rounded-full bg-white shadow ${compact ? "h-6 w-6" : "h-7 w-7"}`}
           >
             <Heart className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
-          </button>
+          </motion.button>
         )}
-      </div>
+      </motion.div>
       <div className={`flex flex-1 flex-col ${compact ? "mt-1.5" : "mt-2.5"}`}>
         <h3 className={`line-clamp-1 font-medium leading-snug text-[#1F2937] ${compact ? "text-[11px]" : "text-[15px]"}`}>{product.name}</h3>
         <div className={`font-bold text-[#0F3D2E] ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[16px]"}`}>
@@ -109,7 +133,9 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
           <span className="font-medium text-[#1F2937]">{Number(product.ratingCount) > 0 ? Number(product.ratingAverage || 0).toFixed(1) : "New"}</span>
           <span>({Number(product.ratingCount) || 0})</span>
         </div>}
-        <button
+        <motion.button
+          whileHover={reducedMotion ? undefined : addToCartButtonVariants.hover}
+          whileTap={reducedMotion ? undefined : addToCartButtonVariants.tap}
           onClick={handleAdd}
           disabled={outOfStock || adding}
           className={`w-full rounded-[8px] font-medium ${compact ? "mt-1.5 h-7 text-[10px]" : "mt-auto mt-3 h-9 text-[13px]"} ${
@@ -117,8 +143,8 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
           }`}
         >
           {outOfStock ? "Out of Stock" : adding ? "Adding..." : "Add to Cart"}
-        </button>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Leaf, Users, Truck, Recycle, ArrowRight } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
@@ -8,6 +9,12 @@ import { listDemoProducts, unwrapList } from "../../data/demoCatalog.js";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
+import {
+  cardItemVariants,
+  cardHover,
+  imageHover,
+  badgeHover,
+} from "../../components/common/motionVariants.jsx";
 
 const HERO =
   "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
@@ -27,6 +34,8 @@ function HomeOfferCard({ offer, serverTime }) {
   const outOfStock = stock < minimumQuantity;
   const active = offer.effectiveStatus === "Active";
   const disabled = outOfStock || !active;
+  const reducedMotion = useReducedMotion();
+  const animate = reducedMotion ? false : "visible";
 
   const shopNow = (event) => {
     event.preventDefault();
@@ -35,17 +44,32 @@ function HomeOfferCard({ offer, serverTime }) {
   };
 
   return (
-    <article className="group flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[#E5EBE5] bg-white p-1.5 shadow-[0_1px_5px_rgba(27,52,36,0.07)] transition hover:shadow-[0_7px_18px_rgba(27,52,36,0.12)]">
-      <div className="relative h-[120px] overflow-hidden rounded-[9px] bg-[#F0F3EF] sm:h-[112px] lg:h-[116px]">
+    <motion.div
+      animate={animate}
+      variants={cardItemVariants}
+      whileHover={reducedMotion ? undefined : cardHover.hover}
+      whileTap={reducedMotion ? undefined : cardHover.tap}
+      className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[#E5EBE5] bg-white p-1.5 shadow-[0_1px_5px_rgba(27,52,36,0.07)]"
+    >
+      <motion.div
+        animate={animate}
+        variants={cardItemVariants}
+        whileHover={reducedMotion ? undefined : imageHover.hover}
+        className="relative h-[120px] overflow-hidden rounded-[9px] bg-[#F0F3EF] sm:h-[112px] lg:h-[116px]"
+      >
         <ImageWithFallback
           src={getImageUrl(product.images?.[0])}
           alt={product.name || "Fresh product"}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          className="h-full w-full object-cover"
         />
-        <span className="absolute left-1.5 top-1.5 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white shadow-sm">
+        <motion.span
+          whileHover={reducedMotion ? undefined : badgeHover.hover}
+          whileTap={reducedMotion ? undefined : badgeHover.tap}
+          className="absolute left-1.5 top-1.5 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white shadow-sm"
+        >
           {discountLabel}
-        </span>
-      </div>
+        </motion.span>
+      </motion.div>
 
       <div className="flex flex-1 flex-col px-1 pt-1.5">
         <Link to={`/product/${productId}`} className="line-clamp-1 text-[12px] font-bold leading-4 text-[#202D24] hover:text-[#16803C] sm:text-[13px]" title={product.name}>
@@ -94,7 +118,7 @@ function HomeOfferCard({ offer, serverTime }) {
           </Link>
         </div>
       </div>
-    </article>
+    </motion.div>
   );
 }
 
