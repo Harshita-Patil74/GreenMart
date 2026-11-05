@@ -31,7 +31,32 @@ export default function CategoryCarousel({ categories }) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const isDraggingRef = useRef(false);
+  const pausedRef = useRef(false);
   const dragStartRef = useRef({ x: 0, scrollLeft: 0 });
+
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || !categories || categories.length === 0) return;
+    let raf;
+    let last = performance.now();
+    const speed = 24; // pixels per second
+    const tick = (now) => {
+      if (!pausedRef.current && !isDraggingRef.current) {
+        const dt = (now - last) / 1000;
+        last = now;
+        vp.scrollLeft += speed * dt;
+        const maxScroll = Math.max(0, vp.scrollWidth - vp.clientWidth);
+        if (maxScroll > 0 && vp.scrollLeft >= maxScroll) {
+          vp.scrollLeft = 0;
+        }
+      } else {
+        last = now;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [categories?.length]);
 
   const updateBounds = useCallback(() => {
     const vp = viewportRef.current;
@@ -153,6 +178,8 @@ export default function CategoryCarousel({ categories }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onMouseEnter={() => { pausedRef.current = true; }}
+        onMouseLeave={() => { pausedRef.current = false; }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
