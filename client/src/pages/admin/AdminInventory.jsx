@@ -3,6 +3,7 @@ import {Download,Search} from "lucide-react";
 import productApi from "../../api/productApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import {downloadCsv} from "../../utils/csv.js";
+import ErrorState from "../../components/common/ErrorState.jsx";
 
 export default function AdminInventory(){
  const [products,setProducts]=useState([]);const [drafts,setDrafts]=useState({});const [search,setSearch]=useState("");const [loading,setLoading]=useState(true);const [saving,setSaving]=useState("");const [error,setError]=useState(null);

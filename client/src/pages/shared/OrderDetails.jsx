@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import orderApi from "../../api/orderApi";
 import { formatCurrency } from "../../utils/constants.js";
 import BackButton from "../../components/common/BackButton.jsx";
+import ErrorState from "../../components/common/ErrorState.jsx";
 import Button from "../../components/common/Button.jsx";
 import OrderStepper from "../../components/orders/OrderStepper.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { Star, Check, MapPin, ShoppingCart, Package } from "lucide-react";
+import ErrorState from "../../components/common/ErrorState.jsx";
 import productApi from "../../api/productApi";
 import reviewApi from "../../api/reviewApi.js";
 import { addItem } from "../../features/cart/cartSlice.js";

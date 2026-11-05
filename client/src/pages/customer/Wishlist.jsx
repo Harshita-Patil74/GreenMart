@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import { fetchWishlist } from "../../features/wishlist/wishlistSlice.js";
+import ErrorState from "../../components/common/ErrorState.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import NextButton from "../../components/common/NextButton.jsx";
 

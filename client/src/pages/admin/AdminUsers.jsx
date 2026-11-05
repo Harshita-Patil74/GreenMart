@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import adminApi from "../../api/adminApi";
 import BackButton from "../../components/common/BackButton.jsx";
+import ErrorState from "../../components/common/ErrorState.jsx";
 
 const SIZE = 10;
 export default function AdminUsers() {
