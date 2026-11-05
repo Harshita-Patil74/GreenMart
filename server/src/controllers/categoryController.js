@@ -45,15 +45,18 @@ exports.update = asyncHandler(async (req, res) => {
   }
   name = String(name).trim();
   const icon = sanitizeIcon(req.body.icon);
-  const existing = await Category.findOne({
-    _id: { $ne: req.params.id },
-    name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "i") },
-  });
-  if (existing) {
-    return res.status(409).json({ message: "A category with this name already exists" });
-  }
   const category = await Category.findById(req.params.id);
   if (!category) return res.status(404).json({ message: "Category not found" });
+  // Only check for duplicate names when the name actually changed
+  if (name !== category.name) {
+    const existing = await Category.findOne({
+      _id: { $ne: req.params.id },
+      name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "i") },
+    });
+    if (existing) {
+      return res.status(409).json({ message: "A category with this name already exists" });
+    }
+  }
   const oldName = category.name;
   const updated = await Category.findByIdAndUpdate(req.params.id, { name, icon }, { new: true });
   // Safely update all products using the old category name to the new name
