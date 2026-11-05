@@ -42,6 +42,6 @@ describe("MongoDB startup configuration", () => {
     const userIndexes = await User.collection.indexes();
     const productIndexes = await Product.collection.indexes();
     expect(userIndexes.find((index) => index.name === "email_1").unique).toBe(true);
-    expect(productIndexes.some((index) => index.name === "name_text_description_text")).toBe(true);
+    expect(productIndexes.some((index) => index.name === "name_text_description_text_category_text")).toBe(true);
   });
 });
