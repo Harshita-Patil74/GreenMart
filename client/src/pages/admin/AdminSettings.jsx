@@ -86,8 +86,8 @@ export default function AdminSettings(){
   };
 
   const rename=async(category)=>{
-    const edit=edits[category._id]||{name:category.name, icon:category.icon};
-    const name=edit.name.trim();
+    const edit={ name: category.name, icon: category.icon||DEFAULT_ICON_KEY, ...(edits[category._id]||{}) };
+    const name=(edit.name||category.name).trim();
     if(!name||name===category.name&&edit.icon===category.icon)return;
     setSaving(true);
     setError(null);
@@ -200,7 +200,7 @@ export default function AdminSettings(){
             </form>
             <div className="mt-3 divide-y">
               {categories.map(category=>{
-                const edit=edits[category._id]||{name:category.name, icon:category.icon||DEFAULT_ICON_KEY};
+                const edit={ name: category.name, icon: category.icon||DEFAULT_ICON_KEY, ...(edits[category._id]||{}) };
                 return (
                   <div key={category._id} className="flex items-center gap-2 py-2">
                     <input aria-label={`Category name ${category.name}`} value={edit.name} onChange={e=>setEdits(items=>({...items,[category._id]:{...items[category._id],name:e.target.value}}))} className="h-8 min-w-0 flex-1 rounded border px-2 text-xs"/>
