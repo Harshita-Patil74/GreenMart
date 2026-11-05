@@ -32,6 +32,21 @@ import { getImageUrl } from "../../utils/imageUrl.js";
 
 const HERO_IMAGE = "/images/banners/hero-basket.jpg";
 
+// Deduplicate items by stable _id, preserving first occurrence order
+function dedupeById(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const id = item._id || item.id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+// Minimum unique items required for infinite triple-copy carousel.
+// Below this threshold, duplicates would be visible immediately on wide screens.
+const MIN_ITEMS_FOR_INFINITE = 5;
+
 export default function CustomerDashboard() {
   const dispatch = useDispatch();
   const { user, token } = useSelector((state) => state.auth);
@@ -54,7 +69,7 @@ export default function CustomerDashboard() {
     setFeaturedError(null);
     try {
       const { data } = await productApi.storefront({ limit: 5, inStock: "true" });
-      setFeatured(Array.isArray(data?.items) ? data.items : []);
+      setFeatured(dedupeById(Array.isArray(data?.items) ? data.items : []));
     } catch (requestError) {
       setFeaturedError(requestError?.message || "Couldn't load recommended products.");
       setFeatured([]);
@@ -82,8 +97,8 @@ export default function CustomerDashboard() {
     setOffersError("");
     try {
       const { data } = await offerApi.list();
-      setActiveOffers(Array.isArray(data?.active) ? data.active : []);
-      setUpcomingOffers(Array.isArray(data?.upcoming) ? data.upcoming : []);
+      setActiveOffers(dedupeById(Array.isArray(data?.active) ? data.active : []));
+      setUpcomingOffers(dedupeById(Array.isArray(data?.upcoming) ? data.upcoming : []));
       setServerTime(data.serverTime);
     } catch (requestError) {
       setActiveOffers([]);
@@ -118,6 +133,9 @@ export default function CustomerDashboard() {
 
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
+  const activeOffersInfinite = activeOffers.length >= MIN_ITEMS_FOR_INFINITE;
+  const upcomingOffersInfinite = upcomingOffers.length >= MIN_ITEMS_FOR_INFINITE;
+  const featuredInfinite = featured.length >= MIN_ITEMS_FOR_INFINITE;
 
   return (
     <div className="space-y-4 pb-4 sm:pb-6 lg:pb-8">
@@ -234,7 +252,7 @@ export default function CustomerDashboard() {
               <div>
                 <h3 className="text-[10px] font-semibold text-[#16803C] mb-2 uppercase tracking-wider">Active Offers</h3>
                 {activeOffers.length ? (
-                  <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+                  <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160} infinite={activeOffersInfinite}>
                     {activeOffers.map((offer) => (
                       <DashboardOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
                     ))}
@@ -247,7 +265,7 @@ export default function CustomerDashboard() {
               <div>
                 <h3 className="text-[10px] font-semibold text-[#C2410C] mb-2 uppercase tracking-wider">Coming Soon</h3>
                 {upcomingOffers.length ? (
-                  <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160}>
+                  <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160} infinite={upcomingOffersInfinite}>
                     {upcomingOffers.map((offer) => (
                       <DashboardOfferCard key={offer._id} offer={offer} upcoming serverTime={serverTime} />
                     ))}
@@ -285,7 +303,7 @@ export default function CustomerDashboard() {
         >
           {featuredLoading ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">{[1, 2, 3, 4, 5].map((key) => <div key={key} className="h-36 animate-pulse rounded-lg bg-gray-50" />)}</div>
             : featuredError ? <ErrorState message={featuredError} onRetry={loadFeatured} />
-            : featured.length ? <ContinuousMarquee speed={40} gap={20} itemWidth={200} minItemWidth={150}>
+            : featured.length ? <ContinuousMarquee speed={40} gap={20} itemWidth={200} minItemWidth={150} infinite={featuredInfinite}>
               {featured.map((product) => <ProductCard key={product._id} product={product} compact />)}
             </ContinuousMarquee>
               : <p className="rounded-lg bg-gray-50 p-5 text-center text-xs text-gray-500">No products are available right now.</p>}

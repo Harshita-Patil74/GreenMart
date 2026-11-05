@@ -239,4 +239,56 @@ describe("ContinuousMarquee", () => {
     expect(hasTestId("label-1")).toBe(true);
     expect(hasTestId("label-2")).toBe(true);
   });
+
+  // Regression: finite mode (infinite={false}) renders unique items only once
+  // when there are too few items for infinite scrolling
+  it("finite mode renders each card exactly once (no triple copies)", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(3)}
+      </ContinuousMarquee>
+    );
+    // Each label should appear exactly once (not 3x as in infinite mode)
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+    expect(screen.getAllByTestId("label-1").length).toBe(1);
+    expect(screen.getAllByTestId("label-2").length).toBe(1);
+  });
+
+  // Regression: infinite mode (default) renders triple copies for seamless loop
+  it("infinite mode renders triple copies (3x each card)", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(3)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getAllByTestId("label-0").length).toBe(3);
+    expect(screen.getAllByTestId("label-1").length).toBe(3);
+    expect(screen.getAllByTestId("label-2").length).toBe(3);
+  });
+
+  // Regression: finite mode with a single card renders once, no duplicates
+  it("finite mode renders single card exactly once", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160} infinite={false}>
+        {makeCards(1)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+  });
+
+  // Regression: finite mode with empty list renders nothing
+  it("finite mode renders empty state with no children", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160} infinite={false}>
+        {[]}
+      </ContinuousMarquee>
+    );
+    expect(screen.queryAllByTestId("label-0").length).toBe(0);
+  });
 });

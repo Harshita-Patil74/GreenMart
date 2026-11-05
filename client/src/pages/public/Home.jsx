@@ -14,6 +14,21 @@ import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../compo
 
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
+// Deduplicate items by stable _id, preserving first occurrence order
+function dedupeById(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const id = item._id || item.id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+// Minimum unique items required for infinite triple-copy carousel.
+// Below this threshold, duplicates would be visible immediately on wide screens.
+const MIN_ITEMS_FOR_INFINITE = 5;
+
 const CATEGORIES = [
   { name: "Vegetables", icon: Leaf, color: "#2E8B57" },
   { name: "Fruits", icon: Apple, color: "#E76F51" },
@@ -137,7 +152,10 @@ export default function Home() {
   useEffect(() => {
     productApi
       .storefront({ limit: 4 })
-      .then((r) => setProducts(unwrapList(r.data, listDemoProducts({ limit: 4 })).slice(0, 4)))
+      .then((r) => {
+        const fetched = unwrapList(r.data, listDemoProducts({ limit: 4 }));
+        setProducts(dedupeById(fetched).slice(0, 4));
+      })
       .catch(() => setProducts(listDemoProducts({ limit: 4 })));
   }, []);
 
@@ -148,7 +166,7 @@ export default function Home() {
     productApi.storefrontOffers()
       .then(({ data }) => {
         if (!active) return;
-        setOffers(Array.isArray(data?.items) ? data.items : []);
+        setOffers(dedupeById(Array.isArray(data?.items) ? data.items : []));
       })
       .catch((requestError) => {
         if (active) {
@@ -167,7 +185,12 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
-  const eligibleOffers = offers.filter((offer) => offer.effectiveStatus === "Active");
+  const uniqueOffers = dedupeById(offers);
+  const eligibleOffers = uniqueOffers.filter((offer) => offer.effectiveStatus === "Active");
+  const offersInfinite = eligibleOffers.length >= MIN_ITEMS_FOR_INFINITE;
+
+  const uniqueProducts = dedupeById(products);
+  const productsInfinite = uniqueProducts.length >= MIN_ITEMS_FOR_INFINITE;
 
   const features = [
     { title: "100% Organic Products", icon: Leaf },
@@ -266,7 +289,7 @@ export default function Home() {
               ))}
             </div>
           ) : eligibleOffers.length ? (
-            <ContinuousMarquee speed={50} gap={20} itemWidth={260} minItemWidth={170}>
+            <ContinuousMarquee speed={50} gap={20} itemWidth={260} minItemWidth={170} infinite={offersInfinite}>
               {eligibleOffers.map((offer) => (
                 <HomeOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
               ))}
@@ -283,8 +306,8 @@ export default function Home() {
               View All <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Link>
           </div>
-          <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160}>
-            {products.map((p) => (
+          <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160} infinite={productsInfinite}>
+            {uniqueProducts.map((p) => (
               <ProductCard key={p._id || p.id} product={p} />
             ))}
           </ContinuousMarquee>

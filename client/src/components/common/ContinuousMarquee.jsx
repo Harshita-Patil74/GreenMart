@@ -29,6 +29,8 @@ import { motion, useReducedMotion } from "framer-motion";
  *   pauseOnHover  - Pause auto-scroll on mouse enter (default true)
  *   pauseOnFocus  - Pause auto-scroll on keyboard focus (default true)
  *   showControls  - Show Previous/Next arrow buttons (default true)
+ *   infinite      - Use triple-copy seamless loop (default true).
+ *                   When false, renders unique items only once without duplicates.
  */
 export default function ContinuousMarquee({
   children,
@@ -39,6 +41,7 @@ export default function ContinuousMarquee({
   pauseOnHover = true,
   pauseOnFocus = true,
   showControls = true,
+  infinite = true,
 }) {
   const reducedMotion = useReducedMotion();
   const mounted = useRef(true);
@@ -65,8 +68,8 @@ export default function ContinuousMarquee({
   const measureOneCopyWidth = useCallback(() => {
     const track = trackRef.current;
     if (!track) return 0;
-    return Math.floor(track.offsetWidth / 3);
-  }, []);
+    return infinite ? Math.floor(track.offsetWidth / 3) : track.offsetWidth;
+  }, [infinite]);
 
   const setScrollPosition = useCallback((position, smooth = false) => {
     const vp = viewportRef.current;
@@ -94,20 +97,21 @@ export default function ContinuousMarquee({
   const initializeScroll = useCallback(() => {
     const width = measureOneCopyWidth();
     oneCopyWidthRef.current = width;
-    scrollPosRef.current = width;
     const vp = viewportRef.current;
     if (vp && width > 0) {
       vp.style.scrollBehavior = "auto";
-      vp.scrollLeft = width;
+      vp.scrollLeft = infinite ? width : 0;
     }
+    scrollPosRef.current = infinite ? width : 0;
     setLayoutMeasured(true);
-  }, [measureOneCopyWidth]);
+  }, [measureOneCopyWidth, infinite]);
 
   // Auto-scroll animation loop (scrollLeft-based)
+  // Skips entirely in finite mode (infinite={false}) — no duplicates, no auto-scroll.
   useEffect(() => {
     mounted.current = true;
 
-    if (reducedMotion || visibleCount === 0) return;
+    if (!infinite || reducedMotion || visibleCount === 0) return;
 
     initializeScroll();
 
@@ -230,13 +234,18 @@ export default function ContinuousMarquee({
     isPausedRef.current = false;
   };
 
-  // Duplicates are always rendered (when not reduced motion and children exist).
+  // Duplicates are only rendered in infinite mode (triple-copy seamless loop).
+  // In finite mode, unique items render once without duplicates.
   // oneCopyWidthRef.current is measured in the effect after first render;
   // using it here would prevent duplicates from ever rendering because refs
-  // do not trigger re-renders — which is why the carousel appeared static.
-  const showDuplicates = !reducedMotion && visibleCount > 0;
-  const canScrollLeft = layoutMeasured && scrollPosRef.current > oneCopyWidthRef.current + 1;
-  const canScrollRight = layoutMeasured && scrollPosRef.current < 2 * oneCopyWidthRef.current - 1;
+  // do not trigger re-renders.
+  const showDuplicates = infinite && !reducedMotion && visibleCount > 0;
+  
+  // Compute scroll bounds from live DOM for both infinite and finite modes
+  const vp = viewportRef.current;
+  const maxScroll = vp ? Math.max(0, vp.scrollWidth - vp.clientWidth) : 0;
+  const canScrollLeft = layoutMeasured && scrollPosRef.current > 1;
+  const canScrollRight = layoutMeasured && scrollPosRef.current < maxScroll - 1;
 
   const renderCopy = (copyIndex) =>
     childArray.map((child, i) => (
