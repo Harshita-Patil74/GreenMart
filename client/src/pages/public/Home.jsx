@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Leaf, Users, Truck, Recycle, ArrowRight, Mail, Pin } from "lucide-react";
+import { Leaf, Users, Truck, Recycle, ArrowRight, Mail, Pin, Apple, Wheat } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
@@ -15,12 +15,12 @@ import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../compo
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
 const CATEGORIES = [
-  { name: "Vegetables", icon: Pin, color: "bg-emerald-50 text-emerald-800 border-emerald-100" },
-  { name: "Fruits", icon: Mail, color: "bg-orange-50 text-orange-800 border-orange-100" },
-  { name: "Grains & Pulses", icon: Leaf, color: "bg-amber-50 text-amber-800 border-amber-100" },
-  { name: "Dairy & Eggs", icon: Truck, color: "bg-blue-50 text-blue-800 border-blue-100" },
-  { name: "Spices & Herbs", icon: Users, color: "bg-rose-50 text-rose-800 border-rose-100" },
-  { name: "Eco Friendly", icon: Recycle, color: "bg-green-50 text-green-800 border-green-100" },
+  { name: "Vegetables", icon: Leaf, color: "#2E8B57" },
+  { name: "Fruits", icon: Apple, color: "#E76F51" },
+  { name: "Grains & Pulses", icon: Wheat, color: "#D4A017" },
+  { name: "Dairy & Eggs", icon: Truck, color: "#4A90C2" },
+  { name: "Spices & Herbs", icon: Leaf, color: "#D97732" },
+  { name: "Eco Friendly", icon: Recycle, color: "#269B83" },
 ];
 
 function HomeOfferCard({ offer, serverTime }) {
@@ -188,8 +188,6 @@ export default function Home() {
           <div className="relative z-10 h-full flex items-center">
             <div className="max-w-[460px] pl-8 sm:pl-12 pr-6">
               <h1 className="font-heading text-[36px] sm:text-[44px] leading-[1.15] font-bold text-white">
-                Fresh. Organic.
-                <br />
                 Direct from Farmers.
               </h1>
               <p className="mt-3 text-[14px] text-white/90 max-w-[380px]">
@@ -199,7 +197,10 @@ export default function Home() {
                 <button onClick={() => navigate("/shop")} className="gm-btn">
                   Shop Now
                 </button>
-                <button onClick={() => navigate("/about")} className="gm-btn-outline">
+                <button
+                  onClick={() => navigate("/about")}
+                  className="gm-btn-outline text-white border-white hover:bg-white hover:text-[#245C3A]"
+                >
                   Learn More
                 </button>
               </div>
@@ -208,12 +209,12 @@ export default function Home() {
         </div>
 
         <div className="bg-white mb-6 rounded-[16px] border border-[#E2E6DF] shadow-sm p-6 sm:p-8">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {features.map((f, i) => {
               const Icon = f.icon;
               return (
-                <div key={i} className="flex items-center gap-3 text-center sm:text-left">
-                  <div className="w-10 h-10 rounded-[10px] bg-[#EAF2E7] flex items-center justify-center shrink-0 mx-auto sm:mx-0">
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-[10px] bg-[#EAF2E7] flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5 text-[#245C3A]" />
                   </div>
                   <span className="text-[12px] sm:text-[13px] font-medium text-[#26352B] leading-snug">{f.title}</span>
@@ -228,14 +229,19 @@ export default function Home() {
             <h2 className="text-[18px] font-bold text-[#26352B]">Shop by Category</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {CATEGORIES.map((cat, i) => (
-              <Link key={i} to={`/shop?category=${encodeURIComponent(cat.name)}`} className="group flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#E2E6DF] bg-white hover:border-[#245C3A]/40 hover:bg-[#F0F5EE] transition">
-                <div className="w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 {...cat.color}">
-                  <cat.icon className="w-4 h-4" />
-                </div>
-                <span className="text-xs font-semibold text-[#26352B] group-hover:text-[#245C3A]">{cat.name}</span>
-              </Link>
-            ))}
+            {CATEGORIES.map((cat, i) => {
+              const Icon = cat.icon;
+              const softBg = `${cat.color}15`;
+              const borderSoft = `${cat.color}30`;
+              return (
+                <Link key={i} to={`/shop?category=${encodeURIComponent(cat.name)}`} className="group flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#E2E6DF] bg-white transition-all hover:border-transparent hover:shadow-sm">
+                  <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-105`} style={{ backgroundColor: softBg }}>
+                    <Icon className="w-4 h-4" style={{ color: cat.color }} />
+                  </div>
+                  <span className="text-xs font-semibold text-[#26352B] group-hover:text-[#245C3A]">{cat.name}</span>
+                </Link>
+              );
+            })}
           </div>
         </div>
 
