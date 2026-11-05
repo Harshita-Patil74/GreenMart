@@ -21,7 +21,14 @@ export default function FilterPanel({
       .then(({ data }) => {
         if (active) {
           const cats = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
-          setCategoryList(cats.filter((c) => c.isActive !== false));
+          const activeCats = cats.filter((c) => c.isActive !== false);
+          const seen = new Set();
+          setCategoryList(activeCats.filter((c) => {
+            const key = String(c.name).trim().toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }));
         }
       })
       .catch(() => {

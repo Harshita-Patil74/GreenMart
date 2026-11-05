@@ -142,7 +142,7 @@ export default function AdminSettings(){
       </header>
       {error&&<p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
       <nav className="flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm">
-        {["delivery","Product Categories"].map(([id,label])=>(
+        {[["delivery","Delivery Charges"],["categories","Product Categories"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} className={`rounded-lg px-3 py-2 text-xs font-medium ${tab===id?"bg-emerald-50 text-primary":"text-gray-500"}`}>{label}</button>
         ))}
       </nav>
