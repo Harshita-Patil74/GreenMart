@@ -103,6 +103,14 @@
 }
 
 input[type="range"] {
-  accent-color: #16803C;
+  accent-color: #245C3A;
   height: 4px;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }

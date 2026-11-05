@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 /**
@@ -55,6 +55,8 @@ export default function ContinuousMarquee({
   const rafRef = useRef(null);
   let resizeObserver = null;
 
+  const [layoutMeasured, setLayoutMeasured] = useState(false);
+
   const childArray = React.Children.toArray(children);
   const visibleCount = childArray.length;
 
@@ -98,6 +100,7 @@ export default function ContinuousMarquee({
       vp.style.scrollBehavior = "auto";
       vp.scrollLeft = width;
     }
+    setLayoutMeasured(true);
   }, [measureOneCopyWidth]);
 
   // Auto-scroll animation loop (scrollLeft-based)
@@ -227,9 +230,13 @@ export default function ContinuousMarquee({
     isPausedRef.current = false;
   };
 
-  const showDuplicates = !reducedMotion && visibleCount > 0 && oneCopyWidthRef.current > 0;
-  const canScrollLeft = scrollPosRef.current > oneCopyWidthRef.current + 1;
-  const canScrollRight = scrollPosRef.current < 2 * oneCopyWidthRef.current - 1;
+  // Duplicates are always rendered (when not reduced motion and children exist).
+  // oneCopyWidthRef.current is measured in the effect after first render;
+  // using it here would prevent duplicates from ever rendering because refs
+  // do not trigger re-renders — which is why the carousel appeared static.
+  const showDuplicates = !reducedMotion && visibleCount > 0;
+  const canScrollLeft = layoutMeasured && scrollPosRef.current > oneCopyWidthRef.current + 1;
+  const canScrollRight = layoutMeasured && scrollPosRef.current < 2 * oneCopyWidthRef.current - 1;
 
   const renderCopy = (copyIndex) =>
     childArray.map((child, i) => (
@@ -255,23 +262,25 @@ export default function ContinuousMarquee({
     minWidth: 32,
     minHeight: 32,
     borderRadius: "50%",
-    border: "1px solid #E5ECE8",
+    border: "1px solid #E2E6DF",
     background: "#ffffff",
-    color: "#1F2937",
+    color: "#26352B",
     cursor: "pointer",
     fontSize: 18,
     lineHeight: 1,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+    boxShadow: "0 1px 3px rgba(38,53,43,0.06)",
   };
 
   return (
     <div
       ref={viewportRef}
-      className="relative max-w-full overflow-x-hidden"
+      className="relative max-w-full overflow-x-hidden scrollbar-hide"
       style={{
-        overflowX: reducedMotion ? "auto" : "hidden",
-        WebkitOverflowScrolling: reducedMotion ? "touch" : "auto",
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
         touchAction: reducedMotion ? "pan-x pan-y" : "pan-y",
+        scrollbarWidth: "none",
+        msOverflowStyle: "none",
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -299,7 +308,7 @@ export default function ContinuousMarquee({
         {showDuplicates && renderCopy(2)}
       </motion.div>
 
-      {showControls && visibleCount > 0 && (
+      {showControls && visibleCount > 0 && layoutMeasured && (
         <>
           <button
             type="button"

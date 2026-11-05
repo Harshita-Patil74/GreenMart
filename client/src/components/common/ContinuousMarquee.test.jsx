@@ -53,6 +53,10 @@ const makeCards = (n) =>
     <Card key={`card-${i}`} id={i} label={`Product ${i + 1}`} />
   ));
 
+// Duplicates render 3 copies of each card, so use getAllByTestId and check length > 0
+const hasTestId = (id) => screen.getAllByTestId(id).length > 0;
+const hasNoTestId = (id) => screen.queryAllByTestId(id).length === 0;
+
 const setReducedMotion = async (val) => {
   const mod = await vi.importMock("framer-motion");
   if (mod.__setReducedMotion) mod.__setReducedMotion(val);
@@ -69,9 +73,9 @@ describe("ContinuousMarquee", () => {
         {makeCards(3)}
       </ContinuousMarquee>
     );
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
-    expect(screen.getByTestId("label-1")).toBeInTheDocument();
-    expect(screen.getByTestId("label-2")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
+    expect(hasTestId("label-1")).toBe(true);
+    expect(hasTestId("label-2")).toBe(true);
   });
 
   it("renders Previous and Next arrow controls with accessible labels", () => {
@@ -110,7 +114,7 @@ describe("ContinuousMarquee", () => {
         {[]}
       </ContinuousMarquee>
     );
-    expect(screen.queryByTestId("label-0")).not.toBeInTheDocument();
+    expect(hasNoTestId("label-0")).toBe(true);
   });
 
   it("renders a single card gracefully", () => {
@@ -119,7 +123,7 @@ describe("ContinuousMarquee", () => {
         {makeCards(1)}
       </ContinuousMarquee>
     );
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("pauses auto-scroll on mouse enter and resumes on mouse leave", () => {
@@ -131,7 +135,7 @@ describe("ContinuousMarquee", () => {
     const viewport = document.querySelector("[style*='overflow-x']");
     fireEvent.mouseEnter(viewport);
     fireEvent.mouseLeave(viewport);
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("pauses auto-scroll on focus and resumes on blur", () => {
@@ -143,7 +147,7 @@ describe("ContinuousMarquee", () => {
     const viewport = document.querySelector("[style*='overflow-x']");
     fireEvent.focus(viewport);
     fireEvent.blur(viewport);
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("disables auto-scroll with prefers-reduced-motion", async () => {
@@ -153,8 +157,8 @@ describe("ContinuousMarquee", () => {
         {makeCards(5)}
       </ContinuousMarquee>
     );
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
-    expect(screen.getByTestId("label-4")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
+    expect(hasTestId("label-4")).toBe(true);
   });
 
   it("handles mouse drag: pointer down, move, up", () => {
@@ -167,7 +171,7 @@ describe("ContinuousMarquee", () => {
     fireEvent.pointerDown(viewport, { button: 0, clientX: 100 });
     fireEvent.pointerMove(viewport, { button: 0, clientX: 50 });
     fireEvent.pointerUp(viewport, { button: 0 });
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("card links remain clickable", () => {
@@ -176,9 +180,9 @@ describe("ContinuousMarquee", () => {
         {makeCards(3)}
       </ContinuousMarquee>
     );
-    const card = screen.getByTestId("card-0");
+    const card = screen.getAllByTestId("card-0")[0];
     fireEvent.click(card);
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("Next button is present and clickable", () => {
@@ -189,7 +193,7 @@ describe("ContinuousMarquee", () => {
     );
     const next = screen.getByRole("button", { name: "Next" });
     fireEvent.click(next);
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("Previous button is present and clickable", () => {
@@ -200,7 +204,7 @@ describe("ContinuousMarquee", () => {
     );
     const prev = screen.getByRole("button", { name: "Previous" });
     fireEvent.click(prev);
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
   });
 
   it("disables Previous button at start position", () => {
@@ -219,9 +223,9 @@ describe("ContinuousMarquee", () => {
         {makeCards(3)}
       </ContinuousMarquee>
     );
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
-    expect(screen.getByTestId("label-1")).toBeInTheDocument();
-    expect(screen.getByTestId("label-2")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
+    expect(hasTestId("label-1")).toBe(true);
+    expect(hasTestId("label-2")).toBe(true);
   });
 
   it("does not duplicate cards with reduced motion", async () => {
@@ -231,8 +235,8 @@ describe("ContinuousMarquee", () => {
         {makeCards(3)}
       </ContinuousMarquee>
     );
-    expect(screen.getByTestId("label-0")).toBeInTheDocument();
-    expect(screen.getByTestId("label-1")).toBeInTheDocument();
-    expect(screen.getByTestId("label-2")).toBeInTheDocument();
+    expect(hasTestId("label-0")).toBe(true);
+    expect(hasTestId("label-1")).toBe(true);
+    expect(hasTestId("label-2")).toBe(true);
   });
 });
