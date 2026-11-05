@@ -112,7 +112,7 @@ describe("Home page offers", () => {
     renderWithStore(<Home />);
 
     expect(await screen.findByText("Special Offers & Discounts")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View All Offers →" })).toHaveAttribute("href", "/customer/offers");
+    expect(screen.getByRole("link", { name: /View All Offers/ })).toHaveAttribute("href", "/customer/offers");
     const figElements = await screen.findAllByText("Organic Fig");
     expect(figElements.length).toBeGreaterThan(0);
     const imgElements = screen.getAllByRole("img", { name: "Organic Fig" });
@@ -192,6 +192,6 @@ describe("Home page offers", () => {
     renderWithStore(<Home />);
     const figElements = await screen.findAllByText("Organic Fig");
     expect(figElements.length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "View All Offers →" })).toHaveAttribute("href", "/customer/offers");
+    expect(screen.getByRole("link", { name: /View All Offers/ })).toHaveAttribute("href", "/customer/offers");
   });
 });

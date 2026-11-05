@@ -1,42 +1,44 @@
-import React, { useEffect, useRef } from "react";
-import { motion, useReducedMotion, useMotionValue } from "framer-motion";
+import React, { useEffect, useRef, useCallback } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 /**
- * ContinuousMarquee: infinite horizontal marquee for offer and product cards.
+ * ContinuousMarquee: responsive, manually slidable horizontal carousel.
  *
- * Duplicates the card sequence so the list loops seamlessly. Uses Framer
- * Motion's useMotionValue with a requestAnimationFrame loop for smooth
- * linear translateX movement that repeats continuously.
- *
- * Mobile-first responsive: cards use a clamp()-based responsive min-width so
- * roughly 1-2 cards show on mobile, 2-3 on tablets, and many on desktop. The
- * track width is re-measured with a ResizeObserver so the loop adapts to any
- * screen width without forcing fixed desktop card widths on small screens.
+ * Architecture: scrollLeft is the single source of truth for position.
+ *   - Auto-scroll updates scrollLeft via requestAnimationFrame.
+ *   - Manual interaction (drag, touch, trackpad, arrows) updates scrollLeft directly.
+ *   - Triple card copies provide seamless looping without visible jumps.
  *
  * Interaction:
- *   - Pauses on mouse hover and keyboard focus; resumes on leave/blur.
- *   - Pauses while the user touches/drags, switches to overflow-x: auto so the
- *     carousel can be swiped manually, then resumes and snaps back on release.
- *   - With prefers-reduced-motion: no auto movement, overflow-x: auto for
- *     manual horizontal scrolling, no duplicated card nodes.
+ *   - Pauses auto-scroll on mouse hover, keyboard focus, and drag/swipe.
+ *   - Resumes smoothly after interaction ends (position preserved).
+ *   - Previous/Next arrow controls scroll by one card width.
+ *   - Mouse click-and-drag on desktop; finger swipe on mobile; trackpad scroll.
+ *
+ * Accessibility:
+ *   - Arrow buttons have aria-label and are native <button> elements.
+ *   - Duplicated copies are aria-hidden to avoid duplicate screen-reader content.
+ *   - Respects prefers-reduced-motion (no auto-scroll, native scrollable row).
  *
  * Props:
  *   children      - React nodes to scroll (card components)
- *   speed         - Pixels per second (default 60)
+ *   speed         - Auto-scroll pixels per second (default 50)
  *   gap           - Gap between cards in px (default 24)
  *   itemWidth     - Desktop max card width in px (default 220)
  *   minItemWidth  - Mobile min card width in px (default 160)
- *   pauseOnHover  - Pause animation on mouse enter (default true)
- *   pauseOnFocus  - Pause animation on keyboard focus (default true)
+ *   pauseOnHover  - Pause auto-scroll on mouse enter (default true)
+ *   pauseOnFocus  - Pause auto-scroll on keyboard focus (default true)
+ *   showControls  - Show Previous/Next arrow buttons (default true)
  */
 export default function ContinuousMarquee({
   children,
-  speed = 60,
+  speed = 50,
   gap = 24,
   itemWidth = 220,
   minItemWidth = 160,
   pauseOnHover = true,
   pauseOnFocus = true,
+  showControls = true,
 }) {
   const reducedMotion = useReducedMotion();
   const mounted = useRef(true);
@@ -44,58 +46,103 @@ export default function ContinuousMarquee({
   const trackRef = useRef(null);
 
   const isPausedRef = useRef(false);
-  const isTouchingRef = useRef(false);
-  const startTimeRef = useRef(performance.now());
-  const offsetRef = useRef(0);
-  const totalWidthRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const justDraggedRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, scrollLeft: 0 });
+  const lastTimeRef = useRef(0);
+  const scrollPosRef = useRef(0);
+  const oneCopyWidthRef = useRef(0);
   const rafRef = useRef(null);
   let resizeObserver = null;
 
   const childArray = React.Children.toArray(children);
   const visibleCount = childArray.length;
 
-  const x = useMotionValue(0);
-  const showDuplicates = !reducedMotion && visibleCount > 0;
-
   const responsiveMinWidth = `clamp(${minItemWidth}px, 25vw, ${itemWidth}px)`;
 
-  const measureWidth = () => {
-    const node = trackRef.current;
-    if (!node) return 0;
-    const measured = Math.floor(node.offsetWidth / 2);
-    return measured > 0 ? measured : visibleCount * (itemWidth + gap) - gap;
+  const measureOneCopyWidth = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return 0;
+    return Math.floor(track.offsetWidth / 3);
+  }, []);
+
+  const setScrollPosition = useCallback((position, smooth = false) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    vp.style.scrollBehavior = smooth ? "smooth" : "auto";
+    vp.scrollLeft = position;
+    scrollPosRef.current = position;
+  }, []);
+
+  const scrollBy = useCallback((delta, smooth = true) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    vp.style.scrollBehavior = smooth ? "smooth" : "auto";
+    vp.scrollLeft += delta;
+    scrollPosRef.current = vp.scrollLeft;
+  }, []);
+
+  const pause = () => {
+    isPausedRef.current = true;
+  };
+  const resume = () => {
+    isPausedRef.current = false;
   };
 
+  const initializeScroll = useCallback(() => {
+    const width = measureOneCopyWidth();
+    oneCopyWidthRef.current = width;
+    scrollPosRef.current = width;
+    const vp = viewportRef.current;
+    if (vp && width > 0) {
+      vp.style.scrollBehavior = "auto";
+      vp.scrollLeft = width;
+    }
+  }, [measureOneCopyWidth]);
+
+  // Auto-scroll animation loop (scrollLeft-based)
   useEffect(() => {
     mounted.current = true;
 
     if (reducedMotion || visibleCount === 0) return;
 
-    const updateWidth = () => {
-      totalWidthRef.current = measureWidth();
-      if (totalWidthRef.current <= 0) {
-        totalWidthRef.current =
-          visibleCount * (itemWidth + gap) - gap;
-      }
-    };
-    updateWidth();
+    initializeScroll();
 
     if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(updateWidth);
+      resizeObserver = new ResizeObserver(() => {
+        oneCopyWidthRef.current = measureOneCopyWidth();
+      });
       resizeObserver.observe(trackRef.current);
     }
 
-    startTimeRef.current = performance.now();
-    offsetRef.current = 0;
+    lastTimeRef.current = performance.now();
 
     function step(time) {
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        rafRef.current = requestAnimationFrame(step);
+        return;
+      }
       rafRef.current = requestAnimationFrame(step);
-      if (isPausedRef.current || isTouchingRef.current) return;
-      const elapsed = (time - startTimeRef.current) / 1000;
-      const distance =
-        (offsetRef.current + speed * elapsed) % totalWidthRef.current;
-      x.set(-distance);
+      lastTimeRef.current = time;
+
+      if (isPausedRef.current || isDraggingRef.current) return;
+
+      const vp = viewportRef.current;
+      if (!vp) return;
+
+      const delta = (time - lastTimeRef.current) / 1000;
+      let newPos = scrollPosRef.current + speed * delta;
+      const maxPos = 2 * oneCopyWidthRef.current;
+
+      if (newPos >= maxPos && oneCopyWidthRef.current > 0) {
+        newPos = oneCopyWidthRef.current;
+        vp.style.scrollBehavior = "auto";
+        vp.scrollLeft = newPos;
+        scrollPosRef.current = newPos;
+      } else {
+        vp.scrollLeft = newPos;
+        scrollPosRef.current = newPos;
+      }
     }
 
     rafRef.current = requestAnimationFrame(step);
@@ -105,15 +152,60 @@ export default function ContinuousMarquee({
       if (resizeObserver) resizeObserver.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [reducedMotion, visibleCount, speed, itemWidth, gap, x, measureWidth]);
+  }, [reducedMotion, visibleCount, speed, measureOneCopyWidth, initializeScroll]);
 
-  const pause = () => {
+  // Mouse/touch drag handlers
+  const handlePointerDown = (e) => {
+    if (e.button !== 0) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
+    isDraggingRef.current = true;
     isPausedRef.current = true;
-  };
-  const resume = () => {
-    isPausedRef.current = false;
+    justDraggedRef.current = false;
+    dragStartRef.current = { x: e.clientX, scrollLeft: vp.scrollLeft };
+    vp.style.scrollBehavior = "auto";
+    vp.style.userSelect = "none";
+    e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
   };
 
+  const handlePointerMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const delta = dragStartRef.current.x - e.clientX;
+    if (Math.abs(delta) > 4) justDraggedRef.current = true;
+    vp.scrollLeft = dragStartRef.current.scrollLeft + delta;
+    scrollPosRef.current = vp.scrollLeft;
+  };
+
+  const handlePointerUp = () => {
+    const wasDragging = isDraggingRef.current;
+    isDraggingRef.current = false;
+    isPausedRef.current = false;
+    const vp = viewportRef.current;
+    if (vp) vp.style.userSelect = "";
+
+    if (wasDragging && justDraggedRef.current) {
+      justDraggedRef.current = false;
+    }
+  };
+
+  const handlePointerCancel = () => {
+    isDraggingRef.current = false;
+    isPausedRef.current = false;
+    const vp = viewportRef.current;
+    if (vp) vp.style.userSelect = "";
+  };
+
+  const handleClickCapture = (e) => {
+    if (justDraggedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      justDraggedRef.current = false;
+    }
+  };
+
+  // Hover / focus pause
   const handleMouseEnter = () => {
     if (pauseOnHover) pause();
   };
@@ -127,78 +219,108 @@ export default function ContinuousMarquee({
     if (pauseOnFocus) resume();
   };
 
+  // Touch: pause auto-scroll while touching
   const handleTouchStart = () => {
-    isTouchingRef.current = true;
     isPausedRef.current = true;
-    const vp = viewportRef.current;
-    if (vp) {
-      vp.style.overflowX = "auto";
-      vp.style.scrollBehavior = "auto";
-    }
   };
-
   const handleTouchEnd = () => {
-    isTouchingRef.current = false;
     isPausedRef.current = false;
-    const vp = viewportRef.current;
-    if (vp) {
-      vp.style.overflowX = "hidden";
-      vp.scrollLeft = 0;
-    }
-    startTimeRef.current = performance.now();
-    offsetRef.current = 0;
   };
 
-  const handleTouchCancel = handleTouchEnd;
+  const showDuplicates = !reducedMotion && visibleCount > 0 && oneCopyWidthRef.current > 0;
+  const canScrollLeft = scrollPosRef.current > oneCopyWidthRef.current + 1;
+  const canScrollRight = scrollPosRef.current < 2 * oneCopyWidthRef.current - 1;
 
-  const viewportStyle = {
-    overflowX: reducedMotion ? "auto" : "hidden",
-    WebkitOverflowScrolling: reducedMotion ? "touch" : "auto",
-    touchAction: reducedMotion ? "pan-x pan-y" : "pan-y",
+  const renderCopy = (copyIndex) =>
+    childArray.map((child, i) => (
+      <div
+        key={`copy${copyIndex}-${i}`}
+        style={{ minWidth: responsiveMinWidth, flex: "0 0 auto" }}
+        aria-hidden={showDuplicates && copyIndex !== 1 ? "true" : undefined}
+      >
+        {child}
+      </div>
+    ));
+
+  const arrowStyle = {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    zIndex: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 32,
+    height: 32,
+    minWidth: 32,
+    minHeight: 32,
+    borderRadius: "50%",
+    border: "1px solid #E5ECE8",
+    background: "#ffffff",
+    color: "#1F2937",
+    cursor: "pointer",
+    fontSize: 18,
+    lineHeight: 1,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
   };
 
   return (
     <div
       ref={viewportRef}
       className="relative max-w-full overflow-x-hidden"
-      style={viewportStyle}
+      style={{
+        overflowX: reducedMotion ? "auto" : "hidden",
+        WebkitOverflowScrolling: reducedMotion ? "touch" : "auto",
+        touchAction: reducedMotion ? "pan-x pan-y" : "pan-y",
+      }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchCancel}
+      onClickCapture={handleClickCapture}
     >
       <motion.div
         ref={trackRef}
         style={{
-          x: reducedMotion ? 0 : x,
           display: "flex",
           gap,
           alignItems: "center",
         }}
         className="relative flex shrink-0"
       >
-        {childArray.map((child, i) => (
-          <div
-            key={`primary-${i}`}
-            style={{ minWidth: responsiveMinWidth, flex: "0 0 auto" }}
-          >
-            {child}
-          </div>
-        ))}
-        {showDuplicates &&
-          childArray.map((child, i) => (
-            <div
-              key={`duplicate-${i}`}
-              style={{ minWidth: responsiveMinWidth, flex: "0 0 auto" }}
-              aria-hidden="true"
-            >
-              {child}
-            </div>
-          ))}
+        {showDuplicates && renderCopy(0)}
+        {renderCopy(1)}
+        {showDuplicates && renderCopy(2)}
       </motion.div>
+
+      {showControls && visibleCount > 0 && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous"
+            disabled={!canScrollLeft}
+            style={{ ...arrowStyle, left: 8, opacity: canScrollLeft ? 1 : 0.4 }}
+            onClick={() => scrollBy(-oneCopyWidthRef.current || itemWidth, true)}
+          >
+            &#9664;
+          </button>
+          <button
+            type="button"
+            aria-label="Next"
+            disabled={!canScrollRight}
+            style={{ ...arrowStyle, right: 8, opacity: canScrollRight ? 1 : 0.4 }}
+            onClick={() => scrollBy(oneCopyWidthRef.current || itemWidth, true)}
+          >
+            &#9654;
+          </button>
+        </>
+      )}
     </div>
   );
 }
