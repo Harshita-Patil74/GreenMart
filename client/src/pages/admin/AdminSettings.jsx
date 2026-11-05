@@ -5,6 +5,7 @@ import settingsApi from "../../api/settingsApi";
 import adminApi from "../../api/adminApi";
 import categoryApi from "../../api/categoryApi";
 import BackButton from "../../components/common/BackButton.jsx";
+import ErrorState from "../../components/common/ErrorState.jsx";
 
 export default function AdminSettings(){
  const [tab,setTab]=useState("delivery");const [charges,setCharges]=useState({deliveryCharge:"30",expressDeliveryCharge:"4",remoteAreaDeliveryCharge:"7"});const [categories,setCategories]=useState([]);const [newCategory,setNewCategory]=useState("");const [edits,setEdits]=useState({});const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [error,setError]=useState(null);
