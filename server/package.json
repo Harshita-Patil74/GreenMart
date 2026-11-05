@@ -6,6 +6,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
+    "seed:categories": "node src/seed/seed.js --categories",
     "seed:reset": "node src/seed/seed.js --reset",
     "seed:admin": "node src/seed/createAdmin.js",
     "test": "jest --runInBand --forceExit"
