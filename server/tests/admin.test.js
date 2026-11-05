@@ -8,6 +8,7 @@ const User = require("../src/models/User");
 const FarmerProfile = require("../src/models/FarmerProfile");
 const Setting = require("../src/models/Setting");
 const AdminAuditLog = require("../src/models/AdminAuditLog");
+const Category = require("../src/models/Category");
 const { hashToken } = require("../src/utils/tokens");
 const env = require("../src/config/env");
 
@@ -49,6 +50,10 @@ beforeAll(async () => {
     address: "Village Road",
     certification: { verifiedByAdmin: false },
   });
+
+  await Category.create({ name: "Vegetables", isActive: true });
+  await Category.create({ name: "Fruits", isActive: true });
+  await Category.create({ name: "Others", isActive: true });
 
   const adminResponse = await request(app).post("/api/auth/login").send({ email: admin.email, password: "admin-password" });
   adminToken = adminResponse.body.token;

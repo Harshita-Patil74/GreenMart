@@ -16,6 +16,7 @@ const User = require("../src/models/User");
 const FarmerProfile = require("../src/models/FarmerProfile");
 const Product = require("../src/models/Product");
 const Order = require("../src/models/Order");
+const Category = require("../src/models/Category");
 
 let farmerToken;
 let otherFarmerToken;
@@ -69,6 +70,10 @@ beforeAll(async () => {
     { user: outsiderFarmerId, farmName: "Farmer Three Farm", certification: { verifiedByAdmin: true } },
     { user: unapprovedFarmer._id, farmName: "Pending Farm", certification: { verifiedByAdmin: false } },
   ]);
+
+  await Category.create({ name: "Vegetables", isActive: true });
+  await Category.create({ name: "Fruits", isActive: true });
+  await Category.create({ name: "Others", isActive: true });
   const customerId = customer._id;
   const products = await Product.create([
     { name: "Farmer One crop", description: "Fresh seasonal crop from Farmer One", category: "Vegetables", price: 2, farmer: farmer._id },

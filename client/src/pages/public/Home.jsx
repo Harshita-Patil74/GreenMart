@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Leaf, Users, Truck, Recycle, ArrowRight, Mail, Pin, Apple, Wheat } from "lucide-react";
+import { Leaf, Users, Truck, Recycle, ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
-import { listDemoProducts, unwrapList } from "../../data/demoCatalog.js";
+import { unwrapList } from "../../data/demoCatalog.js";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
+import { CATEGORY_STYLE_MAP, getCategoryStyle } from "../../utils/constants.js";
 import ContinuousMarquee from "../../components/common/ContinuousMarquee.jsx";
 import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../components/common/motionVariants.jsx";
+import categoryApi from "../../api/categoryApi";
+import newsletterApi from "../../api/newsletterApi";
 
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
@@ -28,15 +31,6 @@ function dedupeById(items) {
 // Minimum unique items required for infinite triple-copy carousel.
 // Below this threshold, duplicates would be visible immediately on wide screens.
 const MIN_ITEMS_FOR_INFINITE = 5;
-
-const CATEGORIES = [
-  { name: "Vegetables", icon: Leaf, color: "#2E8B57" },
-  { name: "Fruits", icon: Apple, color: "#E76F51" },
-  { name: "Grains & Pulses", icon: Wheat, color: "#D4A017" },
-  { name: "Dairy & Eggs", icon: Truck, color: "#4A90C2" },
-  { name: "Spices & Herbs", icon: Leaf, color: "#D97732" },
-  { name: "Eco Friendly", icon: Recycle, color: "#269B83" },
-];
 
 function HomeOfferCard({ offer, serverTime }) {
   const navigate = useNavigate();
@@ -143,20 +137,83 @@ function HomeOfferCard({ offer, serverTime }) {
 
 export default function Home() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState(listDemoProducts({ limit: 4 }));
+  const [products, setProducts] = useState([]);
   const [offers, setOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(true);
   const [offersError, setOffersError] = useState("");
   const [serverTime, setServerTime] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState(null);
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
+  const [newsletterMessage, setNewsletterMessage] = useState("");
+  const [newsletterMessageType, setNewsletterMessageType] = useState("");
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState(null);
+
+  const handleNewsletterSubmit = async (e) => {
+    e.preventDefault();
+    const email = newsletterEmail.trim();
+    if (!email) return;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setNewsletterMessage("Please enter a valid email address");
+      setNewsletterMessageType("error");
+      return;
+    }
+    setNewsletterLoading(true);
+    setNewsletterMessage("");
+    try {
+      await newsletterApi.subscribe(email);
+      setNewsletterMessage("Successfully subscribed to GreenMart updates!");
+      setNewsletterMessageType("success");
+      setNewsletterEmail("");
+    } catch (err) {
+      const msg = err?.response?.data?.message || "Failed to subscribe. Please try again.";
+      setNewsletterMessage(msg);
+      setNewsletterMessageType("error");
+    } finally {
+      setNewsletterLoading(false);
+    }
+  };
 
   useEffect(() => {
-    productApi
-      .storefront({ limit: 4 })
-      .then((r) => {
-        const fetched = unwrapList(r.data, listDemoProducts({ limit: 4 }));
-        setProducts(dedupeById(fetched).slice(0, 4));
-      })
-      .catch(() => setProducts(listDemoProducts({ limit: 4 })));
+    let active = true;
+    setProductsLoading(true);
+    setProductsError(null);
+
+    const fetchAllProducts = async () => {
+      let page = 1;
+      const limit = 20;
+      let allItems = [];
+      let totalPages = Infinity;
+
+      try {
+        while (page <= totalPages) {
+          const response = await productApi.storefront({ page, limit });
+          const items = unwrapList(response.data, []);
+          allItems = allItems.concat(items);
+          totalPages = response.data?.pages || 1;
+          page++;
+        }
+      } catch (err) {
+        if (active) {
+          setProductsError(err?.message || "Products couldn't be loaded.");
+          setProducts([]);
+          setProductsLoading(false);
+        }
+        return;
+      }
+
+      if (active) {
+        setProducts(dedupeById(allItems));
+        setProductsLoading(false);
+      }
+    };
+
+    fetchAllProducts();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -182,6 +239,29 @@ export default function Home() {
         if (active) setServerTime(data.serverTime);
       })
       .catch(() => { /* server time is optional */ });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    categoryApi.list()
+      .then(({ data }) => {
+        if (active) {
+          const catList = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+          setCategories(catList.filter((c) => c.isActive !== false));
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setCategoriesError(requestError?.message || "Categories couldn't be loaded.");
+          setCategories([]);
+        }
+      })
+      .finally(() => {
+        if (active) setCategoriesLoading(false);
+      });
     return () => { active = false; };
   }, []);
 
@@ -251,21 +331,32 @@ export default function Home() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold text-[#26352B]">Shop by Category</h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {CATEGORIES.map((cat, i) => {
-              const Icon = cat.icon;
-              const softBg = `${cat.color}15`;
-              const borderSoft = `${cat.color}30`;
-              return (
-                <Link key={i} to={`/shop?category=${encodeURIComponent(cat.name)}`} className="group flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#E2E6DF] bg-white transition-all hover:border-transparent hover:shadow-sm">
-                  <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-105`} style={{ backgroundColor: softBg }}>
-                    <Icon className="w-4 h-4" style={{ color: cat.color }} />
-                  </div>
-                  <span className="text-xs font-semibold text-[#26352B] group-hover:text-[#245C3A]">{cat.name}</span>
-                </Link>
-              );
-            })}
-          </div>
+          {categoriesLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#EFEFEC] bg-white animate-pulse" />
+              ))}
+            </div>
+          ) : categories.length ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {categories.map((cat, i) => {
+                const { icon: IconName, color } = getCategoryStyle(cat.name);
+                const Icon = IconName ? require("lucide-react")[IconName] : null;
+                const softBg = `${color}15`;
+                const borderSoft = `${color}30`;
+                return (
+                  <Link key={cat._id || i} to={`/shop?category=${encodeURIComponent(cat.name)}`} className="group flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#E2E6DF] bg-white transition-all hover:border-transparent hover:shadow-sm">
+                    <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-105`} style={{ backgroundColor: softBg }}>
+                      {Icon ? <Icon className="w-4 h-4" style={{ color }} /> : null}
+                    </div>
+                    <span className="text-xs font-semibold text-[#26352B] group-hover:text-[#245C3A]">{cat.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[12px] text-[#68756B] text-center py-4">No categories available.</p>
+          )}
         </div>
 
         <div className="mb-6">
@@ -306,11 +397,26 @@ export default function Home() {
               View All <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Link>
           </div>
-          <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160} infinite={productsInfinite}>
-            {uniqueProducts.map((p) => (
-              <ProductCard key={p._id || p.id} product={p} />
-            ))}
-          </ContinuousMarquee>
+
+          {productsLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-[260px] animate-pulse rounded-[10px] border border-[#EFEFEC] bg-white" />
+              ))}
+            </div>
+          ) : productsError ? (
+            <p role="alert" className="rounded-lg border border-[#FBEDE5] bg-[#FBEDE5] px-3 py-2 text-xs text-[#C2410C] mb-4">
+              {productsError}
+            </p>
+          ) : uniqueProducts.length ? (
+            <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160} infinite={productsInfinite}>
+              {uniqueProducts.map((p) => (
+                <ProductCard key={p._id || p.id} product={p} />
+              ))}
+            </ContinuousMarquee>
+          ) : (
+            <EmptyState text="No featured products available right now. Check back soon!" />
+          )}
         </div>
 
         <section className="bg-[#245C3A] rounded-[16px] overflow-hidden">
@@ -324,10 +430,28 @@ export default function Home() {
             </div>
             <div className="border-l border-[#477A4E]/40 pl-6 sm:pl-8 pt-6 sm:pt-0">
               <p className="text-xs text-[#EAF2E7]/80 mb-3">Stay in touch</p>
-              <form className="flex gap-2">
-                <input type="email" placeholder="Your email" className="flex-1 h-9 rounded-[6px] bg-white/10 border border-white/20 text-white placeholder-[#EAF2E7]/50 focus:outline-none focus:ring-2 focus:ring-white" />
-                <button className="h-9 px-4 rounded-[6px] bg-white text-[#245C3A] text-xs font-semibold hover:bg-[#F0F5EE]">Join</button>
+              <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
+                <input
+                  type="email"
+                  placeholder="Your email"
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  className="flex-1 h-9 rounded-[6px] bg-white/10 border border-white/20 text-white placeholder-[#EAF2E7]/50 focus:outline-none focus:ring-2 focus:ring-white"
+                  disabled={newsletterLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={newsletterLoading}
+                  className="h-9 px-4 rounded-[6px] bg-white text-[#245C3A] text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {newsletterLoading ? "Subscribing..." : "Join"}
+                </button>
               </form>
+              {newsletterMessage && (
+                <p className={`mt-2 text-xs ${newsletterMessageType === "success" ? "text-[#16803C] bg-[#EAF2E7] px-3 py-2 rounded-md" : "text-[#C2410C] bg-[#FBEDE5] px-3 py-2 rounded-md"}`}>
+                  {newsletterMessage}
+                </p>
+              )}
             </div>
           </div>
         </section>

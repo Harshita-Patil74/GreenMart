@@ -1,4 +1,5 @@
 const fs = require('fs');
+const Category = require("../models/Category");
 const Product = require("../models/Product");
 const User = require("../models/User");
 const Offer = require("../models/Offer");
@@ -56,7 +57,15 @@ function extractPublicId(secureUrl) {
 async function listProducts(req, res, activeOnly) {
   const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12 } = req.query;
   const q = activeOnly ? { status: "Active" } : {};
-  if (search) q.$text = { $search: search };
+  if (search) {
+    const trimmed = String(search).trim();
+    if (trimmed) {
+      q.$or = [
+        { $text: { $search: trimmed } },
+        { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
+      ];
+    }
+  }
   if (category && category !== "All Products") q.category = category;
   if (minPrice||maxPrice) { q.price = {}; if(minPrice) q.price.$gte=Number(minPrice); if(maxPrice) q.price.$lte=Number(maxPrice); }
   if (inStock === "true") q.stock = { $gt: 0 };
@@ -160,7 +169,11 @@ exports.mine = asyncHandler(async (req,res) => {
   const { search } = req.query;
   const query = { farmer: req.user._id };
   if (search && search.trim()) {
-    query.$text = { $search: search.trim() };
+    const trimmed = String(search).trim();
+    query.$or = [
+      { $text: { $search: trimmed } },
+      { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
+    ];
   }
   const items = await Product.find(query).sort({ createdAt: -1 });
   res.json(items);
@@ -179,6 +192,8 @@ exports.create = asyncHandler(async (req,res) => {
     farmerId = farmer._id;
   }
   if (!req.body.name || !req.body.category || !req.body.description || !String(req.body.description).trim()) return res.status(400).json({ message: "Name, category, and description are required" });
+  const categoryDoc = await Category.findOne({ name: req.body.category, isActive: true });
+  if (!categoryDoc) return res.status(400).json({ message: `Category "${req.body.category}" is not active or does not exist` });
   const data = {
     name: req.body.name,
     description: String(req.body.description).trim(),
@@ -242,6 +257,10 @@ exports.update = asyncHandler(async (req,res) => {
   if (req.user.role !== "admin" && String(p.farmer) !== String(req.user._id)) return res.status(403).json({ message: "Forbidden" });
   if (req.body.status !== undefined && !["Active", "Inactive"].includes(req.body.status)) {
     return res.status(400).json({ message: "Status must be Active or Inactive" });
+  }
+  if (req.body.category !== undefined) {
+    const categoryDoc = await Category.findOne({ name: req.body.category, isActive: true });
+    if (!categoryDoc) return res.status(400).json({ message: `Category "${req.body.category}" is not active or does not exist` });
   }
   if (req.body.description !== undefined) {
     const desc = String(req.body.description).trim();

@@ -9,6 +9,12 @@ import { motion, useReducedMotion } from "framer-motion";
  *   - Manual interaction (drag, touch, trackpad, arrows) updates scrollLeft directly.
  *   - Triple card copies provide seamless looping without visible jumps.
  *
+ * Structure:
+ *   - Outer wrapper: position: relative (contains arrows positioned absolutely)
+ *   - Viewport: overflow-x: auto (scrolling container, separate element)
+ *   - Track: inside viewport (moving content)
+ *   - Arrows: siblings of track inside outer wrapper (absolute, fixed during scroll)
+ *
  * Interaction:
  *   - Pauses auto-scroll on mouse hover, keyboard focus, and drag/swipe.
  *   - Resumes smoothly after interaction ends (position preserved).
@@ -266,7 +272,7 @@ export default function ContinuousMarquee({
   // Duplicates are only rendered when effectively infinite (triple-copy seamless loop).
   // In finite mode, unique items render once without duplicates.
   const showDuplicates = effectiveInfinite && !reducedMotion && visibleCount > 0;
-  
+
   // Compute scroll bounds from live DOM for both infinite and finite modes
   const vp = viewportRef.current;
   const maxScroll = vp ? Math.max(0, vp.scrollWidth - vp.clientWidth) : 0;
@@ -307,41 +313,43 @@ export default function ContinuousMarquee({
   };
 
   return (
-    <div
-      ref={viewportRef}
-      className="relative max-w-full pl-3 sm:px-6 pr-3 sm:pr-6 scrollbar-hide"
-      style={{
-        overflowX: "auto",
-        WebkitOverflowScrolling: "touch",
-        touchAction: reducedMotion ? "pan-x pan-y" : "pan-y",
-        scrollbarWidth: "none",
-        msOverflowStyle: "none",
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onClickCapture={handleClickCapture}
-    >
-      <motion.div
-        ref={trackRef}
+    <div className="relative max-w-full scrollbar-hide">
+      <div
+        ref={viewportRef}
+        className="pl-3 sm:px-6 pr-3 sm:pr-6"
         style={{
-          display: "flex",
-          gap,
-          alignItems: "center",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          touchAction: reducedMotion ? "pan-x pan-y" : "pan-y",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
         }}
-        className="relative flex shrink-0"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onClickCapture={handleClickCapture}
       >
-        {showDuplicates && renderCopy(0)}
-        {renderCopy(1)}
-        {showDuplicates && renderCopy(2)}
-      </motion.div>
+        <motion.div
+          ref={trackRef}
+          style={{
+            display: "flex",
+            gap,
+            alignItems: "center",
+          }}
+          className="relative flex shrink-0"
+        >
+          {showDuplicates && renderCopy(0)}
+          {renderCopy(1)}
+          {showDuplicates && renderCopy(2)}
+        </motion.div>
+      </div>
 
       {showControls && visibleCount > 0 && layoutMeasured && (
         <>
@@ -349,7 +357,7 @@ export default function ContinuousMarquee({
             type="button"
             aria-label="Previous"
             disabled={!canScrollLeft}
-            style={{ ...arrowStyle, left: 8, opacity: canScrollLeft ? 1 : 0.4 }}
+            style={{ ...arrowStyle, left: 0, opacity: canScrollLeft ? 1 : 0.4 }}
             onClick={() => scrollBy(-itemWidth, true)}
           >
             &#9664;
@@ -358,7 +366,7 @@ export default function ContinuousMarquee({
             type="button"
             aria-label="Next"
             disabled={!canScrollRight}
-            style={{ ...arrowStyle, right: 8, opacity: canScrollRight ? 1 : 0.4 }}
+            style={{ ...arrowStyle, right: 0, opacity: canScrollRight ? 1 : 0.4 }}
             onClick={() => scrollBy(itemWidth, true)}
           >
             &#9654;

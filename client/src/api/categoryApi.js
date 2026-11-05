@@ -5,4 +5,5 @@ export default {
   create: (data) => api.post("/categories", data),
   update: (id, data) => api.put(`/categories/${id}`, data),
   remove: (id) => api.delete(`/categories/${id}`),
+  toggleActive: (id) => api.patch(`/categories/${id}/toggle-active`),
 };

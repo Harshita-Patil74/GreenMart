@@ -3,7 +3,7 @@ import Button from "../common/Button.jsx";
 import Input from "../common/Input.jsx";
 import ImageWithFallback from "../common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
-const CATEGORIES = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others"];
+import categoryApi from "../../api/categoryApi";
 const MAX_IMAGES = 6;
 export default function ProductForm({ initial, onSubmit, isSubmitting = false }) {
   const normalizeDescription = (value) => String(value ?? "").replace(/\\r\\n/g, "\n").replace(/\r/g, "\n");
@@ -14,10 +14,29 @@ export default function ProductForm({ initial, onSubmit, isSubmitting = false })
   const [previewUrls, setPreviewUrls] = useState({});
   const [error, setError] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [categoryList, setCategoryList] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   useEffect(() => {
     if (initial) setForm((prev) => ({ ...prev, ...initial, description: normalizeDescription(initial.description) }));
     if (initial && Array.isArray(initial.images)) setExistingImages(initial.images.filter(Boolean));
   }, [initial]);
+  useEffect(() => {
+    let active = true;
+    categoryApi.list()
+      .then(({ data }) => {
+        if (active) {
+          const cats = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+          setCategoryList(cats.filter((c) => c.isActive !== false));
+        }
+      })
+      .catch(() => {
+        if (active) setCategoryList([]);
+      })
+      .finally(() => {
+        if (active) setCategoriesLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
   const totalImageCount = existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).length + newFiles.length;
   const canAddMore = totalImageCount < MAX_IMAGES;
   const handleFileChange = useCallback((e) => {
@@ -83,10 +102,20 @@ export default function ProductForm({ initial, onSubmit, isSubmitting = false })
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Category</label>
-        <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required disabled={isSubmitting}>
-          <option value="">Select category</option>
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        {categoriesLoading ? (
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={isSubmitting} disabled>
+            <option value="">Loading categories...</option>
+          </select>
+        ) : categoryList.length ? (
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required disabled={isSubmitting}>
+            <option value="">Select category</option>
+            {categoryList.map((cat) => <option key={cat._id || cat.name} value={cat.name}>{cat.name}</option>)}
+          </select>
+        ) : (
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={isSubmitting} disabled>
+            <option value="">No categories available</option>
+          </select>
+        )}
         {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
       </div>
       <div>

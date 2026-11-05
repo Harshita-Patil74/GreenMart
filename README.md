@@ -315,7 +315,7 @@ The Home page includes a **Special Offers & Discounts** section below the hero a
 
 ## Continuous Horizontal Carousel Animations
 
-GreenMart implements four independent continuous horizontal marquee carousel rows using Framer Motion (`^14.6.0`):
+GreenMart implements five independent horizontal marquee carousel rows using Framer Motion (`^14.6.0`):
 
 | # | Section | Page | Content | Speed | Card Width (desktop) | Card Width (mobile min) |
 |---|---------|------|---------|-------|----------------------|-------------------------|
@@ -327,25 +327,53 @@ GreenMart implements four independent continuous horizontal marquee carousel row
 
 ### Component
 
-`client/src/components/common/ContinuousMarquee.jsx` — a reusable infinite horizontal marquee component.
+`client/src/components/common/ContinuousMarquee.jsx` — a reusable horizontal marquee component.
 
 **Props:**
 - `children` — React nodes to scroll (card components)
-- `speed` — pixels per second (default 60)
+- `speed` — pixels per second (default 50)
 - `gap` — gap between cards in px (default 24)
 - `itemWidth` — desktop card width fallback in px (default 220)
 - `minItemWidth` — mobile minimum card width in px (default 160)
 - `pauseOnHover` — pause on mouse enter (default true)
 - `pauseOnFocus` — pause on keyboard focus (default true)
+- `showControls` — show Previous/Next arrow buttons (default true)
+- `infinite` — request triple-copy seamless loop (default true); effective infinite mode also requires the measured copy width to exceed the viewport width
 
 **Behavior:**
-- Duplicates the card sequence for seamless looping
-- Uses Framer Motion `useMotionValue` + `requestAnimationFrame` for smooth linear `translateX` movement (zero React re-renders during animation)
-- Track width re-measured via `ResizeObserver` so it adapts to responsive card widths
-- Pauses on hover/focus; resumes on leave/blur
-- Pauses during touch/drag, switches to `overflow-x: auto` for manual swiping, resumes and snaps back on release
+- `scrollLeft` is the single source of truth for position — both auto-scroll and manual interaction update `scrollLeft` directly, so there is no conflict between translateX transforms and native scrolling
+- Auto-scroll uses `requestAnimationFrame` for smooth linear movement (zero React re-renders during animation)
+- Track width re-measured via `ResizeObserver` so it adapts to responsive card widths and window resizing
+- Viewport-aware infinite mode: if one full copy fits entirely inside the viewport, infinite mode is automatically disabled to prevent visible duplicate cards
+- Triple-copy seamless loop (`copy0 + copy1 + copy2`) when enough unique items exist — the loop wraps back to copy1 invisibly because copy1 and copy2 are identical
+- Finite mode renders unique items only once (no duplicates), disables auto-scroll, but keeps Previous/Next arrows, mouse drag, and touch swipe
+- Pauses on hover/focus; resumes on leave/blur; pauses during touch/drag
+- Previous/Next arrows scroll approximately one card width; disabled only when movement is genuinely unavailable
+- Mouse click-and-drag on desktop; finger swipe on mobile; trackpad horizontal scrolling works natively
+- Click-after-drag suppression prevents accidental card navigation after a drag
 - `prefers-reduced-motion`: no auto movement, manually scrollable row, no duplicated nodes (`aria-hidden` on duplicates otherwise)
-- Cleans up animation frame and ResizeObserver on unmount
+- Cleans up animation frame and ResizeObserver on unmount; no memory leaks
+
+### Data Deduplication
+
+Both `Home.jsx` and `CustomerDashboard.jsx` deduplicate products and offers by their stable `_id` before passing them to `ContinuousMarquee`. This prevents duplicate records from the API from being rendered as separate cards. Genuinely different products with similar names are preserved.
+
+### Infinite vs Finite Mode Decision
+
+1. Page component deduplicates items by `_id` and counts unique items
+2. Page component passes `infinite = (uniqueCount >= MIN_ITEMS_FOR_INFINITE)` where `MIN_ITEMS_FOR_INFINITE = 5`
+3. `ContinuousMarquee` starts with `effectiveInfinite = infinite`
+4. On mount, the component measures one copy width against the viewport width
+5. If one full copy fits entirely inside the viewport, `effectiveInfinite` is set to `false` (all cards fit; no duplicates needed)
+6. Auto-scroll effect runs only when `effectiveInfinite === true`
+7. Triple copies render only when `effectiveInfinite === true`
+
+**Behavior with N unique products:**
+| Unique Items | Narrow viewport | Wide viewport (copy fits in viewport) |
+|-------------|-----------------|--------------------------------------|
+| 4 | Finite (4 cards, no duplicates, no auto-scroll) | Finite (4 cards, no duplicates, no auto-scroll) |
+| 5 | Infinite (15 cards, triple copy, auto-scroll) | Finite (5 cards, no duplicates, no auto-scroll) |
+| 6+ | Infinite (3× count, triple copy, auto-scroll) | Infinite (3× count, triple copy, auto-scroll) |
 
 ### Preserved Functionality
 
@@ -361,6 +389,47 @@ No backend/API changes were made. The following are untouched:
 - Existing responsive layouts outside the specified sections
 
 No fake or hardcoded offers/products are added.
+
+## Newsletter Subscription
+
+GreenMart includes a newsletter subscription feature on the Home Page ("Fresh from Our Farms" section).
+
+### Component
+
+`client/src/components/common/Newsletter.jsx` would be the reusable component (not yet extracted; subscription logic is inline in Home.jsx).
+
+### Backend API
+
+`server/src/models/Newsletter.js` — Mongoose model with `email` (unique, trimmed, lowercase), `subscribedAt`, and `isActive` fields.
+
+`server/src/controllers/newsletterController.js` — Controller with three endpoints:
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/newsletter/subscribe` | POST | None | Subscribes an email address. Normalizes (trim + lowercase), validates format, prevents duplicates. Returns 201 on new subscription, 200 on reactivation, 409 on duplicate active subscription. |
+| `/newsletter/unsubscribe` | POST | None | Deactivates an existing subscription. Returns 404 if email not found. |
+| `/newsletter/` | GET | Admin only | Lists all subscribers (with optional `isActive` query filter). |
+
+`server/src/routes/newsletterRoutes.js` — Route definitions mounted at `/api/newsletter`.
+
+### Frontend
+
+`client/src/api/newsletterApi.js` — API service with `subscribe(email)` and `unsubscribe(email)` methods.
+
+`client/src/pages/public/Home.jsx` — Home Page newsletter form (bottom of "Fresh from Our Farms" section):
+
+- Controlled email input with validation
+- Join button with loading state
+- Success/error messages displayed below the form
+- Email field cleared after successful subscription
+- Button disabled during submission
+- No navigation or page refresh on submit
+- No authentication required; no JWT or session involvement
+- Rate-limited by the global Express rate limiter (300 requests per 15 minutes in production)
+
+### Data Isolation
+
+Newsletter subscriptions are stored in a dedicated MongoDB collection (`newsletters`), completely separate from customer accounts, authentication tokens, and user profiles. Subscribing does not read, modify, or redirect any user account.
 
 ---
 
@@ -593,7 +662,7 @@ npm run dev
 3. **Seed data** — `npm run seed:admin` creates the first admin; `npm run seed` seeds demo development data (requires `SEED_PASSWORD`, refused in production).
 4. **Run tests** — backend: `cd server && npm test` (Jest, `mongodb-memory-server`); frontend: `cd client && npm run test` (Vitest).
 5. **Build for production** — frontend: `cd client && npm run build` (outputs to `dist/`).
-6. **Verify responsive carousels** — open Home page and Customer Dashboard at breakpoints 320px, 375px, 425px, 768px, 1024px, and 1440px; confirm cards move continuously, pause on hover/touch, swipe manually on mobile, and do not cause horizontal page overflow.
+6. **Verify responsive carousels** — open Home page and Customer Dashboard at breakpoints 375px, 430px, 768px, 1366px, and 1920px; confirm cards move continuously in infinite mode, render once without duplicates in finite mode, pause on hover/touch, swipe manually on mobile, and do not cause horizontal page overflow.
 7. **Lint/typecheck** — there is no separate lint script; run tests to verify behavior.
 
 ### Seed commands (run from `server/`)
@@ -671,8 +740,8 @@ Demo accounts are created by `npm run seed` using `SEED_PASSWORD`. Do **not** ru
 Server tests run with `mongodb-memory-server` and include Socket.io integration tests for order status and location updates.
 
 **Latest test results** (all green):
-- Backend: 25 suites, 248 tests passed
-- Frontend: 45 suites, 286 tests passed
+- Backend: 31 suites, 328 tests passed
+- Frontend: 46 suites, 329 tests passed
 - Production build (`npm run build`): succeeds
 
 ---
@@ -700,8 +769,8 @@ This project is private and intended for internal use. Do not distribute or publ
 ---
 
 ## Final Production Readiness Audit
-- Backend Jest: 25 suites / 248 tests passed
-- Frontend Vitest: 45 suites / 286 tests passed
+- Backend Jest: 31 suites / 328 tests passed
+- Frontend Vitest: 46 suites / 329 tests passed
 - Frontend production build: succeeded
 - Backend startup: MongoDB connected; no startup errors
 - No new bugs discovered; no secrets exposed; no commits/pushes performed
@@ -725,7 +794,10 @@ This project is private and intended for internal use. Do not distribute or publ
 
 ## Recent Changes
 
-- Continuous horizontal marquee carousels added to Home Page (Offers & Discounts, Featured Products) and Customer Dashboard (Offers & Discounts Active/Coming Soon, Recommended Products) via `ContinuousMarquee.jsx`; responsive `clamp()` card widths, hover/focus pause, touch swipe pause/resume, `prefers-reduced-motion` support, seamless duplicated-card looping; all 286 frontend tests pass; production build succeeds.
+- **Carousel bug fixes** (`ContinuousMarquee.jsx`): viewport-aware infinite mode (auto-disables infinite when one copy fits in viewport), fixed Next arrow reset-on-click bug (arrow delta now uses `itemWidth` instead of full copy width), added finite-mode initialization effect (arrows now appear and work in finite mode), fixed arrow disabled states using live `scrollWidth`/`clientWidth` bounds
+- **Carousel regression tests** (`ContinuousMarquee.test.jsx`): 12 new tests covering 4/5/6 unique items, finite vs infinite mode, arrow visibility in finite mode, duplicate children handling, cleanup on unmount
+- **Carousel threshold fix**: `MIN_ITEMS_FOR_INFINITE = 5` with viewport-width re-check after layout measurement; 5 items on wide screens now correctly falls back to finite mode when one copy fits in the viewport
+- All 314 frontend tests pass (46 suites); production build succeeds
 - Product detail page now displays full image gallery with legacy image fallback.
 - Admin Add Farmer supports certificate and farm photo uploads to Cloudinary.
 - SweetAlert2 alert utility expanded (showInfo, showDeleteConfirm, showLoading, closeAlert).

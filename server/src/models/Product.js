@@ -20,7 +20,7 @@ const ProductSchema = new mongoose.Schema({
 ProductSchema.virtual("image").get(function () {
   return Array.isArray(this.images) && this.images.length ? this.images[0] : null;
 });
-ProductSchema.index({ name: "text", description: "text" });
+ProductSchema.index({ name: "text", description: "text", category: "text" });
 module.exports = mongoose.model("Product", ProductSchema);
 
 

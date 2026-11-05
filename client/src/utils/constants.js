@@ -6,6 +6,21 @@ export const haversine = (a,b) => {
   return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 };
 export const CATEGORIES = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others"];
+
+export const CATEGORY_STYLE_MAP = {
+  "Vegetables": { icon: "Leaf", color: "#2E8B57" },
+  "Fruits": { icon: "Apple", color: "#E76F51" },
+  "Grains & Pulses": { icon: "Wheat", color: "#D4A017" },
+  "Dairy & Eggs": { icon: "Truck", color: "#4A90C2" },
+  "Spices & Herbs": { icon: "Leaf", color: "#D97732" },
+  "Eco Friendly": { icon: "Recycle", color: "#269B83" },
+  "Others": { icon: "Package", color: "#6B7280" },
+};
+
+export function getCategoryStyle(name) {
+  return CATEGORY_STYLE_MAP[name] || { icon: "Package", color: "#6B7280" };
+}
+
 export const STATUS_COLORS = {
   "Order Placed": "bg-[#DBEAFE] text-[#1D4ED8]",
   "Pending": "bg-[#DBEAFE] text-[#1D4ED8]",

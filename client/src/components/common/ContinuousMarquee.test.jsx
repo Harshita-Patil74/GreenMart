@@ -439,4 +439,48 @@ describe("ContinuousMarquee", () => {
     expect(screen.getAllByTestId("card-a").length).toBe(6); // 2 cards with id "a" × 3 copies
     expect(screen.getAllByTestId("card-b").length).toBe(3); // 1 card × 3 copies
   });
+
+  // Regression: arrow buttons are siblings of the track, not children of it
+  it("arrow buttons are outside the moving track element", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(5)}
+      </ContinuousMarquee>
+    );
+    const track = document.querySelector('[ref="trackRef"]') || document.querySelector("[style*='display: flex']");
+    const prev = screen.getByRole("button", { name: "Previous" });
+    const next = screen.getByRole("button", { name: "Next" });
+    // Arrows should not be inside the track
+    expect(track?.contains(prev)).toBe(false);
+    expect(track?.contains(next)).toBe(false);
+    // Arrows should be in the document
+    expect(prev).toBeInTheDocument();
+    expect(next).toBeInTheDocument();
+  });
+
+  // Regression: arrow buttons use absolute positioning
+  it("arrow buttons use absolute positioning with left/right offsets", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(5)}
+      </ContinuousMarquee>
+    );
+    const prev = screen.getByRole("button", { name: "Previous" });
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(prev).toHaveStyle({ position: "absolute", left: 0 });
+    expect(next).toHaveStyle({ position: "absolute", right: 0 });
+  });
+
+  // Regression: arrow buttons remain in place (not affected by track scrolling)
+  it("arrow buttons have z-index above cards", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(5)}
+      </ContinuousMarquee>
+    );
+    const prev = screen.getByRole("button", { name: "Previous" });
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(prev).toHaveStyle({ zIndex: 10 });
+    expect(next).toHaveStyle({ zIndex: 10 });
+  });
 });

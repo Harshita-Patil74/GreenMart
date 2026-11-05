@@ -7,4 +7,5 @@ router.get("/", c.list);
 router.post("/", auth, role("admin"), c.create);
 router.put("/:id", auth, role("admin"), c.update);
 router.delete("/:id", auth, role("admin"), c.remove);
+router.patch("/:id/toggle-active", auth, role("admin"), c.toggleActive);
 module.exports = router;

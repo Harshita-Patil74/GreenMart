@@ -1,11 +1,16 @@
 import React from "react";
-import { act, screen } from "@testing-library/react";
+import { act, screen, fireEvent } from "@testing-library/react";
 import { renderWithStore } from "../../tests/testUtils.jsx";
 import Home from "./Home.jsx";
 import productApi from "../../api/productApi.js";
+import newsletterApi from "../../api/newsletterApi";
 
 vi.mock("../../api/productApi", () => ({
   default: { storefront: vi.fn(), storefrontOffers: vi.fn(), serverTime: vi.fn() },
+}));
+
+vi.mock("../../api/newsletterApi", () => ({
+  default: { subscribe: vi.fn() },
 }));
 
 vi.mock("framer-motion", () => {
@@ -182,8 +187,8 @@ describe("Home page offers", () => {
     productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
     renderWithStore(<Home />);
 
-    await screen.findByText("Featured Products");
-    expect(screen.getAllByText("₹ 60 / kg").length).toBeGreaterThan(0);
+    await screen.findByText("Plain Product");
+    expect(screen.getAllByText(/₹ 60 \/ kg/).length).toBeGreaterThan(0);
     expect(screen.queryByText("OFF")).not.toBeInTheDocument();
   });
 
@@ -193,5 +198,203 @@ describe("Home page offers", () => {
     const figElements = await screen.findAllByText("Organic Fig");
     expect(figElements.length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /View All Offers/ })).toHaveAttribute("href", "/customer/offers");
+  });
+
+  it("fetches all featured products across pages and deduplicates by _id", async () => {
+    productApi.storefront
+      .mockResolvedValueOnce({
+        data: { items: [percentageOffer.product], total: 3, pages: 2 },
+      })
+      .mockResolvedValueOnce({
+        data: { items: [percentageOffer.product], total: 3, pages: 2 },
+      });
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    // Should deduplicate the same product appearing on multiple pages
+    const figElements = await screen.findAllByText("Organic Fig");
+    expect(figElements.length).toBe(1);
+  });
+
+  it("combines paginated product responses correctly", async () => {
+    const product2 = {
+      _id: "product-second",
+      name: "Organic Spinach",
+      price: 40,
+      unit: "kg",
+      stock: 10,
+      images: [],
+      category: "Vegetables",
+    };
+    productApi.storefront
+      .mockResolvedValueOnce({
+        data: { items: [percentageOffer.product], total: 2, pages: 2 },
+      })
+      .mockResolvedValueOnce({
+        data: { items: [product2], total: 2, pages: 2 },
+      });
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    await screen.findByText("Featured Products");
+    expect(screen.getAllByText("Organic Fig").length).toBe(1);
+    expect(screen.getByText("Organic Spinach")).toBeInTheDocument();
+  });
+
+  it("shows loading state for Featured Products", async () => {
+    productApi.storefront.mockReturnValue(new Promise(() => {}));
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    expect(screen.getByText("Featured Products")).toBeInTheDocument();
+  });
+
+  it("shows empty state when no featured products exist", async () => {
+    productApi.storefront.mockResolvedValue({
+      data: { items: [], total: 0, pages: 1 },
+    });
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    expect(await screen.findByText("No featured products available right now. Check back soon!")).toBeInTheDocument();
+  });
+
+  it("shows error state when product API fails", async () => {
+    productApi.storefront.mockRejectedValue(new Error("Products unavailable"));
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    expect(await screen.findByText(/Products unavailable/)).toBeInTheDocument();
+  });
+
+  it("keeps featured products without offers at their normal prices", async () => {
+    productApi.storefront.mockResolvedValue({
+      data: {
+        items: [
+          { ...percentageOffer.product, _id: "product-fig", offer: null },
+          { _id: "product-plain", name: "Plain Product", price: 60, unit: "kg", stock: 5, images: [], offer: null },
+        ],
+        total: 2,
+        pages: 1,
+      },
+    });
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    renderWithStore(<Home />);
+
+    await screen.findByText("Plain Product");
+    expect(screen.getAllByText(/₹ 60 \/ kg/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("OFF")).not.toBeInTheDocument();
+  });
+});
+
+describe("Home page newsletter", () => {
+  const originalPushState = window.history.pushState;
+  const originalLocalStorage = window.localStorage;
+  const originalSessionStorage = window.sessionStorage;
+
+  beforeEach(() => {
+    productApi.storefront.mockResolvedValue({
+      data: { items: [], total: 0, pages: 1 },
+    });
+    productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
+    productApi.serverTime.mockResolvedValue({ data: { serverTime: new Date().toISOString() } });
+    newsletterApi.subscribe.mockResolvedValue({});
+    newsletterApi.subscribe.mockClear();
+    window.history.pushState = vi.fn();
+    Object.defineProperty(window, "localStorage", { value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }, writable: true });
+    Object.defineProperty(window, "sessionStorage", { value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }, writable: true });
+  });
+
+  afterEach(() => {
+    window.history.pushState = originalPushState;
+    Object.defineProperty(window, "localStorage", { value: originalLocalStorage, writable: true });
+    Object.defineProperty(window, "sessionStorage", { value: originalSessionStorage, writable: true });
+  });
+
+  it("subscribes a visitor with a valid email without logging in", async () => {
+    newsletterApi.subscribe.mockResolvedValue({});
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+
+    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    await act(async () => {});
+    expect(newsletterApi.subscribe).toHaveBeenCalledWith("visitor@example.com");
+    expect(screen.getByText("Successfully subscribed to GreenMart updates!")).toBeInTheDocument();
+    expect(emailInput).toHaveValue("");
+  });
+
+  it("rejects an invalid email address", async () => {
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+
+    fireEvent.change(emailInput, { target: { value: "not-an-email" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    await act(async () => {});
+    expect(screen.getByText("Please enter a valid email address")).toBeInTheDocument();
+  });
+
+  it("shows error when email is already subscribed", async () => {
+    newsletterApi.subscribe.mockRejectedValue({ response: { data: { message: "You are already subscribed to GreenMart updates" } } });
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+
+    fireEvent.change(emailInput, { target: { value: "existing@example.com" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    await act(async () => {});
+    expect(screen.getByText("You are already subscribed to GreenMart updates")).toBeInTheDocument();
+  });
+
+  it("shows error message when API fails", async () => {
+    newsletterApi.subscribe.mockRejectedValue(new Error("Network error"));
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+
+    fireEvent.change(emailInput, { target: { value: "fail@example.com" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    await act(async () => {});
+    expect(screen.getByText("Failed to subscribe. Please try again.")).toBeInTheDocument();
+  });
+
+  it("does not redirect when Join is clicked", async () => {
+    newsletterApi.subscribe.mockResolvedValue({});
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+
+    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    await act(async () => {});
+    expect(window.history.pushState).not.toHaveBeenCalled();
+  });
+
+  it("disables Join button during submission", async () => {
+    let resolveSubscribe;
+    newsletterApi.subscribe.mockReturnValue(new Promise((resolve) => { resolveSubscribe = resolve; }));
+    renderWithStore(<Home />);
+
+    const emailInput = screen.getByPlaceholderText("Your email");
+    const joinButton = screen.getByRole("button", { name: "Join" });
+
+    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
+    fireEvent.submit(emailInput.closest("form"));
+
+    expect(joinButton).toHaveAttribute("disabled");
+    expect(joinButton).toHaveTextContent("Subscribing...");
+
+    await act(async () => {
+      resolveSubscribe({});
+    });
+    expect(joinButton).not.toHaveAttribute("disabled");
+    expect(joinButton).toHaveTextContent("Join");
   });
 });

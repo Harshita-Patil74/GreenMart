@@ -1,18 +1,9 @@
-import React from "react";
-
-const CATEGORY_LIST = [
-  "All Products",
-  "Vegetables",
-  "Fruits",
-  "Grains & Pulses",
-  "Dairy & Eggs",
-  "Spices & Herbs",
-  "Eco Friendly",
-  "Others",
-];
+import React, { useEffect, useState } from "react";
+import categoryApi from "../../api/categoryApi";
+import { getCategoryStyle } from "../../utils/constants.js";
 
 export default function FilterPanel({
-  category = "All Products",
+  category = "",
   setCategory,
   inStock = true,
   setInStock,
@@ -21,6 +12,29 @@ export default function FilterPanel({
   maxPrice = 1000,
   setMaxPrice,
 }) {
+  const [categoryList, setCategoryList] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    categoryApi.list()
+      .then(({ data }) => {
+        if (active) {
+          const cats = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+          setCategoryList(cats.filter((c) => c.isActive !== false));
+        }
+      })
+      .catch(() => {
+        if (active) setCategoryList([]);
+      })
+      .finally(() => {
+        if (active) setCategoriesLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const isSelected = (catName) => category === catName || (category === "" && catName === "All Products");
+
   return (
     <div className="bg-white rounded-[14px] border border-[#EEF1EF] shadow-card p-5 flex flex-col gap-6 sticky top-20">
       {/* Categories */}
@@ -29,26 +43,51 @@ export default function FilterPanel({
           Categories
         </h3>
         <div className="flex flex-col gap-1">
-          {CATEGORY_LIST.map((c) => {
-            const isSelected = category === c || (category === "" && c === "All Products");
-            return (
+          {categoriesLoading ? (
+            <div className="flex flex-col gap-1">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <>
               <button
-                key={c}
                 type="button"
-                onClick={() => setCategory(c === "All Products" ? "" : c)}
+                onClick={() => setCategory("")}
                 className={`w-full text-left px-3.5 py-2 rounded-xl text-sm transition font-medium flex items-center justify-between ${
-                  isSelected
+                  isSelected("All Products")
                     ? "bg-emerald-50 text-[#16803C] font-semibold"
                     : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                 }`}
               >
-                <span>{c}</span>
-                {isSelected && (
+                <span>All Products</span>
+                {isSelected("All Products") && (
                   <span className="w-1.5 h-1.5 rounded-full bg-[#16803C]" />
                 )}
               </button>
-            );
-          })}
+              {categoryList.map((cat) => {
+                const { color } = getCategoryStyle(cat.name);
+                const isCatSelected = isSelected(cat.name);
+                return (
+                  <button
+                    key={cat._id || cat.name}
+                    type="button"
+                    onClick={() => setCategory(cat.name)}
+                    className={`w-full text-left px-3.5 py-2 rounded-xl text-sm transition font-medium flex items-center justify-between ${
+                      isCatSelected
+                        ? "bg-emerald-50 text-[#16803C] font-semibold"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    <span style={{ color: isCatSelected ? "#16803C" : "#6B7280" }}>{cat.name}</span>
+                    {isCatSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#16803C]" />
+                    )}
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
       </div>
 
