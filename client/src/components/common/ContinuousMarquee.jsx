@@ -274,7 +274,7 @@ export default function ContinuousMarquee({
   return (
     <div
       ref={viewportRef}
-      className="relative max-w-full overflow-x-hidden scrollbar-hide"
+      className="relative max-w-full pl-3 sm:px-6 pr-3 sm:pr-6 scrollbar-hide"
       style={{
         overflowX: "auto",
         WebkitOverflowScrolling: "touch",
