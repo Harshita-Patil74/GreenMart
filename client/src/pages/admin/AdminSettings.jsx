@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from "react";
-import {Pencil,Plus,Trash2,ToggleRight,ToggleLeft,CheckCircle2,XCircle} from "lucide-react";
+import {Pencil,Plus,Trash2,ToggleRight,ToggleLeft,CheckCircle2,XCircle,User} from "lucide-react";
 import toast from "react-hot-toast";
 import settingsApi from "../../api/settingsApi";
 import adminApi from "../../api/adminApi";
@@ -7,6 +7,7 @@ import categoryApi from "../../api/categoryApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { ICON_ALLOWLIST, DEFAULT_ICON_KEY } from "../../utils/constants.js";
+import useAuth from "../../hooks/useAuth.js";
 
 const ICON_OPTIONS = ICON_ALLOWLIST.map(key => ({ key, label: key.replace(/([A-Z])/g, " $1").trim() }));
 
@@ -20,6 +21,7 @@ export default function AdminSettings(){
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState(null);
+  const { user } = useAuth();
 
   const load=async()=>{
     setLoading(true);
@@ -141,6 +143,15 @@ export default function AdminSettings(){
         <p className="mt-1 text-xs text-gray-500">Configure delivery charges and product categories.</p>
       </header>
       {error&&<p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm mb-4">
+        <div className="flex items-center gap-3 mb-3">
+          <User className="h-5 w-5 text-[#245C3A]" />
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{user?.name || "Admin"}</p>
+            <p className="text-xs text-gray-500 truncate">{user?.email || ""}</p>
+          </div>
+        </div>
+      </section>
       <nav className="flex gap-1 rounded-xl border border-gray-100 bg-white p-1 shadow-sm">
         {[["delivery","Delivery Charges"],["categories","Product Categories"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} className={`rounded-lg px-3 py-2 text-xs font-medium ${tab===id?"bg-emerald-50 text-primary":"text-gray-500"}`}>{label}</button>
