@@ -9,11 +9,11 @@ import { unwrapList } from "../../data/demoCatalog.js";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
-import { CATEGORY_STYLE_MAP, getCategoryStyle } from "../../utils/constants.js";
 import ContinuousMarquee from "../../components/common/ContinuousMarquee.jsx";
 import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../components/common/motionVariants.jsx";
 import categoryApi from "../../api/categoryApi";
 import newsletterApi from "../../api/newsletterApi";
+import CategoryCarousel from "../../components/common/CategoryCarousel.jsx";
 
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
@@ -332,28 +332,13 @@ export default function Home() {
             <h2 className="text-[18px] font-bold text-[#26352B]">Shop by Category</h2>
           </div>
           {categoriesLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="flex gap-4 sm:gap-5 md:gap-6 px-3 sm:px-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#EFEFEC] bg-white animate-pulse" />
+                <div key={i} className="min-w-[120px] sm:min-w-[135px] md:min-w-[150px] flex flex-col items-center gap-2 p-3 rounded-[12px] border border-[#EFEFEC] bg-white animate-pulse" />
               ))}
             </div>
           ) : categories.length ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {categories.map((cat, i) => {
-                const { icon: IconName, color } = getCategoryStyle(cat.name);
-                const Icon = IconName ? require("lucide-react")[IconName] : null;
-                const softBg = `${color}15`;
-                const borderSoft = `${color}30`;
-                return (
-                  <Link key={cat._id || i} to={`/shop?category=${encodeURIComponent(cat.name)}`} className="group flex flex-col items-center gap-2 p-3 rounded-[10px] border border-[#E2E6DF] bg-white transition-all hover:border-transparent hover:shadow-sm">
-                    <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-105`} style={{ backgroundColor: softBg }}>
-                      {Icon ? <Icon className="w-4 h-4" style={{ color }} /> : null}
-                    </div>
-                    <span className="text-xs font-semibold text-[#26352B] group-hover:text-[#245C3A]">{cat.name}</span>
-                  </Link>
-                );
-              })}
-            </div>
+            <CategoryCarousel categories={categories} />
           ) : (
             <p className="text-[12px] text-[#68756B] text-center py-4">No categories available.</p>
           )}

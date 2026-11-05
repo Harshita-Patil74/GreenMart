@@ -30,7 +30,7 @@ if (!process.env.SEED_PASSWORD) {
 async function main() {
   await mongoose.connect(process.env.MONGO_URI);
   // ensure defaults
-  const cats = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others"];
+  const cats = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others","Dry Fruits & Nuts","Seeds & Superfoods","Edible Oils","Honey & Natural Sweeteners","Mushrooms & Specialty Produce","Flours & Flour Products"];
   for (const c of cats) await Category.updateOne({ name: c }, { $setOnInsert: { name: c } }, { upsert: true });
   await Setting.updateOne({}, { $setOnInsert: { deliveryCharge: 30 } }, { upsert: true });
 

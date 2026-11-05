@@ -5,17 +5,68 @@ export const haversine = (a,b) => {
   const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
   return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 };
-export const CATEGORIES = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Others"];
+export const CATEGORIES = ["Vegetables","Fruits","Grains & Pulses","Dairy & Eggs","Spices & Herbs","Eco Friendly","Dry Fruits & Nuts","Seeds & Superfoods","Edible Oils","Honey & Natural Sweeteners","Mushrooms & Specialty Produce","Flours & Flour Products","Others"];
+
+import {
+  Sprout, Apple, Wheat, Milk, Leaf, Recycle, Nut, Vegan, Droplet, Droplets,
+  Cherry, Package, ChefHat, Coffee, Egg, Fish, Flame, Pizza, Sandwich, Soup,
+  Star, TreePine, Wine,
+} from "lucide-react";
+
+export const ICON_ALLOWLIST = [
+  "Sprout", "Apple", "Wheat", "Milk", "Leaf", "Recycle", "Nut", "Vegan",
+  "Droplet", "Droplets", "Cherry", "Package", "ChefHat", "Coffee", "Egg",
+  "Fish", "Flame", "Pizza", "Sandwich", "Soup", "Star", "TreePine", "Wine",
+];
+
+export const ICON_COMPONENT_MAP = {
+  Sprout, Apple, Wheat, Milk, Leaf, Recycle, Nut, Vegan, Droplet, Droplets,
+  Cherry, Package, ChefHat, Coffee, Egg, Fish, Flame, Pizza, Sandwich, Soup,
+  Star, TreePine, Wine,
+};
+
+export const DEFAULT_ICON_KEY = "Package";
+export const ICON_COLOR = "#245C3A";
+
+export function isValidIconKey(key) {
+  return typeof key === "string" && ICON_ALLOWLIST.includes(key);
+}
+
+export function getIconComponent(iconKey) {
+  if (!isValidIconKey(iconKey)) return ICON_COMPONENT_MAP[DEFAULT_ICON_KEY];
+  return ICON_COMPONENT_MAP[iconKey] || ICON_COMPONENT_MAP[DEFAULT_ICON_KEY];
+}
 
 export const CATEGORY_STYLE_MAP = {
-  "Vegetables": { icon: "Leaf", color: "#2E8B57" },
-  "Fruits": { icon: "Apple", color: "#E76F51" },
-  "Grains & Pulses": { icon: "Wheat", color: "#D4A017" },
-  "Dairy & Eggs": { icon: "Truck", color: "#4A90C2" },
-  "Spices & Herbs": { icon: "Leaf", color: "#D97732" },
-  "Eco Friendly": { icon: "Recycle", color: "#269B83" },
+  "Vegetables": { icon: "Sprout", color: "#245C3A" },
+  "Fruits": { icon: "Apple", color: "#245C3A" },
+  "Grains & Pulses": { icon: "Wheat", color: "#245C3A" },
+  "Dairy & Eggs": { icon: "Milk", color: "#245C3A" },
+  "Spices & Herbs": { icon: "Leaf", color: "#245C3A" },
+  "Eco Friendly": { icon: "Recycle", color: "#245C3A" },
+  "Dry Fruits & Nuts": { icon: "Nut", color: "#245C3A" },
+  "Seeds & Superfoods": { icon: "Vegan", color: "#245C3A" },
+  "Edible Oils": { icon: "Droplet", color: "#245C3A" },
+  "Honey & Natural Sweeteners": { icon: "Droplets", color: "#245C3A" },
+  "Mushrooms & Specialty Produce": { icon: "Cherry", color: "#245C3A" },
+  "Flours & Flour Products": { icon: "Wheat", color: "#245C3A" },
   "Others": { icon: "Package", color: "#6B7280" },
 };
+
+export function getDefaultIconKey(name) {
+  const match = CATEGORY_STYLE_MAP[String(name).trim()];
+  return match ? match.icon : DEFAULT_ICON_KEY;
+}
+
+export function resolveIconKey(category) {
+  if (category && category.icon && isValidIconKey(category.icon)) {
+    return category.icon;
+  }
+  if (category && category.name) {
+    return getDefaultIconKey(category.name);
+  }
+  return DEFAULT_ICON_KEY;
+}
 
 export function getCategoryStyle(name) {
   return CATEGORY_STYLE_MAP[name] || { icon: "Package", color: "#6B7280" };

@@ -2,6 +2,20 @@ const Category = require("../models/Category");
 const Product = require("../models/Product");
 const { asyncHandler } = require("../utils/asyncHandler");
 
+const ICON_ALLOWLIST = new Set([
+  "Sprout", "Apple", "Wheat", "Milk", "Leaf", "Recycle", "Nut", "Vegan",
+  "Droplet", "Droplets", "Cherry", "Package", "ChefHat", "Coffee", "Egg",
+  "Fish", "Flame", "Pizza", "Sandwich", "Soup", "Star", "TreePine", "Wine",
+]);
+
+function sanitizeIcon(icon) {
+  if (!icon) return undefined;
+  if (typeof icon !== "string") return undefined;
+  const trimmed = icon.trim();
+  if (!trimmed || !ICON_ALLOWLIST.has(trimmed)) return undefined;
+  return trimmed;
+}
+
 exports.list = asyncHandler(async (req, res) => {
   const isAdmin = req.user && req.user.role === "admin";
   const query = isAdmin ? {} : { isActive: true };
@@ -15,11 +29,12 @@ exports.create = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Category name is required" });
   }
   name = String(name).trim();
+  const icon = sanitizeIcon(req.body.icon);
   const existing = await Category.findOne({ name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "i") } });
   if (existing) {
     return res.status(409).json({ message: "A category with this name already exists" });
   }
-  const category = await Category.create({ name, isActive: true });
+  const category = await Category.create({ name, icon, isActive: true });
   res.status(201).json(category);
 });
 
@@ -29,6 +44,7 @@ exports.update = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Category name is required" });
   }
   name = String(name).trim();
+  const icon = sanitizeIcon(req.body.icon);
   const existing = await Category.findOne({
     _id: { $ne: req.params.id },
     name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}$`, "i") },
@@ -39,7 +55,7 @@ exports.update = asyncHandler(async (req, res) => {
   const category = await Category.findById(req.params.id);
   if (!category) return res.status(404).json({ message: "Category not found" });
   const oldName = category.name;
-  const updated = await Category.findByIdAndUpdate(req.params.id, { name }, { new: true });
+  const updated = await Category.findByIdAndUpdate(req.params.id, { name, icon }, { new: true });
   // Safely update all products using the old category name to the new name
   if (oldName !== name) {
     await Product.updateMany({ category: oldName }, { $set: { category: name } });
