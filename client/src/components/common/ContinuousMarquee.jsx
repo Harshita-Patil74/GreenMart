@@ -12,7 +12,7 @@ import { motion, useReducedMotion } from "framer-motion";
  * Interaction:
  *   - Pauses auto-scroll on mouse hover, keyboard focus, and drag/swipe.
  *   - Resumes smoothly after interaction ends (position preserved).
- *   - Previous/Next arrow controls scroll by one card width.
+ *   - Previous/Next arrow controls scroll approximately one card width.
  *   - Mouse click-and-drag on desktop; finger swipe on mobile; trackpad scroll.
  *
  * Accessibility:
@@ -29,8 +29,10 @@ import { motion, useReducedMotion } from "framer-motion";
  *   pauseOnHover  - Pause auto-scroll on mouse enter (default true)
  *   pauseOnFocus  - Pause auto-scroll on keyboard focus (default true)
  *   showControls  - Show Previous/Next arrow buttons (default true)
- *   infinite      - Use triple-copy seamless loop (default true).
- *                   When false, renders unique items only once without duplicates.
+ *   infinite      - Request triple-copy seamless loop (default true).
+ *                   Effective infinite mode also requires the measured copy
+ *                   width to exceed the viewport width, otherwise duplicates
+ *                   would be visible immediately.
  */
 export default function ContinuousMarquee({
   children,
@@ -59,6 +61,7 @@ export default function ContinuousMarquee({
   let resizeObserver = null;
 
   const [layoutMeasured, setLayoutMeasured] = useState(false);
+  const [effectiveInfinite, setEffectiveInfinite] = useState(infinite);
 
   const childArray = React.Children.toArray(children);
   const visibleCount = childArray.length;
@@ -68,8 +71,8 @@ export default function ContinuousMarquee({
   const measureOneCopyWidth = useCallback(() => {
     const track = trackRef.current;
     if (!track) return 0;
-    return infinite ? Math.floor(track.offsetWidth / 3) : track.offsetWidth;
-  }, [infinite]);
+    return effectiveInfinite ? Math.floor(track.offsetWidth / 3) : track.offsetWidth;
+  }, [effectiveInfinite]);
 
   const setScrollPosition = useCallback((position, smooth = false) => {
     const vp = viewportRef.current;
@@ -100,18 +103,28 @@ export default function ContinuousMarquee({
     const vp = viewportRef.current;
     if (vp && width > 0) {
       vp.style.scrollBehavior = "auto";
-      vp.scrollLeft = infinite ? width : 0;
+      vp.scrollLeft = effectiveInfinite ? width : 0;
     }
-    scrollPosRef.current = infinite ? width : 0;
+    scrollPosRef.current = effectiveInfinite ? width : 0;
+
+    // Viewport-aware correction: if one full copy fits entirely inside the
+    // viewport, disable infinite mode to avoid showing duplicate cards.
+    if (infinite && width > 0) {
+      const viewportWidth = vp.clientWidth;
+      if (width <= viewportWidth) {
+        setEffectiveInfinite(false);
+      }
+    }
+
     setLayoutMeasured(true);
-  }, [measureOneCopyWidth, infinite]);
+  }, [measureOneCopyWidth, effectiveInfinite, infinite]);
 
   // Auto-scroll animation loop (scrollLeft-based)
-  // Skips entirely in finite mode (infinite={false}) — no duplicates, no auto-scroll.
+  // Skips entirely when not effectively infinite — no duplicates, no auto-scroll.
   useEffect(() => {
     mounted.current = true;
 
-    if (!infinite || reducedMotion || visibleCount === 0) return;
+    if (!effectiveInfinite || reducedMotion || visibleCount === 0) return;
 
     initializeScroll();
 
@@ -159,7 +172,23 @@ export default function ContinuousMarquee({
       if (resizeObserver) resizeObserver.disconnect();
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [reducedMotion, visibleCount, speed, measureOneCopyWidth, initializeScroll]);
+  }, [reducedMotion, visibleCount, speed, measureOneCopyWidth, initializeScroll, effectiveInfinite]);
+
+  // Finite-mode initialization: measure layout and set starting position (scrollLeft = 0).
+  // Needed so arrow buttons and scroll bounds are computed correctly.
+  useEffect(() => {
+    if (effectiveInfinite || reducedMotion || visibleCount === 0) return;
+
+    const vp = viewportRef.current;
+    if (!vp) return;
+
+    const width = trackRef.current ? trackRef.current.offsetWidth : 0;
+    oneCopyWidthRef.current = width;
+    vp.style.scrollBehavior = "auto";
+    vp.scrollLeft = 0;
+    scrollPosRef.current = 0;
+    setLayoutMeasured(true);
+  }, [effectiveInfinite, reducedMotion, visibleCount]);
 
   // Mouse/touch drag handlers
   const handlePointerDown = (e) => {
@@ -234,12 +263,9 @@ export default function ContinuousMarquee({
     isPausedRef.current = false;
   };
 
-  // Duplicates are only rendered in infinite mode (triple-copy seamless loop).
+  // Duplicates are only rendered when effectively infinite (triple-copy seamless loop).
   // In finite mode, unique items render once without duplicates.
-  // oneCopyWidthRef.current is measured in the effect after first render;
-  // using it here would prevent duplicates from ever rendering because refs
-  // do not trigger re-renders.
-  const showDuplicates = infinite && !reducedMotion && visibleCount > 0;
+  const showDuplicates = effectiveInfinite && !reducedMotion && visibleCount > 0;
   
   // Compute scroll bounds from live DOM for both infinite and finite modes
   const vp = viewportRef.current;
@@ -324,7 +350,7 @@ export default function ContinuousMarquee({
             aria-label="Previous"
             disabled={!canScrollLeft}
             style={{ ...arrowStyle, left: 8, opacity: canScrollLeft ? 1 : 0.4 }}
-            onClick={() => scrollBy(-oneCopyWidthRef.current || itemWidth, true)}
+            onClick={() => scrollBy(-itemWidth, true)}
           >
             &#9664;
           </button>
@@ -333,7 +359,7 @@ export default function ContinuousMarquee({
             aria-label="Next"
             disabled={!canScrollRight}
             style={{ ...arrowStyle, right: 8, opacity: canScrollRight ? 1 : 0.4 }}
-            onClick={() => scrollBy(oneCopyWidthRef.current || itemWidth, true)}
+            onClick={() => scrollBy(itemWidth, true)}
           >
             &#9654;
           </button>

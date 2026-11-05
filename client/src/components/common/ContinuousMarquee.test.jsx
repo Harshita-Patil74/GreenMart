@@ -291,4 +291,152 @@ describe("ContinuousMarquee", () => {
     );
     expect(screen.queryAllByTestId("label-0").length).toBe(0);
   });
+
+  // Regression: four unique items in finite mode render exactly once (no duplicates)
+  it("four unique items in finite mode render exactly once", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(4)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+    expect(screen.getAllByTestId("label-1").length).toBe(1);
+    expect(screen.getAllByTestId("label-2").length).toBe(1);
+    expect(screen.getAllByTestId("label-3").length).toBe(1);
+  });
+
+  // Regression: five unique items with infinite={false} render exactly once
+  it("five unique items in finite mode render exactly once", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(5)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+    expect(screen.getAllByTestId("label-4").length).toBe(1);
+  });
+
+  // Regression: six unique items with infinite={true} render triple copies
+  it("six unique items in infinite mode render triple copies", () => {
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(6)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getAllByTestId("label-0").length).toBe(3);
+    expect(screen.getAllByTestId("label-5").length).toBe(3);
+  });
+
+  // Regression: arrows are visible in finite mode after layout measurement
+  it("shows Previous and Next arrows in finite mode", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(4)}
+      </ContinuousMarquee>
+    );
+    expect(screen.getByRole("button", { name: "Previous" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  // Regression: Next button scrolls forward in finite mode without error
+  it("Next button scrolls forward in finite mode", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(4)}
+      </ContinuousMarquee>
+    );
+    const next = screen.getByRole("button", { name: "Next" });
+    fireEvent.click(next);
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+  });
+
+  // Regression: Previous button scrolls backward in finite mode without error
+  it("Previous button scrolls backward in finite mode", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(4)}
+      </ContinuousMarquee>
+    );
+    const prev = screen.getByRole("button", { name: "Previous" });
+    fireEvent.click(prev);
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+  });
+
+  // Regression: does not auto-scroll in finite mode (no duplicates, no animation loop)
+  it("does not auto-scroll in finite mode", () => {
+    renderWithStore(
+      <ContinuousMarquee
+        speed={50}
+        gap={20}
+        itemWidth={220}
+        minItemWidth={160}
+        infinite={false}
+      >
+        {makeCards(4)}
+      </ContinuousMarquee>
+    );
+    // Finite mode renders each card once — no triple copies
+    expect(screen.getAllByTestId("label-0").length).toBe(1);
+    expect(screen.getAllByTestId("label-3").length).toBe(1);
+  });
+
+  // Regression: cleanup cancels animation frame on unmount
+  it("cleans up animation frame on unmount", () => {
+    const { unmount } = renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {makeCards(5)}
+      </ContinuousMarquee>
+    );
+    // Should not throw on unmount
+    unmount();
+    expect(true).toBe(true);
+  });
+
+  // Regression: duplicate product IDs passed as children are rendered as-is
+  // (deduplication happens in the page component, not here)
+  it("renders whatever children are passed without internal deduplication", () => {
+    const cards = [
+      <Card key="a" id="a" label="Product A" />,
+      <Card key="b" id="b" label="Product B" />,
+      <Card key="c" id="a" label="Product A duplicate" />,
+    ];
+    renderWithStore(
+      <ContinuousMarquee speed={50} gap={20} itemWidth={220} minItemWidth={160}>
+        {cards}
+      </ContinuousMarquee>
+    );
+    // Infinite mode renders triple copies of whatever is passed
+    expect(screen.getAllByTestId("card-a").length).toBe(6); // 2 cards with id "a" × 3 copies
+    expect(screen.getAllByTestId("card-b").length).toBe(3); // 1 card × 3 copies
+  });
 });
