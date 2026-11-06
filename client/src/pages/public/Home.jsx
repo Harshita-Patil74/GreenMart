@@ -170,7 +170,12 @@ export default function Home() {
       setNewsletterMessageType("success");
       setNewsletterEmail("");
     } catch (err) {
-      const msg = err?.response?.data?.message || "Unable to subscribe right now. Please try again later.";
+      const status = err?.response?.status;
+      const msg =
+        status === 409
+          ? "This email is already subscribed to GreenMart updates."
+          : err?.response?.data?.message ||
+            "Unable to subscribe right now. Please try again later.";
       setNewsletterMessage(msg);
       setNewsletterMessageType("error");
     } finally {

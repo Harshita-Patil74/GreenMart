@@ -5,6 +5,12 @@ import { MemoryRouter } from "react-router-dom";
 import orderApi from "../../api/orderApi";
 import FarmerOrders from "./FarmerOrders.jsx";
 
+vi.mock("../../utils/alertUtils", () => ({
+  showConfirm: vi.fn().mockResolvedValue({ isConfirmed: true }),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+}));
+
 const order = {
   _id: "order-1",
   orderNumber: "GM-1001",
