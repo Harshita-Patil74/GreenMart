@@ -18,4 +18,3 @@ export default {
   cancelCampaign: (id) => api.post(`/newsletter/admin/campaigns/${id}/cancel`),
   recipients: (id) => api.get(`/newsletter/admin/campaigns/${id}/recipients`),
 };
-EOF
