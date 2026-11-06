@@ -10,7 +10,8 @@ router.get("/unsubscribe/confirm", c.unsubscribeByToken);
 router.post("/unsubscribe/confirm", c.unsubscribeByToken);
 
 router.get("/admin/stats", auth, role("admin"), c.stats);
-router.get("/admin/subscribers", auth, role("admin"), c.list);
+router.get("/admin/products", auth, role("admin"), c.products);
+router.get("/admin/offers", auth, role("admin"), c.offers);
 router.post("/admin/subscribers/:id/unsubscribe", auth, role("admin"), c.subscriberUnsubscribe);
 router.post("/admin/subscribers/:id/reactivate", auth, role("admin"), c.subscriberReactivate);
 

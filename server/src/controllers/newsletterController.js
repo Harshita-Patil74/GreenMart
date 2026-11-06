@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const Newsletter = require("../models/Newsletter");
 const NewsletterCampaign = require("../models/NewsletterCampaign");
 const NewsletterRecipient = require("../models/NewsletterRecipient");
+const Product = require("../models/Product");
+const Offer = require("../models/Offer");
 const { asyncHandler } = require("../utils/asyncHandler");
 const env = require("../config/env");
 const { sendNewsletterEmail, isConfigured, getConfigError } = require("../services/emailService");
@@ -170,11 +172,31 @@ exports.getCampaign = asyncHandler(async (req, res) => {
 
 exports.createCampaign = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
-  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl } = req.body;
+  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds, audienceType, selectedSubscriberIds } = req.body;
   if (!campaignName || !subject) return res.status(400).json({ message: "Campaign name and subject are required" });
   if (!isValidUrl(bannerImage) || !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid URL" });
+
+  const products = selectedProductIds?.length ? await Product.find({ _id: { $in: selectedProductIds }, status: "Active" }) : [];
+  if (selectedProductIds?.length && products.length !== selectedProductIds.length) {
+    return res.status(400).json({ message: "One or more selected products are invalid" });
+  }
+
+  const offers = selectedOfferIds?.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: true }).populate("product") : [];
+  if (selectedOfferIds?.length && offers.length !== selectedOfferIds.length) {
+    return res.status(400).json({ message: "One or more selected offers are invalid" });
+  }
+
+  let selectedSubscribers = [];
+  if (audienceType === "selected" && Array.isArray(selectedSubscriberIds)) {
+    selectedSubscribers = await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true });
+    if (selectedSubscribers.length !== selectedSubscriberIds.length) {
+      return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
+    }
+  }
+
   const campaign = await NewsletterCampaign.create({
     campaignName: String(campaignName).trim(),
+    campaignType: campaignType || "custom",
     subject: String(subject).trim(),
     preheader: String(preheader || "").trim(),
     heading: String(heading || "").trim(),
@@ -182,6 +204,10 @@ exports.createCampaign = asyncHandler(async (req, res) => {
     bannerImage: String(bannerImage || "").trim(),
     buttonText: String(buttonText || "").trim(),
     buttonUrl: String(buttonUrl || "").trim(),
+    selectedProducts: products.map((p) => ({ productId: p._id, snapshot: snapshotProduct(p) })),
+    selectedOffers: offers.map((o) => ({ offerId: o._id, snapshot: snapshotOffer(o) })),
+    audienceType: audienceType === "selected" ? "selected" : "all",
+    selectedSubscribers: selectedSubscribers.map((s) => s._id),
     createdBy: req.user._id,
   });
   res.status(201).json(campaign);
@@ -192,7 +218,7 @@ exports.updateCampaign = asyncHandler(async (req, res) => {
   const campaign = await NewsletterCampaign.findById(req.params.id);
   if (!campaign) return res.status(404).json({ message: "Campaign not found" });
   if (campaign.status !== "draft") return res.status(400).json({ message: "Only drafts can be edited" });
-  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl } = req.body;
+  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds, audienceType, selectedSubscriberIds } = req.body;
   if (bannerImage !== undefined && !isValidUrl(bannerImage)) return res.status(400).json({ message: "Invalid banner URL" });
   if (buttonUrl !== undefined && !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid button URL" });
   const updates = {};
@@ -204,6 +230,27 @@ exports.updateCampaign = asyncHandler(async (req, res) => {
   if (bannerImage !== undefined) updates.bannerImage = String(bannerImage).trim();
   if (buttonText !== undefined) updates.buttonText = String(buttonText).trim();
   if (buttonUrl !== undefined) updates.buttonUrl = String(buttonUrl).trim();
+  if (campaignType !== undefined) updates.campaignType = campaignType;
+  if (audienceType !== undefined) updates.audienceType = audienceType === "selected" ? "selected" : "all";
+
+  if (selectedProductIds !== undefined) {
+    const products = selectedProductIds.length ? await Product.find({ _id: { $in: selectedProductIds }, status: "Active" }) : [];
+    if (products.length !== selectedProductIds.length) return res.status(400).json({ message: "One or more selected products are invalid" });
+    updates.selectedProducts = products.map((p) => ({ productId: p._id, snapshot: snapshotProduct(p) }));
+  }
+  if (selectedOfferIds !== undefined) {
+    const offers = selectedOfferIds.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: true }).populate("product") : [];
+    if (offers.length !== selectedOfferIds.length) return res.status(400).json({ message: "One or more selected offers are invalid" });
+    updates.selectedOffers = offers.map((o) => ({ offerId: o._id, snapshot: snapshotOffer(o) }));
+  }
+  if (audienceType === "selected" && selectedSubscriberIds !== undefined) {
+    const subs = selectedSubscriberIds.length ? await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true }) : [];
+    if (subs.length !== selectedSubscriberIds.length) return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
+    updates.selectedSubscribers = subs.map((s) => s._id);
+  } else if (audienceType === "all") {
+    updates.selectedSubscribers = [];
+  }
+
   const updated = await NewsletterCampaign.findByIdAndUpdate(req.params.id, updates, { new: true });
   res.json(updated);
 });
@@ -259,7 +306,9 @@ exports.sendCampaign = asyncHandler(async (req, res) => {
   if (!campaign) return res.status(404).json({ message: "Campaign not found" });
   if (campaign.status !== "draft") return res.status(400).json({ message: "Campaign already processed" });
 
-  const subscribers = await Newsletter.find({ isActive: true });
+  const subscribers = campaign.audienceType === "selected"
+    ? await Newsletter.find({ _id: { $in: campaign.selectedSubscribers }, isActive: true })
+    : await Newsletter.find({ isActive: true });
   campaign.status = "sending";
   campaign.startedAt = new Date();
   campaign.recipientCount = subscribers.length;
@@ -359,4 +408,61 @@ exports.webhook = asyncHandler(async (req, res) => {
   res.json({ received: true });
 });
 
-module.exports = exports;
+exports.products = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
+  const { search, category } = req.query || {};
+  const query = { status: "Active" };
+  if (category) query.category = category;
+  if (search) query.name = { $regex: String(search), $options: "i" };
+  const products = await Product.find(query).sort({ createdAt: -1 }).limit(100);
+  res.json(products);
+});
+
+exports.offers = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
+  const { search } = req.query || {};
+  const now = new Date();
+  const query = { status: "Active", isActive: true };
+  if (search) query.title = { $regex: String(search), $options: "i" };
+  const offers = await Offer.find(query).populate("product").sort({ createdAt: -1 }).limit(100);
+  const eligible = offers.filter((o) => {
+    const start = o.startAt || o.startDate;
+    const end = o.endAt || o.endDate;
+    return (!start || start <= now) && (!end || end >= now);
+  });
+  res.json(eligible);
+});
+
+function snapshotProduct(p) {
+  return {
+    productId: p._id,
+    name: p.name,
+    price: p.price,
+    image: Array.isArray(p.images) && p.images.length ? p.images[0] : (p.image || null),
+    category: p.category,
+    stock: p.stock,
+    status: p.status,
+  };
+}
+
+function snapshotOffer(o) {
+  const product = o.product || {};
+  const originalPrice = product.price || 0;
+  let discountedPrice = originalPrice;
+  if (o.discountType === "Percentage") {
+    discountedPrice = Math.max(0, originalPrice - (originalPrice * o.discountValue) / 100);
+  } else {
+    discountedPrice = Math.max(0, originalPrice - o.discountValue);
+  }
+  return {
+    offerId: o._id,
+    title: o.title,
+    discountType: o.discountType,
+    discountValue: o.discountValue,
+    originalPrice,
+    discountedPrice: Number(discountedPrice.toFixed(2)),
+    startDate: o.startAt || o.startDate,
+    endDate: o.endAt || o.endDate,
+    product: snapshotProduct(product),
+  };
+}
