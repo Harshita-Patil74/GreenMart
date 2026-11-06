@@ -170,7 +170,7 @@ export default function Home() {
       setNewsletterMessageType("success");
       setNewsletterEmail("");
     } catch (err) {
-      const msg = err?.response?.data?.message || "Failed to subscribe. Please try again.";
+      const msg = err?.response?.data?.message || "Unable to subscribe right now. Please try again later.";
       setNewsletterMessage(msg);
       setNewsletterMessageType("error");
     } finally {

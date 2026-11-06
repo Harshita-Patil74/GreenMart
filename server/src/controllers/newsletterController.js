@@ -4,6 +4,8 @@ const NewsletterCampaign = require("../models/NewsletterCampaign");
 const NewsletterRecipient = require("../models/NewsletterRecipient");
 const Product = require("../models/Product");
 const Offer = require("../models/Offer");
+const User = require("../models/User");
+const { createNotification } = require("../services/notificationService");
 const { asyncHandler } = require("../utils/asyncHandler");
 const env = require("../config/env");
 const { sendNewsletterEmail, isConfigured, getConfigError } = require("../services/emailService");
@@ -84,9 +86,24 @@ exports.subscribe = asyncHandler(async (req, res) => {
       await Newsletter.findByIdAndUpdate(existing._id, { isActive: true, subscribedAt: new Date(), unsubscribedAt: null });
       return res.status(200).json({ message: "Successfully subscribed to GreenMart updates!" });
     }
-    return res.status(409).json({ message: "You are already subscribed to GreenMart updates" });
+    return res.status(409).json({ message: "This email is already subscribed to GreenMart updates." });
   }
-  await Newsletter.create({ email, isActive: true });
+  const sub = await Newsletter.create({ email, isActive: true });
+  // Notify admins
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
+  for (const admin of admins) {
+    await createNotification({
+      userId: admin._id,
+      type: "newsletter_subscriber",
+      category: "newsletter",
+      title: "New Newsletter Subscriber",
+      message: "A new subscriber has joined the GreenMart newsletter.",
+      resourceType: "Newsletter",
+      resourceId: sub._id,
+      actionUrl: "/admin/newsletter",
+      eventKey: `newsletter:subscriber:${sub._id}`,
+    });
+  }
   res.status(201).json({ message: "Successfully subscribed to GreenMart updates!" });
 });
 
@@ -359,6 +376,23 @@ exports.sendCampaign = asyncHandler(async (req, res) => {
   campaign.completedAt = new Date();
   campaign.status = failed === subscribers.length && subscribers.length > 0 ? "failed" : "sent";
   await campaign.save();
+
+  if (failed > 0) {
+    const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
+    for (const admin of admins) {
+      await createNotification({
+        userId: admin._id,
+        type: "newsletter_campaign_failure",
+        category: "newsletter",
+        title: "Newsletter Campaign Processing Failed",
+        message: `Campaign "${campaign.campaignName}" had ${failed} failed recipient(s).`,
+        resourceType: "NewsletterCampaign",
+        resourceId: campaign._id,
+        actionUrl: "/admin/newsletter",
+        eventKey: `newsletter:campaign-failure:${campaign._id}`,
+      });
+    }
+  }
 
   res.json({
     message: "Campaign processed",

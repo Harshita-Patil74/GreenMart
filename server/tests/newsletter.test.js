@@ -90,7 +90,7 @@ describe("Newsletter Controller", () => {
       await subscribe(req, res);
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "You are already subscribed to GreenMart updates" })
+        expect.objectContaining({ message: "This email is already subscribed to GreenMart updates." })
       );
     });
 
