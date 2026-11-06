@@ -361,7 +361,7 @@ describe("Home page newsletter", () => {
     fireEvent.submit(emailInput.closest("form"));
 
     await act(async () => {});
-    expect(screen.getByText("Failed to subscribe. Please try again.")).toBeInTheDocument();
+    expect(screen.getByText("Unable to subscribe right now. Please try again later.")).toBeInTheDocument();
   });
 
   it("does not redirect when Join is clicked", async () => {
@@ -398,3 +398,4 @@ describe("Home page newsletter", () => {
     expect(joinButton).toHaveTextContent("Join");
   });
 });
+
