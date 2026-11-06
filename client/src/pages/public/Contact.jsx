@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import BackButton from "../../components/common/BackButton.jsx";
 import { Mail, Phone, MapPin, Send, MessageSquare } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
+import toast from "react-hot-toast";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -19,18 +22,28 @@ export default function Contact() {
   return (
     <div className="gm-container max-w-4xl mx-auto space-y-10 py-8 pb-16">
       <BackButton fallback="/" />
-      <div className="text-center space-y-3">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="text-center space-y-3"
+      >
         <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-gray-900 tracking-tight">
           Get in Touch
         </h1>
         <p className="text-sm sm:text-base text-gray-500 max-w-xl mx-auto">
           Have a question about organic certification, partnership opportunities, or your order? We’re here to help.
         </p>
-      </div>
+      </motion.div>
 
-      <div className="grid md:grid-cols-2 gap-8 items-start">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid md:grid-cols-2 gap-8 items-start"
+      >
         {/* Contact Info Cards */}
-        <div className="space-y-4">
+        <motion.div variants={staggerItem} initial="hidden" animate="visible" className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.03)] p-6 space-y-4">
             <h3 className="font-heading font-bold text-gray-900 text-base">
               GreenMart Help Desk
@@ -68,10 +81,10 @@ export default function Contact() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Contact Form */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.03)] p-6">
+        <motion.div variants={staggerItem} initial="hidden" animate="visible" className="bg-white rounded-2xl border border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.03)] p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase mb-1">
@@ -124,8 +137,8 @@ export default function Contact() {
               <span>{loading ? "Sending..." : "Send Message"}</span>
             </button>
           </form>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

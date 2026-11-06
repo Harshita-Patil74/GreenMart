@@ -1,6 +1,8 @@
 import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import NextButton from "../../components/common/NextButton.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import { ArrowLeft, ShoppingBag } from "lucide-react";
@@ -61,27 +63,42 @@ export default function Cart() {
   return (
     <div className={`gm-container min-w-0 py-4 sm:py-6 ${hasCustomerMobileNavigation ? "pb-24 lg:pb-16" : "pb-16"}`}>
       <BackButton fallback="/shop" />
-      <div className="mb-4">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="mb-4"
+      >
         <h1 className="text-xl font-heading font-bold text-gray-900">Your Cart</h1>
         <p className="mt-1 text-xs text-gray-500">Review your items before checkout.</p>
-      </div>
+      </motion.div>
       {deliveryError && <p role="alert" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{deliveryError} <button onClick={() => dispatch(fetchDeliveryCharge())} className="font-semibold underline">Retry</button></p>}
       {items.length === 0 ? (
-        <div className="rounded-xl border border-gray-100 bg-white p-10 text-center">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="rounded-xl border border-gray-100 bg-white p-10 text-center"
+        >
           <ShoppingBag className="mx-auto mb-3 h-8 w-8 text-primary" />
           <h2 className="text-sm font-semibold text-gray-900">Your cart is empty</h2>
           <p className="mt-1 text-xs text-gray-500">Browse fresh produce from local farmers.</p>
           <Link to="/shop" className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white">Start Shopping</Link>
-        </div>
+        </motion.div>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-3">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="grid items-start gap-4 lg:grid-cols-3"
+        >
           <div className="space-y-3 lg:col-span-2">
             <CartTable items={itemsWithPending} onUpdate={(id, quantity) => dispatch(updateQuantity({ productId: id, quantity }))} onRemove={(id) => dispatch(removeItem(id))} />
             <Link to="/shop" className="inline-flex items-center gap-2 text-xs font-medium text-primary"><ArrowLeft className="h-4 w-4" />Continue Shopping</Link>
             <div className="mt-2"><NextButton to="/checkout" label="Continue to Checkout" /></div>
           </div>
           <OrderSummary subtotal={subtotal} discount={discount} delivery={deliveryCharge ?? 0} total={total} buttonLabel="Proceed to Checkout" onAction={handleCheckout} loading={deliveryLoading || deliveryCharge == null} />
-        </div>
+        </motion.div>
       )}
     </div>
   );

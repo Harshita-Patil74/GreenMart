@@ -69,8 +69,10 @@ export default function CategoryCarousel({ categories }) {
   const scrollBy = useCallback((delta, smooth = true) => {
     const vp = viewportRef.current;
     if (!vp) return;
-    vp.style.scrollBehavior = smooth ? "smooth" : "auto";
+    pausedRef.current = true;
+    vp.style.scrollBehavior = "auto";
     vp.scrollLeft += delta;
+    setTimeout(() => { pausedRef.current = false; }, 800);
   }, []);
 
   const scrollToStart = useCallback(() => {

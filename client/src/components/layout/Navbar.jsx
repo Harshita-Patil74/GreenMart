@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { ShoppingCart, Heart, Search, User, ChevronDown, LogOut, LayoutDashboard, Truck, MapPin, Bell, Menu, X } from "lucide-react";
+import { motion } from "framer-motion";
+import { dropdownVariants } from "../../animations/variants.js";
 import Logo from "../common/Logo.jsx";
 import { logout } from "../../features/auth/authSlice.js";
 import { fetchCart } from "../../features/cart/cartSlice.js";
@@ -95,7 +97,13 @@ export default function Navbar() {
               {dropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
-                  <div className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 text-sm">
+                  <motion.div
+                    variants={dropdownVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="absolute right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50 text-sm"
+                  >
                     <div className="px-4 py-2 border-b border-gray-100">
                       <p className="font-semibold text-gray-800 truncate">{user?.name || "Guest"}</p>
                       <p className="text-xs text-primary capitalize">{user?.role || "Customer"}</p>
@@ -120,7 +128,7 @@ export default function Navbar() {
                         Login / Register
                       </Link>
                     )}
-                  </div>
+                  </motion.div>
                 </>
               )}
             </div>

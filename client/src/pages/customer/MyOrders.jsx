@@ -4,6 +4,8 @@ import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { formatCurrency } from "../../utils/constants.js";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
@@ -102,18 +104,33 @@ export default function MyOrders() {
   return (
     <div className="space-y-4 pb-12">
       <BackButton fallback="/customer/dashboard" />
-      <div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="space-y-1"
+      >
         <h1 className="text-xl font-heading font-bold text-gray-900">My Orders</h1>
         <p className="mt-1 text-xs text-gray-500">Review your purchases and follow their delivery status.</p>
-      </div>
-      <div className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-1 shadow-sm">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-1 shadow-sm"
+      >
         {statuses.map((item) => (
           <button key={item} onClick={() => setStatus(item)} className={`shrink-0 rounded-lg px-3 py-2 text-[11px] font-medium ${status === item ? "bg-emerald-50 text-primary" : "text-gray-500 hover:bg-gray-50"}`}>
             {item}
           </button>
         ))}
-      </div>
-      <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm"
+      >
         <label className="relative min-w-[180px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
@@ -137,8 +154,13 @@ export default function MyOrders() {
         </label>
         <label className="flex items-center gap-2 text-[10px] text-gray-500">From<input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
         <label className="flex items-center gap-2 text-[10px] text-gray-500">To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
-      </div>
-      <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      </motion.div>
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
+      >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-xs">
             <thead>
@@ -151,12 +173,12 @@ export default function MyOrders() {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100" variants={staggerContainer} initial="hidden" animate="visible">
               {filteredOrders.map((order) => {
                 const items = order.items || [];
                 const itemNames = items.map((item) => item.name).filter(Boolean);
                 return (
-                  <tr key={order._id} className="hover:bg-gray-50/60">
+                  <motion.tr key={order._id} variants={staggerItem} initial="hidden" animate="visible" className="hover:bg-gray-50/60">
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">#{order.orderNumber}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
                     <td className="max-w-[220px] px-4 py-3 text-gray-600">
@@ -189,7 +211,7 @@ export default function MyOrders() {
                         </button>
                       )}
                     </td>
-                  </tr>
+                  </motion.tr>
                 );
               })}
               {filteredOrders.length === 0 && (
@@ -203,7 +225,7 @@ export default function MyOrders() {
             </tbody>
           </table>
         </div>
-      </section>
+      </motion.section>
     </div>
   );
 }

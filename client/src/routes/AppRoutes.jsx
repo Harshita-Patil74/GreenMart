@@ -5,6 +5,7 @@ import DashboardLayout from "../layouts/DashboardLayout.jsx";
 import ProtectedRoute, { RoleRoute } from "../components/routing/ProtectedRoute.jsx";
 
 import Home from "../pages/public/Home.jsx";
+import Unsubscribe from "../pages/public/Unsubscribe.jsx";
 import Shop from "../pages/public/Shop.jsx";
 import ProductDetail from "../pages/public/ProductDetail.jsx";
 import Farmers from "../pages/public/Farmers.jsx";
@@ -30,6 +31,9 @@ import Notifications from "../pages/shared/Notifications.jsx";
 import CustomerDashboard from "../pages/customer/CustomerDashboard.jsx";
 import CustomerOffers from "../pages/customer/CustomerOffers.jsx";
 import MyOrders from "../pages/customer/MyOrders.jsx";
+import MyNewsletters from "../pages/customer/MyNewsletters.jsx";
+import NewsletterDetail from "../pages/customer/NewsletterDetail.jsx";
+import NewsletterPreferences from "../pages/shared/NewsletterPreferences.jsx";
 import Wishlist from "../pages/customer/Wishlist.jsx";
 import Profile from "../pages/customer/Profile.jsx";
 import SavedAddresses from "../pages/customer/SavedAddresses.jsx";
@@ -66,6 +70,7 @@ export default function AppRoutes() {
       {/* Public Pages with Top Navbar matching Image 1 */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<Home />} />
+            <Route path="/newsletter/unsubscribe" element={<Unsubscribe />} />
         <Route path="/product/:id" element={<ProductDetail />} />
         <Route path="/farmers" element={<Farmers />} />
         <Route path="/farmers/:id" element={<FarmerProfile />} />
@@ -102,6 +107,9 @@ export default function AppRoutes() {
           <Route element={<RoleRoute role="customer" />}>
             <Route path="/customer/offers" element={<CustomerOffers />} />
             <Route path="/customer/orders" element={<MyOrders />} />
+            <Route path="/customer/newsletters" element={<MyNewsletters />} />
+            <Route path="/customer/newsletters/:campaignId" element={<NewsletterDetail />} />
+            <Route path="/customer/newsletter-preferences" element={<NewsletterPreferences />} />
             <Route path="/customer/wishlist" element={<Wishlist />} />
             <Route path="/customer/profile" element={<Profile />} />
             <Route path="/customer/addresses" element={<SavedAddresses />} />

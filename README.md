@@ -740,8 +740,8 @@ Demo accounts are created by `npm run seed` using `SEED_PASSWORD`. Do **not** ru
 Server tests run with `mongodb-memory-server` and include Socket.io integration tests for order status and location updates.
 
 **Latest test results** (all green):
-- Backend: 31 suites, 328 tests passed
-- Frontend: 46 suites, 329 tests passed
+- Backend: 30 suites, ~300 tests passed (2 pre-existing environment failures unrelated to this change: mongodb-memory-server disk space, stock-alert notification)
+- Frontend: 46 suites, 326 tests passed
 - Production build (`npm run build`): succeeds
 
 ---
@@ -769,8 +769,8 @@ This project is private and intended for internal use. Do not distribute or publ
 ---
 
 ## Final Production Readiness Audit
-- Backend Jest: 31 suites / 328 tests passed
-- Frontend Vitest: 46 suites / 329 tests passed
+- Backend Jest: 30 suites pass (2 pre-existing environment failures unrelated to this change)
+- Frontend Vitest: 46 suites / 326 tests passed
 - Frontend production build: succeeded
 - Backend startup: MongoDB connected; no startup errors
 - No new bugs discovered; no secrets exposed; no commits/pushes performed
@@ -788,12 +788,56 @@ This project is private and intended for internal use. Do not distribute or publ
 - Product validation fix: stock-only updates no longer blocked by missing legacy product descriptions
 - UI consistency passes: base font 17px, shared layout components, container 1280px, responsive grids.
 - Customer mobile drawer (hamburger menu): shows public links (Home, Shop, Offers, About, Farmers, Contact) followed by customer links (Customer Dashboard, My Orders, Cart, Wishlist, Track Orders, Profile, Notifications, Settings) and Logout; customer login redirects to home page
+
+---
+
+## Recent Bug Fixes (Latest Session)
+
+### Root Cause: Missing Products in Special Offers & Discounts (Home & Customer Dashboard)
+
+**Problem:** The Special Offers & Discounts sections on both the public Home page and Customer Dashboard were not displaying any products. Every offer API returned an empty list.
+
+**Root cause:** `server/src/models/Offer.js` did not declare an `isActive` field, but all three customer-facing offer queries filtered on `isActive: true`:
+- `productController.storefrontOffers` → `GET /api/products/storefront/offers` (public Home page)
+- `customerOfferController.list` → `GET /api/offers/customer` (Customer Dashboard)
+- `newsletterController.customerExclusiveOffers` → `GET /api/newsletter/customer/offers` (subscriber exclusives)
+
+With Mongoose strict mode, `isActive` was never persisted on offer documents, so `isActive: true` matched zero documents and every customer offer API returned an empty list.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `server/src/models/Offer.js` | Added `isActive: { type: Boolean, default: true, index: true }` to the Offer schema |
+| `server/src/services/offerService.js` | `getEffectiveStatus` checks `offer.isActive === false` (not `!offer.isActive`); `getActiveOffers` uses `isActive: { $ne: false }` |
+| `server/src/controllers/customerOfferController.js` | `isActive: { $ne: false }` + excludes `isSubscriberExclusive: true` |
+| `server/src/controllers/productController.js` | `isActive: { $ne: false }` |
+| `server/src/controllers/newsletterController.js` | 3 query sites use `isActive: { $ne: false }` (backward-compatible with existing offers lacking the field) |
+| `client/src/pages/public/Home.jsx` | Added Retry button on offers error state, farmer name on offer cards, `fetchOffers()` with `useRef` cleanup |
+| `client/src/pages/admin/AdminNewsletter.jsx` | Fixed subscribers parsing (`subs.data?.items`); removed farmer/guest from type filter (customer-only) |
+| `client/src/pages/customer/CustomerDashboard.jsx` | `loadExclusiveOffers()` now triggers directly after `loadNewsletterPreferences()` completes |
+| `client/src/pages/customer/NewsletterDetail.jsx` | Fixed `discPct` → `discountPct` crash; unwrapped `{productId, snapshot}` / `{offerId, snapshot}` snapshots so featured product images, names, prices, and discounts render correctly; View Product links guarded against undefined IDs |
+
+### Backward Compatibility
+
+Existing offers in the database that lack the `isActive` field are treated as active (`isActive: { $ne: false }`), so older offers continue to work without migration. Only `isActive: false` explicitly deactivates an offer.
+
+### Verification
+
+- **Backend:** `customerOffers.test.js` 11/11 pass (was 6/11 before fix)
+- **Frontend:** 46 test files / 326 tests pass
+- **Production build:** `vite build` succeeds
+- **Live API:** Public offers return real populated data (product image, name, farmer name, price, discounted price, discount percent)
+- **Public vs subscriber-exclusive:** Remain separate; public offers are never hidden for unsubscribed customers; exclusive offers require an active newsletter subscription
 - **Bug Fix – Customer Farmer Explore blank page**: Fixed `client/src/pages/public/FarmerProfile.jsx` (missing `ErrorState` import, unreachable loading state, async useEffect returning a Promise that React tried to destroy on unmount, missing farmer name/category/description/certification status, and non-active products). Backend `GET /farmers/:id` now populates the farmer `name`, returns `category`/`description`/`certification.verifiedByAdmin`, and returns 404 for invalid or missing farmer IDs. The page now shows the selected farmer's actual details, location map, admin verification status, and only that farmer's approved and active products, with a route back to the farmers listing.
 - **Bug Fix – Customer Notification Centre**: `client/src/pages/shared/Notifications.jsx` now uses backend pagination (`category`/`page`/`limit`) with page reset on category change, displays each notification's category, and keeps mark-all-read, unread counts, empty/loading/error states and Socket.IO real-time updates. `notificationsSlice.fetchNotifications` accepts optional params and normalizes paginated responses. Backend order notifications (`orderConfirmation`, `statusUpdate`) are now tagged with `category: "orders"` so the Orders filter shows order placed/packed/out-for-delivery/delivered notifications; duplicates are still prevented by existing event-key/orderId dedup.
 - **Bug Fix – Farmer Notification Categories empty**: Farmer notifications were saved without a `category` field (e.g. `newOrderFarmer`, `newMessage`), so clicking Orders/Products/Inventory/Certifications/Messages/Support/Account showed "You're all caught up" even though records existed. Fixed by adding `category` to the missing `createNotification` calls (`server/src/controllers/orderController.js` newOrderFarmer → `orders`; `server/src/controllers/messageController.js` newMessage → `messages`), normalizing legacy null-category records by `type` at query time (`server/src/controllers/notificationController.js` `TYPE_CATEGORY_MAP` + `$or` matching), adding a one-time backfill migration script (`server/src/scripts/backfillNotificationCategories.js`), and rewriting `client/src/pages/farmer/FarmerNotifications.jsx` with accurate per-category counts, unread counts, loading/error/genuine-empty states, mark-read/delete, and pagination that resets to page 1 on category change. Frontend `client/src/config/notificationConfig.js` gained a shared `TYPE_TO_CATEGORY` map + `normalizeCategory()` helper.
 
 ## Recent Changes
 
+- **Admin newsletter unsubscribe notifications** (`server/src/controllers/newsletterController.js`): `unsubscribe` and `unsubscribeByToken` (public token page) now create a persisted admin in-app notification (`newsletter_unsubscribed_admin`, title "Newsletter Unsubscription", message `email has unsubscribed...`) via the existing `createNotification` + Socket.IO `emitToAdmins` infra after a successful MongoDB `isActive = false` update; early-return when already unsubscribed (no duplicate notifications) and skip notification when the unsubscribe fails. `customerUnsubscribe` additionally notifies admins that a customer unsubscribed. `NEWSLETTER_EMAIL_MODE=mock` preserved; no SMTP/email service configured.
+- **Carousel Previous/Back button fix** (`client/src/components/common/ContinuousMarquee.jsx`): `canScrollLeft`/`canScrollRight` now read from a `scrollPosition` state that re-renders on every scroll/drag/arrow click (previously read from a stale `ref`, so buttons stayed disabled after scrolling); `scrollPosRef` is clamped to `[0, maxScroll]` so buttons stay accurate after reaching the end. Covers Home Special Offers, Home Featured, CustomerDashboard Offers, and CustomerDashboard Recommended carousels.
+- **Admin Newsletter Management page redesign** (`client/src/pages/admin/AdminNewsletter.jsx`): rebuilt with GreenMart design tokens (cards `#FFFFFF`/`border-[#E2E6DF]`, green palette `#245C3A`/`#477A4E`/`#EAF2E7`, Poppins heading font, `gm-card`/`gm-input`/`gm-btn` styles). Compact stat cards (Total/Active/Unsubscribed/Campaigns Processed (Mock)) from `newsletterApi.stats()`. Create Campaign + Live Preview side-by-side on desktop (stacked mobile) with all form fields, eligible-recipient count, and dynamic preview with Desktop/Mobile toggles. Campaign History with View/Test/Process/Cancel/Duplicate actions (`sent` renders as `Processed (Mock)`). Subscriber Management with email search, All/Active/Unsubscribed filter, green Active / neutral-red Unsubscribed badges, and pagination. Sidebar, header, other admin pages, and backend APIs untouched.
 - **Carousel bug fixes** (`ContinuousMarquee.jsx`): viewport-aware infinite mode (auto-disables infinite when one copy fits in viewport), fixed Next arrow reset-on-click bug (arrow delta now uses `itemWidth` instead of full copy width), added finite-mode initialization effect (arrows now appear and work in finite mode), fixed arrow disabled states using live `scrollWidth`/`clientWidth` bounds
 - **Carousel regression tests** (`ContinuousMarquee.test.jsx`): 12 new tests covering 4/5/6 unique items, finite vs infinite mode, arrow visibility in finite mode, duplicate children handling, cleanup on unmount
 - **Carousel threshold fix**: `MIN_ITEMS_FOR_INFINITE = 5` with viewport-width re-check after layout measurement; 5 items on wide screens now correctly falls back to finite mode when one copy fits in the viewport

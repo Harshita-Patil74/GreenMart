@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import orderApi from "../../api/orderApi";
 import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
@@ -99,21 +101,35 @@ export default function FarmerOrders() {
   return (
     <section className="space-y-4 pb-5 text-[13px] text-[#20312E]">
       <BackButton fallback="/farmer/dashboard" />
-      <header>
+      <motion.header
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+      >
         <h1 className="text-xl font-bold tracking-tight text-[#172A27]">My Orders</h1>
         <p className="mt-1 text-xs text-[#71817D]">View and track orders containing your products.</p>
-      </header>
+      </motion.header>
       {statusError && <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{statusError}</p>}
 
-      <div className="flex flex-wrap gap-1 border-b border-[#DFE8E4]">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap gap-1 border-b border-[#DFE8E4]"
+      >
         {filters.map((filter) => (
           <button key={filter} type="button" onClick={() => setActiveFilter(filter)} className={`rounded-t-md px-3 py-2 text-[11px] font-medium ${activeFilter === filter ? "border-b-2 border-[#07814E] bg-white text-[#087449]" : "text-[#778680] hover:bg-white/70"}`}>
             {filter}
           </button>
         ))}
-      </div>
+      </motion.div>
 
-      <div className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+      >
         <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F0] p-3">
           <SearchBar value={search} onChange={(val) => setSearch(val)} placeholder="Search orders by ID, customer, product, or status" ariaLabel="Search orders" />
           <label className="flex items-center gap-1 text-[10px] text-[#74827E]">From <input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
@@ -141,13 +157,13 @@ export default function FarmerOrders() {
                   <th className="px-3 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#EEF2F0]">
+              <tbody className="divide-y divide-[#EEF2F0]" variants={staggerContainer} initial="hidden" animate="visible">
                 {visibleOrders.map((order) => {
                   const items = getOwnedItems(order, farmerId);
                   const orderId = order.orderNumber || `#${String(order._id || "").slice(-7)}`;
                   return (
                     <React.Fragment key={order._id}>
-                    <tr className="hover:bg-[#FBFCFC]">
+                    <motion.tr variants={staggerItem} initial="hidden" animate="visible" className="hover:bg-[#FBFCFC]">
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-[#344640]">{orderId}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-[#74827E]">{formatDate(order.createdAt)}</td>
                       <td className="px-3 py-2.5 text-[#52615D]">{order.address?.name || order.user?.name || "Customer"}</td>
@@ -155,7 +171,7 @@ export default function FarmerOrders() {
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-[#344640]">{formatCurrency(getOrderAmount(order, farmerId))}</td>
                       <td className="px-3 py-2.5"><OrderStatusBadge status={order.status} /></td>
                       <td className="px-3 py-2.5 text-right"><button type="button" aria-expanded={expandedOrder === order._id} onClick={() => setExpandedOrder(expandedOrder === order._id ? "" : order._id)} className="inline-flex h-6 items-center rounded border border-[#B9D9CC] px-2.5 text-[10px] font-medium text-[#087449] hover:bg-[#F1F8F4]">{expandedOrder === order._id ? "Hide" : "View"}</button></td>
-                    </tr>
+                    </motion.tr>
                     {expandedOrder === order._id && (
                       <tr className="bg-[#F8FBF9]">
                         <td colSpan="7" className="px-4 py-2.5">
@@ -218,7 +234,7 @@ export default function FarmerOrders() {
           </div>
         )}
         {!error && !loading && <div className="border-t border-[#EDF1F0] px-3 py-2 text-[10px] text-[#788782]">Showing {visibleOrders.length} orders</div>}
-      </div>
+      </motion.div>
     </section>
   );
 }

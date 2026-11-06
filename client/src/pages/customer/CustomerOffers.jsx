@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import {
   ArrowRight, CalendarDays, ChevronDown, Heart, Leaf, Search, ShoppingCart,
 } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import offerApi from "../../api/offerApi.js";
@@ -187,7 +189,12 @@ export default function CustomerOffers() {
 
   return (
     <main className="mx-auto w-full max-w-[1500px] space-y-3 pb-10">
-      <section className="relative isolate min-h-[178px] overflow-hidden rounded-xl bg-[#EAF5D5] sm:min-h-[198px] lg:min-h-[210px]">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="relative isolate min-h-[178px] overflow-hidden rounded-xl bg-[#EAF5D5] sm:min-h-[198px] lg:min-h-[210px]"
+      >
         <ImageWithFallback
           src={HERO_IMAGE}
           alt="Fresh produce at a farmers market"
@@ -215,9 +222,14 @@ export default function CustomerOffers() {
             </button>
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      <div className="flex gap-2 border-b border-[#E6ECE4] pb-2 mb-3">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex gap-2 border-b border-[#E6ECE4] pb-2 mb-3"
+      >
         <button
           type="button"
           onClick={() => setTab("active")}
@@ -232,9 +244,15 @@ export default function CustomerOffers() {
         >
           Coming Soon ({upcomingOffers.length})
         </button>
-      </div>
+      </motion.div>
 
-      <section aria-label="Offer filters" className="flex flex-wrap gap-2.5 rounded-xl border border-[#E6ECE4] bg-white/80 p-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        aria-label="Offer filters"
+        className="flex flex-wrap gap-2.5 rounded-xl border border-[#E6ECE4] bg-white/80 p-2.5 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-0.5">
           {OFFER_TYPES.map((offerType) => (
             <button
@@ -297,9 +315,12 @@ export default function CustomerOffers() {
             <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#738078]" />
           </label>
         </div>
-      </section>
+      </motion.section>
 
-      <section
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
         id="offers-section"
         ref={offersRef}
         tabIndex={-1}
@@ -343,19 +364,21 @@ export default function CustomerOffers() {
             {[1, 2, 3, 4].map((item) => <div key={item} className="h-[245px] animate-pulse rounded-xl border border-[#E7EEEC] bg-white" />)}
           </div>
         ) : visibleOffers.length ? (
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
             {visibleOffers.map((offer) => (
-              <OfferCard
-                key={offer._id}
-                offer={offer}
-                wished={isWished(wishlist, getId(offer.product))}
-                adding={addingId === String(offer._id)}
-                onAdd={() => addOfferToCart(offer)}
-                onWishlist={() => toggleProductWishlist(offer)}
-                serverTime={serverTime}
-              />
+              <motion.div key={offer._id} variants={staggerItem} initial="hidden" animate="visible">
+                <OfferCard
+                  key={offer._id}
+                  offer={offer}
+                  wished={isWished(wishlist, getId(offer.product))}
+                  adding={addingId === String(offer._id)}
+                  onAdd={() => addOfferToCart(offer)}
+                  onWishlist={() => toggleProductWishlist(offer)}
+                  serverTime={serverTime}
+                />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         ) : (
           <div className="rounded-xl border border-[#E6ECE4] bg-white px-5 py-10 text-center">
             <Leaf aria-hidden="true" className="mx-auto h-8 w-8 text-[#8BAF83]" />
@@ -365,7 +388,7 @@ export default function CustomerOffers() {
             <p className="mt-1 text-xs text-[#778681]">{tab === "active" ? "Check back soon for fresh deals from local farmers." : "Check back later for new upcoming offers."}</p>
           </div>
         )}
-      </section>
+      </motion.section>
     </main>
   );
 }

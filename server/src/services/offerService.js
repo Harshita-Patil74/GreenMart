@@ -41,7 +41,7 @@ function getEffectiveEnd(offer) {
 function getEffectiveStatus(offer, product, now = new Date()) {
   const nowMs = now.getTime();
   if (offer.status === "Pending" || offer.status === "Rejected") return offer.status;
-  if (offer.status === "Inactive" || !offer.isActive) return "Inactive";
+  if (offer.status === "Inactive" || offer.isActive === false) return "Inactive";
   const startTime = getEffectiveStart(offer);
   const endTime = getEffectiveEnd(offer);
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) return "Inactive";
@@ -68,7 +68,7 @@ async function getActiveOffers(productIds, now = new Date()) {
   const offers = await Offer.find({
     product: { $in: productIds },
     status: "Active",
-    isActive: true,
+    isActive: { $ne: false },
     $or: [
       { startAt: { $lte: now }, endAt: { $gte: now } },
       { startAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },

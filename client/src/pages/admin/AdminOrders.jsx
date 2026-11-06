@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { Link } from "react-router-dom";
 import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
@@ -55,10 +57,14 @@ const [toastMsg, setToastMsg] = useState("");
   return (
     <div className="space-y-4 pb-10">
       <BackButton fallback="/admin/dashboard" />
-      <header>
+      <motion.header
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+      >
         <h1 className="text-xl font-heading font-bold text-gray-900">Order Monitoring</h1>
         <p className="mt-1 text-xs text-gray-500">Review platform orders and their current processing status.</p>
-      </header>
+      </motion.header>
       {error && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error} <button onClick={load} className="underline">Retry</button>
@@ -69,7 +75,12 @@ const [toastMsg, setToastMsg] = useState("");
           {toastMsg}
         </p>
       )}
-      <div className="flex flex-wrap gap-2">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap gap-2"
+      >
         {["", ...statuses].map((item) => (
           <button
             key={item || "all"}
@@ -80,8 +91,13 @@ const [toastMsg, setToastMsg] = useState("");
             {item ? ` (${orders.filter((o) => o.status === item).length})` : ` (${orders.length})`}
           </button>
         ))}
-      </div>
-      <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+      </motion.div>
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
+      >
         <div className="flex flex-wrap gap-2 border-b p-3">
           <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by ID, customer, product, status, or payment method" ariaLabel="Search orders" />
           <label className="flex items-center gap-1 text-[10px] text-gray-500">
@@ -106,13 +122,13 @@ const [toastMsg, setToastMsg] = useState("");
                 <th className="px-3 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100" variants={staggerContainer} initial="hidden" animate="visible">
               {loading ? (
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-gray-500">Loading orders...</td>
                 </tr>
               ) : current.map((o) => (
-                <tr key={o._id}>
+                <motion.tr key={o._id} variants={staggerItem} initial="hidden" animate="visible">
                   <td className="px-3 py-3 font-semibold">#{o.orderNumber}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-gray-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "-"}</td>
                   <td className="px-3 py-3">{o.user?.name || "Customer"}</td>
@@ -127,7 +143,7 @@ const [toastMsg, setToastMsg] = useState("");
                     <Link to={`/orders/${o._id}`} className="font-semibold text-primary hover:underline">View</Link>
                     <button onClick={() => { setModalOrder(o); setNewStatus(getInitialStatus(o.status)); setReason(""); }} className="ml-2 text-xs text-blue-600">Update</button>
                   </td>
-                </tr>
+                </motion.tr>
               ))}
               {loading === false && current.length === 0 && (
                 <tr>
@@ -147,7 +163,7 @@ const [toastMsg, setToastMsg] = useState("");
             <button disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
           </div>
         </div>
-      </section>
+      </motion.section>
       {modalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-xl bg-white p-4">

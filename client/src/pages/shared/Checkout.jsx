@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
@@ -177,9 +179,19 @@ const saveNewAddress = async (event) => {
     <div className="gm-container max-w-5xl py-6 pb-16">
       <BackButton fallback="/cart" />
       <CheckoutStepper step={0} />
-      <div className="grid items-start gap-4 lg:grid-cols-3">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="grid items-start gap-4 lg:grid-cols-3"
+      >
         <div className="space-y-4 lg:col-span-2">
-          <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <motion.section
+            variants={sectionReveal}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+          >
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Delivery Address</h2>
@@ -197,15 +209,19 @@ const saveNewAddress = async (event) => {
                       <span className="mt-1 block text-[11px] text-gray-600">{address.line1}, {address.city}</span>
                       <span className="mt-1 flex items-center gap-1 text-[10px] text-gray-500"><Phone className="h-3 w-3" />{address.phone}</span>
                     </span>
-                    <MapPin className="h-4 w-4 shrink-0 text-primary" />
                   </label>
                 ))}
-                {addresses.length === 0 && !addressError && !addressFormOpen && <p className="text-xs text-gray-500">Add a delivery address to continue.</p>}
               </div>
             )}
             {addressError && <p role="alert" className="mt-2 text-xs text-red-700">{addressError} <button onClick={loadAddresses} className="font-semibold underline">Retry</button></p>}
             {addressFormOpen && (
-              <form onSubmit={saveNewAddress} className="mt-3 grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2">
+              <motion.form
+                variants={sectionReveal}
+                initial="hidden"
+                animate="visible"
+                onSubmit={saveNewAddress}
+                className="mt-3 grid gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:grid-cols-2"
+              >
                 {[
                   ["name", "Recipient name"],
                   ["phone", "Phone number"],
@@ -222,11 +238,16 @@ const saveNewAddress = async (event) => {
                   <button disabled={savingAddress} className="h-8 rounded-lg bg-primary px-3 text-[10px] font-semibold text-white disabled:opacity-60">{savingAddress ? "Saving..." : "Save Address"}</button>
                   <button type="button" onClick={() => setAddressFormOpen(false)} className="h-8 rounded-lg border border-gray-200 px-3 text-[10px] font-medium text-gray-600">Cancel</button>
                 </div>
-              </form>
+              </motion.form>
             )}
-          </section>
+          </motion.section>
 
-          <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <motion.section
+            variants={sectionReveal}
+            initial="hidden"
+            animate="visible"
+            className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+          >
             <div className="flex items-center justify-between gap-2 mb-3">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Payment Method</h2>
@@ -332,10 +353,15 @@ const saveNewAddress = async (event) => {
                 </div>
               </div>
             )}
-          </section>
+          </motion.section>
         </div>
 
-        <div className="space-y-3">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="space-y-3"
+        >
           {cartError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{cartError} <button onClick={() => dispatch(fetchCart())} className="font-semibold underline">Retry</button></p>}
           {deliveryError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{deliveryError} <button onClick={() => dispatch(fetchDeliveryCharge())} className="font-semibold underline">Retry</button></p>}
           {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{error}</p>}
@@ -351,8 +377,8 @@ const saveNewAddress = async (event) => {
             loading={placingOrder || addressLoading || cartLoading || deliveryLoading || deliveryCharge == null}
           />
           {!items.length && !cartLoading && <div className="rounded-lg border border-gray-100 bg-white p-3 text-center text-xs text-gray-500">Your cart is empty. <Link to="/shop" className="font-semibold text-primary">Shop now</Link></div>}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

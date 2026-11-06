@@ -34,7 +34,7 @@ jest.mock("../src/models/Newsletter", () => {
 
 jest.resetModules();
 const Newsletter = require("../src/models/Newsletter");
-const { subscribe, unsubscribe, list } = require("../src/controllers/newsletterController");
+const { list } = require("../src/controllers/newsletterController");
 
 function makeRes() {
   const res = {};
@@ -49,89 +49,6 @@ describe("Newsletter Controller", () => {
     Newsletter.__reset();
   });
 
-  describe("subscribe", () => {
-    it("subscribes a new email", async () => {
-      const req = { body: { email: "user@example.com" } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "Successfully subscribed to GreenMart updates!" })
-      );
-    });
-
-    it("rejects empty email", async () => {
-      const req = { body: { email: "" } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it("rejects invalid email", async () => {
-      const req = { body: { email: "not-an-email" } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it("trims and lowercases email", async () => {
-      const req = { body: { email: "  USER@Example.COM  " } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(Newsletter.create).toHaveBeenCalledWith(
-        expect.objectContaining({ email: "user@example.com" })
-      );
-    });
-
-    it("rejects duplicate email", async () => {
-      await Newsletter.create({ email: "user@example.com", isActive: true });
-      const req = { body: { email: "user@example.com" } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(409);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "This email is already subscribed to GreenMart updates." })
-      );
-    });
-
-    it("reactivates a previously unsubscribed email", async () => {
-      await Newsletter.create({ email: "user@example.com", isActive: false });
-      const req = { body: { email: "user@example.com" } };
-      const res = makeRes();
-      await subscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "Successfully subscribed to GreenMart updates!" })
-      );
-    });
-  });
-
-  describe("unsubscribe", () => {
-    it("unsubscribes an existing email", async () => {
-      await Newsletter.create({ email: "user@example.com", isActive: true });
-      const req = { body: { email: "user@example.com" } };
-      const res = makeRes();
-      await unsubscribe(req, res);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: "You have been unsubscribed from GreenMart updates" })
-      );
-    });
-
-    it("rejects empty email", async () => {
-      const req = { body: { email: "" } };
-      const res = makeRes();
-      await unsubscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it("returns 404 for unknown email", async () => {
-      const req = { body: { email: "unknown@example.com" } };
-      const res = makeRes();
-      await unsubscribe(req, res);
-      expect(res.status).toHaveBeenCalledWith(404);
-    });
-  });
-
   describe("list", () => {
     it("returns only active subscribers for admin", async () => {
       await Newsletter.create({ email: "a@example.com", isActive: true });
@@ -140,8 +57,9 @@ describe("Newsletter Controller", () => {
       const res = makeRes();
       await list(req, res);
       const jsonArg = res.json.mock.calls[0][0];
-      expect(jsonArg.find((s) => s.email === "a@example.com")).toBeDefined();
-      expect(jsonArg.find((s) => s.email === "b@example.com")).toBeUndefined();
+      const items = jsonArg.items || jsonArg;
+      expect(items.find((s) => s.email === "a@example.com")).toBeDefined();
+      expect(items.find((s) => s.email === "b@example.com")).toBeUndefined();
     });
 
     it("rejects non-admin access", async () => {

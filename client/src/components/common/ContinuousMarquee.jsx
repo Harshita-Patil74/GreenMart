@@ -68,6 +68,7 @@ export default function ContinuousMarquee({
 
   const [layoutMeasured, setLayoutMeasured] = useState(false);
   const [effectiveInfinite, setEffectiveInfinite] = useState(infinite);
+  const [scrollPosition, setScrollPositionState] = useState(0);
 
   const childArray = React.Children.toArray(children);
   const visibleCount = childArray.length;
@@ -86,14 +87,20 @@ export default function ContinuousMarquee({
     vp.style.scrollBehavior = smooth ? "smooth" : "auto";
     vp.scrollLeft = position;
     scrollPosRef.current = position;
-  }, []);
+    setScrollPositionState(position);
+  }, [setScrollPositionState]);
 
   const scrollBy = useCallback((delta, smooth = true) => {
     const vp = viewportRef.current;
     if (!vp) return;
-    vp.style.scrollBehavior = smooth ? "smooth" : "auto";
-    vp.scrollLeft += delta;
-    scrollPosRef.current = vp.scrollLeft;
+    isPausedRef.current = true;
+    vp.style.scrollBehavior = "auto";
+    const maxScroll = Math.max(0, vp.scrollWidth - vp.clientWidth);
+    const next = Math.min(Math.max(0, scrollPosRef.current + delta), maxScroll);
+    scrollPosRef.current = next;
+    vp.scrollLeft = next;
+    setScrollPosition(next);
+    setTimeout(() => { isPausedRef.current = false; }, 800);
   }, []);
 
   const pause = () => {
@@ -218,6 +225,7 @@ export default function ContinuousMarquee({
     if (Math.abs(delta) > 4) justDraggedRef.current = true;
     vp.scrollLeft = dragStartRef.current.scrollLeft + delta;
     scrollPosRef.current = vp.scrollLeft;
+    setScrollPosition(vp.scrollLeft);
   };
 
   const handlePointerUp = () => {
@@ -276,8 +284,8 @@ export default function ContinuousMarquee({
   // Compute scroll bounds from live DOM for both infinite and finite modes
   const vp = viewportRef.current;
   const maxScroll = vp ? Math.max(0, vp.scrollWidth - vp.clientWidth) : 0;
-  const canScrollLeft = layoutMeasured && scrollPosRef.current > 1;
-  const canScrollRight = layoutMeasured && scrollPosRef.current < maxScroll - 1;
+  const canScrollLeft = layoutMeasured && scrollPosition > 1;
+  const canScrollRight = layoutMeasured && scrollPosition < maxScroll - 1;
 
   const renderCopy = (copyIndex) =>
     childArray.map((child, i) => (

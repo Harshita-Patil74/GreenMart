@@ -47,7 +47,7 @@ describe("Customer Dashboard page", () => {
     expect(screen.getByText("AI Shopping Assistant")).toBeInTheDocument();
     expect(screen.queryByText("Fresh Deals from Our Farmers")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Fresh Organic Products/i })).toHaveClass("text-white");
-    expect(productApi.storefront).toHaveBeenCalledWith({ limit: 5, inStock: "true" });
+    expect(productApi.storefront).toHaveBeenCalledWith({ limit: 1000, inStock: "true" });
     await waitFor(() =>
       expect(screen.getAllByText("Organic Tomatoes").length).toBeGreaterThan(0)
     );

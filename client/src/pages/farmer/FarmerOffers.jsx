@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   BadgePercent, CheckCircle2, Clock3, Eye, MoreHorizontal, Plus, Search,
   ShoppingBag, Tag, X,
@@ -9,6 +10,8 @@ import Pagination from "../../components/common/Pagination.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import farmerOffersApi from "../../api/farmerOffersApi.js";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
+import StatusBadge from "../../components/common/StatusBadge.jsx";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { formatCurrency, formatDate } from "./farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
 
@@ -20,18 +23,6 @@ const EMPTY_DRAFT = {
   discountValue: "", startDate: "", endDate: "", startTime: "", endTime: "",
   minimumQuantity: "1", minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
 };
-
-function statusStyle(status) {
-  const styles = {
-    Active: "bg-emerald-50 text-emerald-700",
-    Pending: "bg-amber-50 text-amber-700",
-    Rejected: "bg-red-50 text-red-700",
-    Expired: "bg-slate-100 text-slate-600",
-    Inactive: "bg-gray-100 text-gray-600",
-    Scheduled: "bg-blue-50 text-blue-700",
-  };
-  return styles[status] || styles.Inactive;
-}
 
 function inputClass(hasError = false) {
   return `mt-1 h-9 w-full rounded-md border bg-white px-2.5 text-xs text-[#263B34] outline-none focus:border-[#14905B] ${hasError ? "border-red-400" : "border-[#DDE6E2]"}`;
@@ -206,7 +197,12 @@ export default function FarmerOffers() {
 
   return (
     <section className="mx-auto w-full max-w-[1440px] space-y-5 pb-8 text-xs text-[#20312E]">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+      <motion.header
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap items-center justify-between gap-4"
+      >
         <div>
           <h1 className="text-xl font-bold tracking-tight text-[#172A27]">My Offers</h1>
           <p className="mt-1 text-xs text-[#71817D]">Manage your offers and track performance.</p>
@@ -214,18 +210,34 @@ export default function FarmerOffers() {
         <button type="button" onClick={openCreate} className="inline-flex h-9 items-center gap-2 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white hover:bg-[#066B42] focus:outline-none focus:ring-2 focus:ring-[#07814E]/30">
           <Plus size={14} /> Create Offer
         </button>
-      </header>
+      </motion.header>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      >
         {statCards.map(({ label, value, icon: Icon, color }) => (
-          <article key={label} className="flex min-h-[88px] items-center gap-3 rounded-xl border border-[#E7EEEC] bg-white px-4 py-3 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+          <motion.article
+            key={label}
+            variants={staggerItem}
+            initial="hidden"
+            animate="visible"
+            className="flex min-h-[88px] items-center gap-3 rounded-xl border border-[#E7EEEC] bg-white px-4 py-3 shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+          >
             <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${color}`}><Icon size={20} /></span>
             <div className="min-w-0"><p className="text-[10px] text-[#71817D]">{label}</p><p className="mt-1 truncate text-base font-bold leading-5 text-[#233B33]">{value}</p></div>
-          </article>
+          </motion.article>
         ))}
-      </div>
+      </motion.div>
 
-      <section className="overflow-hidden rounded-xl border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="overflow-hidden rounded-xl border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+      >
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F0] p-4">
           <label className="relative min-w-[220px] flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#91A09B]" />
@@ -253,26 +265,26 @@ export default function FarmerOffers() {
               <thead className="border-b border-[#E9EFED] bg-[#F7F9F8] text-[10px] font-semibold uppercase tracking-wide text-[#71817D]">
                 <tr><th className="px-4 py-3">Offer</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Discount</th><th className="px-4 py-3">Validity</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Performance</th><th className="px-4 py-3 text-right">Actions</th></tr>
               </thead>
-              <tbody className="divide-y divide-[#EEF2F0]">
+              <tbody className="divide-y divide-[#EEF2F0]" variants={staggerContainer} initial="hidden" animate="visible">
                 {offers.map((offer) => {
                   const product = offer.product && typeof offer.product === "object" ? offer.product : {};
                   const status = offer.effectiveStatus || offer.status;
                   return (
-                    <tr key={offer._id} className="h-[68px] hover:bg-[#FBFCFC]">
+                    <motion.tr key={offer._id} variants={staggerItem} initial="hidden" animate="visible" className="h-[68px] hover:bg-[#FBFCFC]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <ImageWithFallback src={getImageUrl(product.images?.[0])} alt="" className="h-11 w-11 shrink-0 rounded-md border border-[#E9EFEC] object-cover" />
                           <div className="min-w-0"><p className="max-w-[240px] truncate text-xs font-semibold text-[#293D36]" title={offer.title}>{offer.title}</p><p className="max-w-[240px] truncate text-[10px] text-[#81908A]">{product.name || "Product unavailable"}</p></div>
                         </div>
                       </td>
-                      <td className="px-4 py-3"><span className="rounded-full bg-[#EDF6F1] px-2.5 py-1.5 text-[10px] font-medium text-[#297453]">{offer.type}</span></td>
+                      <td className="px-4 py-3"><StatusBadge status={offer.type} /></td>
                       <td className="px-4 py-3 text-xs font-semibold text-[#32473F]">{offer.discountType === "Percentage" ? `${offer.discountValue}% OFF` : `${formatCurrency(offer.discountValue)} OFF`}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-[10px] text-[#687972]">
                         {formatDate(offer.startDate, { day: "numeric", month: "short" })} – {formatDate(offer.endDate, { day: "numeric", month: "short" })}
                         {offer.startAt && offer.effectiveStatus === "Upcoming" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
                         {offer.endAt && offer.effectiveStatus === "Active" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
                       </td>
-                      <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1.5 text-[10px] font-semibold ${statusStyle(status)}`}>{status}</span></td>
+                      <td className="px-4 py-3"><StatusBadge status={status} /></td>
                       <td className="px-4 py-3 whitespace-nowrap text-[10px] text-[#65756F]">{offer.unitsSold || 0} units</td>
                       <td className="relative px-4 py-3 text-right">
                         <button type="button" aria-label={`Actions for ${offer.title}`} aria-expanded={actionsFor === offer._id} onClick={() => setActionsFor((current) => current === offer._id ? "" : offer._id)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#DDE6E2] text-[#54665F] hover:bg-[#F4F8F5]"><MoreHorizontal size={18} /></button>
@@ -282,7 +294,7 @@ export default function FarmerOffers() {
                           {offer.isActive && status !== "Rejected" && <button type="button" onClick={() => deactivate(offer)} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-xs text-red-700 hover:bg-red-50"><X size={14} /> Deactivate</button>}
                         </div>}
                       </td>
-                    </tr>
+                    </motion.tr>
                   );
                 })}
               </tbody>
@@ -290,7 +302,7 @@ export default function FarmerOffers() {
           </div>
         )}
         {!loading && pages > 1 && <div className="border-t border-[#EDF1F0] p-3"><Pagination page={page} pages={pages} onChange={setPage} /></div>}
-      </section>
+      </motion.section>
 
       <Modal open={dialog?.mode === "form"} onClose={() => !saving && setDialog(null)} title={editing ? "Edit Offer" : "Create Offer"}>
         <form onSubmit={saveOffer} className="space-y-3">

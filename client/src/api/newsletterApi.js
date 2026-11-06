@@ -1,9 +1,10 @@
 import api from "./axiosInstance";
 
 export default {
-  subscribe: (email) => api.post("/newsletter/subscribe", { email }),
-  unsubscribe: (email) => api.post("/newsletter/unsubscribe", { email }),
-  unsubscribeByToken: (token) => api.get("/newsletter/unsubscribe/confirm", { params: { token } }),
+  preferences: () => api.get("/newsletter/preferences"),
+  customerSubscribe: () => api.post("/newsletter/preferences/subscribe"),
+  customerUnsubscribe: () => api.post("/newsletter/preferences/unsubscribe"),
+  stats: () => api.get("/newsletter/admin/stats"),
   products: (params) => api.get("/newsletter/admin/products", { params }),
   offers: (params) => api.get("/newsletter/admin/offers", { params }),
   subscribers: (params) => api.get("/newsletter/admin/subscribers", { params }),
@@ -18,4 +19,9 @@ export default {
   sendCampaign: (id) => api.post(`/newsletter/admin/campaigns/${id}/send`),
   cancelCampaign: (id) => api.post(`/newsletter/admin/campaigns/${id}/cancel`),
   recipients: (id) => api.get(`/newsletter/admin/campaigns/${id}/recipients`),
+  // Customer newsletter inbox (authenticated customers only)
+  customerNewsletters: (params) => api.get("/newsletter/customer/newsletters", { params }),
+  customerNewsletter: (id) => api.get(`/newsletter/customer/newsletters/${id}`),
+  markNewsletterRead: (id) => api.patch(`/newsletter/customer/newsletters/${id}/read`),
+  customerExclusiveOffers: () => api.get("/newsletter/customer/offers"),
 };

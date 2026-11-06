@@ -5,12 +5,14 @@ const NewsletterRecipient = require("../models/NewsletterRecipient");
 const Product = require("../models/Product");
 const Offer = require("../models/Offer");
 const User = require("../models/User");
+const FarmerProfile = require("../models/FarmerProfile");
 const { createNotification } = require("../services/notificationService");
 const { asyncHandler } = require("../utils/asyncHandler");
 const env = require("../config/env");
 const { sendNewsletterEmail, isConfigured, getConfigError } = require("../services/emailService");
 const { sendMockEmail } = require("../services/mockNewsletterEmailService");
 const { generateToken, verifyToken } = require("../utils/unsubscribeToken");
+const { money, getEffectiveStatus } = require("../services/offerService");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -71,70 +73,162 @@ function buildEmail(campaign, unsubscribeUrl) {
   return { html, text };
 }
 
-exports.subscribe = asyncHandler(async (req, res) => {
-  let { email } = req.body;
-  if (!email || !String(email).trim()) {
-    return res.status(400).json({ message: "Email address is required" });
-  }
-  email = String(email).trim().toLowerCase();
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ message: "Please enter a valid email address" });
-  }
-  const existing = await Newsletter.findOne({ email });
-  if (existing) {
-    if (!existing.isActive) {
-      await Newsletter.findByIdAndUpdate(existing._id, { isActive: true, subscribedAt: new Date(), unsubscribedAt: null });
-      return res.status(200).json({ message: "Successfully subscribed to GreenMart updates!" });
+exports.preferences = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  const sub = await Newsletter.findOne({ email });
+  res.json({
+    email,
+    subscriberType: sub?.subscriberType || "guest",
+    isSubscribed: !!sub?.isActive,
+    subscribedAt: sub?.subscribedAt || null,
+    updatedAt: sub?.updatedAt || null,
+  });
+});
+
+exports.customerSubscribe = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  let sub = await Newsletter.findOne({ email });
+  if (sub) {
+    if (sub.isActive) return res.json({ message: "You are already subscribed to GreenMart updates.", isSubscribed: true });
+    if (sub.subscriberType !== "customer" && sub.subscriberType !== "guest") {
+      return res.status(409).json({ message: "This email is already subscribed under a different account type." });
     }
-    return res.status(409).json({ message: "This email is already subscribed to GreenMart updates." });
+    sub.isActive = true;
+    sub.subscriberType = "customer";
+    sub.subscribedAt = new Date();
+    sub.unsubscribedAt = null;
+    await sub.save();
+  } else {
+    sub = await Newsletter.create({ email, isActive: true, subscriberType: "customer" });
   }
-  const sub = await Newsletter.create({ email, isActive: true });
-  // Notify admins
-  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
-  for (const admin of admins) {
+  try {
     await createNotification({
-      userId: admin._id,
-      type: "newsletter_subscriber",
+      userId: req.user._id,
+      type: "newsletter_subscribed",
       category: "newsletter",
-      title: "New Newsletter Subscriber",
-      message: "A new subscriber has joined the GreenMart newsletter.",
+      title: "Newsletter Subscription",
+      message: "You're subscribed to GreenMart newsletter updates!",
       resourceType: "Newsletter",
       resourceId: sub._id,
-      actionUrl: "/admin/newsletter",
-      eventKey: `newsletter:subscriber:${sub._id}`,
+      actionUrl: "/customer/dashboard",
+      eventKey: `newsletter:customer-subscribed:${sub._id}`,
     });
-  }
-  res.status(201).json({ message: "Successfully subscribed to GreenMart updates!" });
+  } catch (e) { /* ignore */ }
+  res.json({ message: "You're subscribed to GreenMart newsletter updates!", isSubscribed: true });
 });
 
-exports.unsubscribe = asyncHandler(async (req, res) => {
-  let { email } = req.body;
-  if (!email || !String(email).trim()) {
-    return res.status(400).json({ message: "Email address is required" });
+exports.customerUnsubscribe = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  const sub = await Newsletter.findOne({ email });
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+  if (!sub.isActive) return res.json({ message: "You have successfully unsubscribed from GreenMart updates.", isSubscribed: false });
+  sub.isActive = false;
+  sub.unsubscribedAt = new Date();
+  await sub.save();
+  try {
+    await createNotification({
+      userId: req.user._id,
+      type: "newsletter_unsubscribed",
+      category: "newsletter",
+      title: "Newsletter Unsubscribed",
+      message: "You have successfully unsubscribed from GreenMart newsletter updates.",
+      resourceType: "Newsletter",
+      resourceId: sub._id,
+      actionUrl: "/customer/dashboard",
+      eventKey: `newsletter:customer-unsubscribed:${sub._id}`,
+    });
+  } catch (e) { /* ignore */ }
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
+  for (const admin of admins) {
+    try {
+      await createNotification({
+        userId: admin._id,
+        type: "newsletter_unsubscribed_admin",
+        category: "newsletter",
+        title: "Newsletter Unsubscription",
+        message: `${email} (customer) has unsubscribed from GreenMart newsletter updates.`,
+        resourceType: "Newsletter",
+        resourceId: sub._id,
+        actionUrl: "/admin/newsletter",
+        eventKey: `newsletter:unsubscribed:${sub._id}`,
+      });
+    } catch (e) { /* ignore */ }
   }
-  email = String(email).trim().toLowerCase();
-  const existing = await Newsletter.findOne({ email });
-  if (!existing) return res.status(404).json({ message: "Email address not found" });
-  await Newsletter.findByIdAndUpdate(existing._id, { isActive: false, unsubscribedAt: new Date() });
-  res.json({ message: "You have been unsubscribed from GreenMart updates" });
-});
-
-exports.unsubscribeByToken = asyncHandler(async (req, res) => {
-  const token = req.query.token || req.body.token;
-  const email = verifyToken(token);
-  if (!email) return res.status(400).json({ message: "Invalid or expired unsubscribe link" });
-  const existing = await Newsletter.findOne({ email });
-  if (!existing) return res.status(404).json({ message: "Email address not found" });
-  await Newsletter.findByIdAndUpdate(existing._id, { isActive: false, unsubscribedAt: new Date() });
-  res.json({ message: "You have successfully unsubscribed from GreenMart updates." });
+  res.json({ message: "You have successfully unsubscribed from GreenMart updates.", isSubscribed: false });
 });
 
 exports.list = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
-  const { isActive } = req.query || {};
-  const query = isActive !== undefined ? { isActive: isActive === "true" } : {};
-  const subscribers = await Newsletter.find(query).sort({ createdAt: -1 });
-  res.json(subscribers);
+  const { isActive, type, subscriberType, search, page: pageParam, limit: limitParam } = req.query || {};
+  const page = Math.max(1, parseInt(pageParam || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(limitParam || "20", 10)));
+  const query = {};
+  if (isActive !== undefined) query.isActive = isActive === "true";
+  if (subscriberType && ["customer", "farmer", "guest"].includes(String(subscriberType).toLowerCase())) {
+    query.subscriberType = String(subscriberType).toLowerCase();
+  }
+  if (search) query.email = { $regex: String(search), $options: "i" };
+
+  let subscribers = await Newsletter.find(query).sort({ createdAt: -1 });
+
+  if (type === "guest") {
+    subscribers = subscribers.filter((s) => s.subscriberType === "guest");
+  } else if (type === "registered" || type === "customer" || type === "farmer") {
+    subscribers = subscribers.filter((s) => s.subscriberType !== "guest");
+    if (type === "customer") subscribers = subscribers.filter((s) => s.subscriberType === "customer");
+    if (type === "farmer") subscribers = subscribers.filter((s) => s.subscriberType === "farmer");
+  }
+
+  const total = subscribers.length;
+  const paged = subscribers.slice((page - 1) * limit, page * limit);
+
+  res.json({
+    items: paged,
+    page,
+    limit,
+    total,
+    pages: Math.ceil(total / limit),
+  });
+});
+
+exports.createCampaign = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
+  const { isActive, type, subscriberType, search, page: pageParam, limit: limitParam } = req.query || {};
+  const page = Math.max(1, parseInt(pageParam || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(limitParam || "20", 10)));
+  const query = {};
+  if (isActive !== undefined) query.isActive = isActive === "true";
+  if (subscriberType && ["customer", "farmer", "guest"].includes(String(subscriberType).toLowerCase())) {
+    query.subscriberType = String(subscriberType).toLowerCase();
+  }
+  if (search) query.email = { $regex: String(search), $options: "i" };
+
+  let subscribers = await Newsletter.find(query).sort({ createdAt: -1 });
+
+  if (type === "guest") {
+    subscribers = subscribers.filter((s) => s.subscriberType === "guest");
+  } else if (type === "registered" || type === "customer" || type === "farmer") {
+    subscribers = subscribers.filter((s) => s.subscriberType !== "guest");
+    if (type === "customer") subscribers = subscribers.filter((s) => s.subscriberType === "customer");
+    if (type === "farmer") subscribers = subscribers.filter((s) => s.subscriberType === "farmer");
+  }
+
+  const total = subscribers.length;
+  const paged = subscribers.slice((page - 1) * limit, page * limit);
+
+  res.json({
+    items: paged,
+    page,
+    limit,
+    total,
+    pages: Math.ceil(total / limit),
+  });
 });
 
 exports.stats = asyncHandler(async (req, res) => {
@@ -198,14 +292,14 @@ exports.createCampaign = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "One or more selected products are invalid" });
   }
 
-  const offers = selectedOfferIds?.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: true }).populate("product") : [];
+  const offers = selectedOfferIds?.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: { $ne: false } }).populate("product") : [];
   if (selectedOfferIds?.length && offers.length !== selectedOfferIds.length) {
     return res.status(400).json({ message: "One or more selected offers are invalid" });
   }
 
   let selectedSubscribers = [];
   if (audienceType === "selected" && Array.isArray(selectedSubscriberIds)) {
-    selectedSubscribers = await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true });
+    selectedSubscribers = await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true, subscriberType: "customer" });
     if (selectedSubscribers.length !== selectedSubscriberIds.length) {
       return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
     }
@@ -256,12 +350,12 @@ exports.updateCampaign = asyncHandler(async (req, res) => {
     updates.selectedProducts = products.map((p) => ({ productId: p._id, snapshot: snapshotProduct(p) }));
   }
   if (selectedOfferIds !== undefined) {
-    const offers = selectedOfferIds.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: true }).populate("product") : [];
+    const offers = selectedOfferIds.length ? await Offer.find({ _id: { $in: selectedOfferIds }, status: "Active", isActive: { $ne: false } }).populate("product") : [];
     if (offers.length !== selectedOfferIds.length) return res.status(400).json({ message: "One or more selected offers are invalid" });
     updates.selectedOffers = offers.map((o) => ({ offerId: o._id, snapshot: snapshotOffer(o) }));
   }
   if (audienceType === "selected" && selectedSubscriberIds !== undefined) {
-    const subs = selectedSubscriberIds.length ? await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true }) : [];
+    const subs = selectedSubscriberIds.length ? await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true, subscriberType: "customer" }) : [];
     if (subs.length !== selectedSubscriberIds.length) return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
     updates.selectedSubscribers = subs.map((s) => s._id);
   } else if (audienceType === "all") {
@@ -323,9 +417,27 @@ exports.sendCampaign = asyncHandler(async (req, res) => {
   if (!campaign) return res.status(404).json({ message: "Campaign not found" });
   if (campaign.status !== "draft") return res.status(400).json({ message: "Campaign already processed" });
 
+  // Validate selected offers are still approved and eligible before processing
+  if (campaign.selectedOffers && campaign.selectedOffers.length > 0) {
+    const offerIds = campaign.selectedOffers.map((o) => o.offerId);
+    const offers = await Offer.find({ _id: { $in: offerIds } }).populate("product");
+    const offerMap = new Map(offers.map((o) => [String(o._id), o]));
+    for (const snap of campaign.selectedOffers) {
+      const offer = offerMap.get(String(snap.offerId));
+      if (!offer) {
+        return res.status(400).json({ message: `Offer referenced in campaign no longer exists.` });
+      }
+      const product = offer.product || {};
+      const status = getEffectiveStatus(offer, product, new Date());
+      if (status !== "Active") {
+        return res.status(400).json({ message: `Offer "${offer.title}" is no longer eligible (status: ${status}). Please update the campaign.` });
+      }
+    }
+  }
+
   const subscribers = campaign.audienceType === "selected"
-    ? await Newsletter.find({ _id: { $in: campaign.selectedSubscribers }, isActive: true })
-    : await Newsletter.find({ isActive: true });
+    ? await Newsletter.find({ _id: { $in: campaign.selectedSubscribers }, isActive: true, subscriberType: "customer" })
+    : await Newsletter.find({ isActive: true, subscriberType: "customer" });
   campaign.status = "sending";
   campaign.startedAt = new Date();
   campaign.recipientCount = subscribers.length;
@@ -376,6 +488,25 @@ exports.sendCampaign = asyncHandler(async (req, res) => {
   campaign.completedAt = new Date();
   campaign.status = failed === subscribers.length && subscribers.length > 0 ? "failed" : "sent";
   await campaign.save();
+
+  // In-app notifications for customers with accounts only
+  for (const sub of subscribers) {
+    try {
+      const user = await User.findOne({ email: sub.email });
+      if (!user || user.role !== "customer") continue;
+      await createNotification({
+        userId: user._id,
+        type: "newsletter_campaign",
+        category: "newsletter",
+        title: campaign.subject || campaign.campaignName,
+        message: campaign.preheader || campaign.content.slice(0, 120),
+        resourceType: "NewsletterCampaign",
+        resourceId: campaign._id,
+        actionUrl: `/customer/newsletters/${campaign._id}`,
+        eventKey: `newsletter:campaign:${campaign._id}:user:${user._id}`,
+      });
+    } catch (e) { /* ignore */ }
+  }
 
   if (failed > 0) {
     const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
@@ -448,7 +579,10 @@ exports.products = asyncHandler(async (req, res) => {
   const query = { status: "Active" };
   if (category) query.category = category;
   if (search) query.name = { $regex: String(search), $options: "i" };
-  const products = await Product.find(query).sort({ createdAt: -1 }).limit(100);
+  const products = await Product.find(query)
+    .populate("farmer", "name")
+    .sort({ createdAt: -1 })
+    .limit(100);
   res.json(products);
 });
 
@@ -472,10 +606,12 @@ function snapshotProduct(p) {
     productId: p._id,
     name: p.name,
     price: p.price,
-    image: Array.isArray(p.images) && p.images.length ? p.images[0] : (p.image || null),
+    unit: p.unit,
+    image: Array.isArray(p.images) && p.images.length ? p.images[0] : null,
     category: p.category,
     stock: p.stock,
     status: p.status,
+    farmerName: p.farmer?.name || null,
   };
 }
 
@@ -493,6 +629,7 @@ function snapshotOffer(o) {
     title: o.title,
     discountType: o.discountType,
     discountValue: o.discountValue,
+    minimumQuantity: o.minimumQuantity || 1,
     originalPrice,
     discountedPrice: Number(discountedPrice.toFixed(2)),
     startDate: o.startAt || o.startDate,
@@ -500,3 +637,302 @@ function snapshotOffer(o) {
     product: snapshotProduct(product),
   };
 }
+
+exports.customerNewsletters = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  const page = Math.max(1, parseInt(req.query.page || "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "10", 10)));
+  const search = req.query.search || "";
+  const type = req.query.type || "all";
+  const read = req.query.read || "all";
+
+  const recipientQuery = { email };
+  if (read === "read") recipientQuery.readAt = { $ne: null };
+  else if (read === "unread") recipientQuery.readAt = null;
+
+  const recipients = await NewsletterRecipient.find(recipientQuery)
+    .populate({
+      path: "campaignId",
+      match: { status: "sent" },
+      select: "campaignName campaignType subject heading content bannerImage buttonText buttonUrl createdAt completedAt selectedProducts selectedOffers",
+    })
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  const items = recipients
+    .filter((r) => r.campaignId)
+    .filter((r) => type === "all" || r.campaignId.campaignType === type)
+    .map((r) => ({
+      _id: r._id,
+      campaignId: r.campaignId._id,
+      campaignName: r.campaignId.campaignName,
+      campaignType: r.campaignId.campaignType,
+      subject: r.campaignId.subject,
+      heading: r.campaignId.heading || r.campaignId.subject,
+      content: r.campaignId.content,
+      bannerImage: r.campaignId.bannerImage,
+      buttonText: r.campaignId.buttonText,
+      buttonUrl: r.campaignId.buttonUrl,
+      createdAt: r.campaignId.createdAt,
+      completedAt: r.campaignId.completedAt,
+      status: r.status,
+      isRead: !!r.readAt,
+      selectedProducts: r.campaignId.selectedProducts || [],
+      selectedOffers: r.campaignId.selectedOffers || [],
+    }));
+
+  const total = await NewsletterRecipient.countDocuments({ ...recipientQuery, email }).then((count) => count);
+  const typeFilteredTotal = await NewsletterRecipient.find(recipientQuery)
+    .populate({ path: "campaignId", match: { status: "sent" } })
+    .then((rs) => rs.filter((r) => r.campaignId && (type === "all" || r.campaignId.campaignType === type)).length);
+
+  res.json({
+    items,
+    page,
+    limit,
+    total: typeFilteredTotal,
+    pages: Math.ceil(typeFilteredTotal / limit),
+  });
+});
+
+exports.customerNewsletterDetail = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  const recipient = await NewsletterRecipient.findOne({
+    campaignId: req.params.id,
+    email,
+  }).populate({
+    path: "campaignId",
+    match: { status: "sent" },
+    select: "campaignName campaignType subject heading content bannerImage buttonText buttonUrl createdAt completedAt selectedProducts selectedOffers",
+  });
+  if (!recipient || !recipient.campaignId) {
+    return res.status(404).json({ message: "Newsletter not found or you are not eligible to view it" });
+  }
+  if (!recipient.readAt) {
+    recipient.readAt = new Date();
+    await recipient.save();
+  }
+  res.json({
+    _id: recipient._id,
+    campaignId: recipient.campaignId._id,
+    campaignName: recipient.campaignId.campaignName,
+    campaignType: recipient.campaignId.campaignType,
+    subject: recipient.campaignId.subject,
+    heading: recipient.campaignId.heading || recipient.campaignId.subject,
+    content: recipient.campaignId.content,
+    bannerImage: recipient.campaignId.bannerImage,
+    buttonText: recipient.campaignId.buttonText,
+    buttonUrl: recipient.campaignId.buttonUrl,
+    createdAt: recipient.campaignId.createdAt,
+    completedAt: recipient.campaignId.completedAt,
+    status: recipient.status,
+    isRead: !!recipient.readAt,
+    readAt: recipient.readAt,
+    selectedProducts: recipient.campaignId.selectedProducts || [],
+    selectedOffers: recipient.campaignId.selectedOffers || [],
+  });
+});
+
+exports.markNewsletterRead = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  const recipient = await NewsletterRecipient.findOne({ campaignId: req.params.id, email });
+  if (!recipient) return res.status(404).json({ message: "Newsletter recipient not found" });
+  if (!recipient.readAt) {
+    recipient.readAt = new Date();
+    await recipient.save();
+  }
+  res.json({ message: "Marked as read", isRead: true });
+});
+
+exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  const sub = await Newsletter.findOne({ email });
+  if (!sub || !sub.isActive) {
+    return res.json({ items: [], subscribed: false, message: "Not subscribed" });
+  }
+  const now = new Date();
+  const nowMs = now.getTime();
+  const offers = await Offer.find({
+    status: "Active",
+    isActive: { $ne: false },
+    isSubscriberExclusive: true,
+    endDate: { $gte: now },
+  })
+    .populate("farmer", "name")
+    .populate({
+      path: "product",
+      select: "name description category price unit stock images status farmer isOrganic",
+      populate: { path: "farmer", select: "name" },
+    })
+    .sort({ createdAt: -1 });
+
+  const farmerIds = [...new Set(offers.map((o) => String(o.farmer?._id || o.farmer)).filter(Boolean))];
+  const [eligibleFarmers, verifiedProfiles] = await Promise.all([
+    User.find({ _id: { $in: farmerIds }, role: "farmer", status: "active" }).select("_id"),
+    FarmerProfile.find({
+      user: { $in: farmerIds },
+      "certification.verifiedByAdmin": true,
+      "certification.rejectedByAdmin": { $ne: true },
+    }).select("user"),
+  ]);
+  const activeFarmerIds = new Set(eligibleFarmers.map((f) => String(f._id)));
+  const verifiedFarmerIds = new Set(verifiedProfiles.map((p) => String(p.user)));
+
+  const items = [];
+  for (const offer of offers) {
+    const product = offer.product;
+    const farmerId = String(offer.farmer?._id || offer.farmer || "");
+    if (!product || product.status !== "Active" ||
+        String(product.farmer?._id || product.farmer || "") !== farmerId ||
+        !activeFarmerIds.has(farmerId) ||
+        !verifiedFarmerIds.has(farmerId) ||
+        Number(product.stock) < Number(offer.minimumQuantity || 1)) continue;
+
+    const effectiveStatus = getEffectiveStatus(offer, product, now);
+    if (effectiveStatus !== "Active" && effectiveStatus !== "Scheduled") continue;
+
+    const quantity = Math.max(1, Number(offer.minimumQuantity || 1));
+    const originalPrice = Number(product.price);
+    const perUnitDiscount = offer.discountType === "Percentage"
+      ? originalPrice * Number(offer.discountValue) / 100
+      : Number(offer.discountValue);
+    const discount = money(Math.min(
+      originalPrice * quantity,
+      perUnitDiscount * quantity,
+      offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
+    ));
+    if (!Number.isFinite(originalPrice) || originalPrice <= 0 || !Number.isFinite(discount) || discount <= 0) continue;
+
+    items.push({
+      _id: offer._id,
+      title: offer.title,
+      description: offer.description,
+      type: offer.type,
+      discountType: offer.discountType,
+      discountValue: offer.discountValue,
+      minimumQuantity: offer.minimumQuantity,
+      originalPrice,
+      offerPrice: money((originalPrice * quantity - discount) / quantity),
+      discountAmount: money(discount / quantity),
+      discountPercent: Math.round((discount / (originalPrice * quantity)) * 100),
+      startDate: offer.startDate,
+      endDate: offer.endDate,
+      startAt: offer.startAt,
+      endAt: offer.endAt,
+      product: {
+        _id: product._id,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        unit: product.unit,
+        stock: product.stock,
+        images: product.images,
+        isOrganic: product.isOrganic,
+      },
+      farmer: {
+        _id: farmerId,
+        name: product.farmer?.name || offer.farmer?.name || "GreenMart Farmer",
+      },
+    });
+  }
+
+  res.json({ items, subscribed: true });
+});
+
+exports.preferences = asyncHandler(async (req, res) => {
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  const sub = await Newsletter.findOne({ email });
+  res.json({
+    email,
+    subscriberType: sub?.subscriberType || "guest",
+    isSubscribed: !!sub?.isActive,
+    subscribedAt: sub?.subscribedAt || null,
+    updatedAt: sub?.updatedAt || null,
+  });
+});
+
+exports.customerSubscribe = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  let sub = await Newsletter.findOne({ email });
+  if (sub) {
+    if (sub.isActive) return res.json({ message: "You are already subscribed to GreenMart updates.", isSubscribed: true });
+    if (sub.subscriberType !== "customer" && sub.subscriberType !== "guest") {
+      return res.status(409).json({ message: "This email is already subscribed under a different account type." });
+    }
+    sub.isActive = true;
+    sub.subscriberType = "customer";
+    sub.subscribedAt = new Date();
+    sub.unsubscribedAt = null;
+    await sub.save();
+  } else {
+    sub = await Newsletter.create({ email, isActive: true, subscriberType: "customer" });
+  }
+  try {
+    await createNotification({
+      userId: req.user._id,
+      type: "newsletter_subscribed",
+      category: "newsletter",
+      title: "Newsletter Subscription",
+      message: "You're subscribed to GreenMart newsletter updates!",
+      resourceType: "Newsletter",
+      resourceId: sub._id,
+      actionUrl: "/customer/dashboard",
+      eventKey: `newsletter:customer-subscribed:${sub._id}`,
+    });
+  } catch (e) { /* ignore */ }
+  res.json({ message: "You're subscribed to GreenMart newsletter updates!", isSubscribed: true });
+});
+
+module.exports = exports;
+
+exports.customerUnsubscribe = asyncHandler(async (req, res) => {
+  if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+  const email = String(req.user.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ message: "User email not found" });
+  const sub = await Newsletter.findOne({ email });
+  if (!sub) return res.status(404).json({ message: "Subscription not found" });
+  if (!sub.isActive) return res.json({ message: "You have successfully unsubscribed from GreenMart updates.", isSubscribed: false });
+  sub.isActive = false;
+  sub.unsubscribedAt = new Date();
+  await sub.save();
+  try {
+    await createNotification({
+      userId: req.user._id,
+      type: "newsletter_unsubscribed",
+      category: "newsletter",
+      title: "Newsletter Unsubscribed",
+      message: "You have successfully unsubscribed from GreenMart newsletter updates.",
+      resourceType: "Newsletter",
+      resourceId: sub._id,
+      actionUrl: "/customer/dashboard",
+      eventKey: `newsletter:customer-unsubscribed:${sub._id}`,
+    });
+  } catch (e) { /* ignore */ }
+  const admins = await User.find({ role: "admin", status: { $ne: "blocked" } }).catch(() => []);
+  for (const admin of admins) {
+    try {
+      await createNotification({
+        userId: admin._id,
+        type: "newsletter_unsubscribed_admin",
+        category: "newsletter",
+        title: "Newsletter Unsubscription",
+        message: `${email} (customer) has unsubscribed from GreenMart newsletter updates.`,
+        resourceType: "Newsletter",
+        resourceId: sub._id,
+        actionUrl: "/admin/newsletter",
+        eventKey: `newsletter:unsubscribed:${sub._id}`,
+      });
+    } catch (e) { /* ignore */ }
+  }
+  res.json({ message: "You have successfully unsubscribed from GreenMart updates.", isSubscribed: false });
+});
+
+module.exports = exports;

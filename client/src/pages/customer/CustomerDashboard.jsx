@@ -7,6 +7,8 @@ import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import productApi from "../../api/productApi";
 import offerApi from "../../api/offerApi";
+import newsletterApi from "../../api/newsletterApi";
+import toast from "react-hot-toast";
 import orderApi from "../../api/orderApi";
 import { fetchWishlist } from "../../features/wishlist/wishlistSlice.js";
 import { fetchCart } from "../../features/cart/cartSlice.js";
@@ -28,6 +30,7 @@ import {
   imageHover,
   badgeHover,
 } from "../../components/common/motionVariants.jsx";
+import { sectionReveal } from "../../animations/variants.js";
 import { getImageUrl } from "../../utils/imageUrl.js";
 
 const HERO_IMAGE = "/images/banners/hero-basket.jpg";
@@ -56,9 +59,16 @@ export default function CustomerDashboard() {
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [featuredError, setFeaturedError] = useState(null);
   const [activeOffers, setActiveOffers] = useState([]);
+  const [newsletterPref, setNewsletterPref] = useState(null);
+  const [newsletterBusy, setNewsletterBusy] = useState(false);
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesError, setPreferencesError] = useState(null);
   const [upcomingOffers, setUpcomingOffers] = useState([]);
   const [offersLoading, setOffersLoading] = useState(true);
   const [offersError, setOffersError] = useState("");
+  const [exclusiveOffers, setExclusiveOffers] = useState([]);
+  const [exclusiveOffersLoading, setExclusiveOffersLoading] = useState(false);
+  const [exclusiveOffersError, setExclusiveOffersError] = useState(null);
   const [tab, setTab] = useState("active");
   const [serverTime, setServerTime] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -68,7 +78,7 @@ export default function CustomerDashboard() {
     setFeaturedLoading(true);
     setFeaturedError(null);
     try {
-      const { data } = await productApi.storefront({ limit: 5, inStock: "true" });
+      const { data } = await productApi.storefront({ inStock: "true", limit: 1000 });
       setFeatured(dedupeById(Array.isArray(data?.items) ? data.items : []));
     } catch (requestError) {
       setFeaturedError(requestError?.message || "Couldn't load recommended products.");
@@ -109,10 +119,78 @@ export default function CustomerDashboard() {
     }
   };
 
+  const loadNewsletterPreferences = async () => {
+    setPreferencesLoading(true);
+    setPreferencesError(null);
+    try {
+      const { data } = await newsletterApi.preferences();
+      setNewsletterPref(data);
+      if (data?.isSubscribed) {
+        loadExclusiveOffers();
+      } else {
+        setExclusiveOffers([]);
+        setExclusiveOffersLoading(false);
+        setExclusiveOffersError(null);
+      }
+    } catch (requestError) {
+      setPreferencesError(requestError?.message || "Couldn't load subscription preferences.");
+      setNewsletterPref(null);
+    } finally {
+      setPreferencesLoading(false);
+    }
+  };
+
+  const loadExclusiveOffers = async () => {
+    if (!newsletterPref?.isSubscribed) {
+      setExclusiveOffers([]);
+      setExclusiveOffersLoading(false);
+      setExclusiveOffersError(null);
+      return;
+    }
+    setExclusiveOffersLoading(true);
+    setExclusiveOffersError(null);
+    try {
+      const { data } = await newsletterApi.customerExclusiveOffers();
+      setExclusiveOffers(Array.isArray(data?.items) ? data.items : []);
+    } catch (requestError) {
+      setExclusiveOffers([]);
+      setExclusiveOffersError(requestError?.message || "Couldn't load exclusive offers.");
+    } finally {
+      setExclusiveOffersLoading(false);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    setNewsletterBusy(true);
+    try {
+      await newsletterApi.customerSubscribe();
+      toast.success("You're subscribed to GreenMart newsletter updates!");
+      await loadNewsletterPreferences();
+    } catch (error) {
+      toast.error(error?.message || "Couldn't subscribe to GreenMart updates.");
+    } finally {
+      setNewsletterBusy(false);
+    }
+  };
+
+  const handleUnsubscribe = async () => {
+    setNewsletterBusy(true);
+    try {
+      await newsletterApi.customerUnsubscribe();
+      toast.success("You have successfully unsubscribed from GreenMart updates.");
+      await loadNewsletterPreferences();
+    } catch (error) {
+      toast.error(error?.message || "Couldn't unsubscribe from GreenMart updates.");
+    } finally {
+      setNewsletterBusy(false);
+    }
+  };
+
   useEffect(() => {
     loadFeatured();
     loadOffers();
     loadOrders();
+    loadNewsletterPreferences();
     if (user?.role === "customer" && token && token !== "demo-token") dispatch(fetchWishlist());
   }, [dispatch, token, user?.role]);
 
@@ -130,6 +208,15 @@ export default function CustomerDashboard() {
     { label: "Active Cart Items", value: cart.error || cartCountLoading ? "—" : cartItemCount, to: "/cart", icon: ShoppingBag, tone: "bg-amber-50 text-amber-700" },
   ];
   const latestOrder = orders[0];
+
+  useEffect(() => {
+    if (newsletterPref?.isSubscribed) loadExclusiveOffers();
+    else {
+      setExclusiveOffers([]);
+      setExclusiveOffersLoading(false);
+      setExclusiveOffersError(null);
+    }
+  }, [newsletterPref?.isSubscribed]);
 
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
@@ -171,7 +258,12 @@ export default function CustomerDashboard() {
       </div>
 
       <div className="grid items-stretch gap-3 lg:grid-cols-12">
-        <section className="relative flex min-h-[190px] items-center overflow-hidden rounded-xl bg-[#134B35] lg:col-span-7">
+        <motion.section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="relative flex min-h-[190px] items-center overflow-hidden rounded-xl bg-[#134B35] lg:col-span-7"
+        >
           <img src={HERO_IMAGE} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#082C22]/90 via-[#082C22]/75 to-[#082C22]/35" />
           <div className="relative z-10 max-w-sm p-5 text-white sm:p-6">
@@ -179,9 +271,14 @@ export default function CustomerDashboard() {
             <p className="mt-2 text-xs leading-5 text-white/85">Support local farmers · Eat healthier · Build a greener future</p>
             <Link to="/shop" className="mt-3 inline-flex h-8 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-white">Shop Now<ArrowRight className="h-3.5 w-3.5" /></Link>
           </div>
-        </section>
+        </motion.section>
 
-        <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm lg:col-span-5">
+        <motion.section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm lg:col-span-5"
+        >
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-900">Recent Orders</h2>
             <Link to="/customer/orders" className="text-[11px] font-semibold text-primary">View all <ArrowRight className="ml-0.5 inline h-3 w-3" /></Link>
@@ -201,7 +298,7 @@ export default function CustomerDashboard() {
                 </table>
               </div>
           ) : <div className="p-6 text-center text-xs text-gray-500">No orders yet. <Link to="/shop" className="font-semibold text-primary">Explore the shop</Link></div>}
-        </section>
+        </motion.section>
       </div>
 
       <motion.div
@@ -289,6 +386,74 @@ export default function CustomerDashboard() {
           animate={animate}
           variants={sectionContentVariants}
         >
+          <section className="rounded-xl border border-[#E8EEEA] bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Exclusive Subscriber Offers</h2>
+                <p className="mt-0.5 text-[10px] text-gray-500">Special promotions reserved for active newsletter subscribers.</p>
+              </div>
+            </div>
+
+            {preferencesLoading ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {[1, 2, 3, 4].map((key) => (
+                  <div key={key} className="h-56 animate-pulse rounded-lg bg-gray-50" />
+                ))}
+              </div>
+            ) : preferencesError ? (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700">
+                {preferencesError} <button onClick={loadNewsletterPreferences} className="ml-2 font-semibold underline">Retry</button>
+              </p>
+            ) : newsletterPref?.isSubscribed ? (
+              <>
+                {exclusiveOffersLoading ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map((key) => (
+                      <div key={key} className="h-56 animate-pulse rounded-lg bg-gray-50" />
+                    ))}
+                  </div>
+                ) : exclusiveOffersError ? (
+                  <p role="alert" className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700">
+                    {exclusiveOffersError} <button onClick={loadExclusiveOffers} className="ml-2 font-semibold underline">Retry</button>
+                  </p>
+                ) : exclusiveOffers.length === 0 ? (
+                  <p className="text-[10px] text-center text-gray-500 py-4">No exclusive subscriber offers available right now. Check back soon.</p>
+                ) : (
+                  <>
+                    <h3 className="text-[10px] font-semibold text-[#16803C] mb-2 uppercase tracking-wider">Subscriber-Exclusive Offers</h3>
+                    <ContinuousMarquee speed={40} gap={20} itemWidth={220} minItemWidth={160} infinite={exclusiveOffers.length >= MIN_ITEMS_FOR_INFINITE}>
+                      {exclusiveOffers.map((offer) => (
+                        <DashboardOfferCard key={offer._id} offer={offer} serverTime={serverTime} />
+                      ))}
+                    </ContinuousMarquee>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="rounded-lg border border-gray-100 bg-[#FAF8F1] p-6 text-center">
+                <p className="text-xs text-gray-500 mb-3">Subscribe to the GreenMart newsletter to unlock exclusive subscriber offers.</p>
+                <button
+                  onClick={handleSubscribe}
+                  className="h-8 rounded-md bg-[#245C3A] px-3 text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
+                >
+                  Subscribe Now
+                </button>
+              </div>
+            )}
+          </section>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial="hidden"
+        animate={animate}
+        variants={sectionContainerVariants}
+      >
+        <motion.div
+          initial="hidden"
+          animate={animate}
+          variants={sectionContentVariants}
+        >
           <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div><h2 className="text-sm font-semibold text-gray-900">Recommended for You</h2><p className="mt-0.5 text-[10px] text-gray-500">Fresh picks from GreenMart farmers.</p></div>
@@ -310,9 +475,52 @@ export default function CustomerDashboard() {
         </motion.div>
       </motion.div>
 
-      <section aria-label="AI Shopping Assistant">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+      >
+        <h2 className="text-sm font-semibold text-gray-900 mb-2">Newsletter Preferences</h2>
+        {!(newsletterPref?.subscribedAt) && !newsletterPref?.isSubscribed ? (
+          <>
+            <p className="text-xs text-gray-500 mb-3">Stay in Touch</p>
+            <p className="text-xs text-gray-500 mb-3">Get the latest GreenMart offers, fresh harvest updates, and exclusive subscriber promotions.</p>
+            <button
+              disabled={newsletterBusy}
+              onClick={handleSubscribe}
+              className="h-9 rounded-lg bg-[#245C3A] px-4 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {newsletterBusy ? "Updating..." : "Subscribe Now"}
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 mb-2">{newsletterPref?.email || user?.email}</p>
+            <div className="flex items-center gap-2 mb-3">
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${newsletterPref?.isSubscribed ? "bg-[#16803C] text-white" : "bg-[#F59E0B] text-white"}`}>
+                {newsletterPref?.isSubscribed ? "Active" : "Unsubscribed"}
+              </span>
+            </div>
+            <button
+              disabled={newsletterBusy}
+              onClick={newsletterPref?.isSubscribed ? handleUnsubscribe : handleSubscribe}
+              className="h-9 rounded-lg bg-[#245C3A] px-4 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {newsletterBusy ? "Updating..." : newsletterPref?.isSubscribed ? "Unsubscribe" : "Subscribe Again"}
+            </button>
+          </>
+        )}
+      </motion.section>
+
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        aria-label="AI Shopping Assistant"
+      >
         <ChatAssistant />
-      </section>
+      </motion.section>
     </div>
   );
 }
@@ -321,7 +529,7 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
   const product = offer.product || {};
   const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
   const unit = product.unit || "unit";
-  const productId = product._id;
+  const productId = product._id || product.id;
   const savingLabel = offer.discountType === "Percentage"
     ? `${offer.discountPercent}% OFF`
     : `Save ${formatCurrency(offer.discountAmount)}`;

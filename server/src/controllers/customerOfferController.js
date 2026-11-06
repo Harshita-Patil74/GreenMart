@@ -12,7 +12,8 @@ exports.list = asyncHandler(async (req, res) => {
   // Find approved offers that are active and not yet expired
   const offers = await Offer.find({
     status: "Active",
-    isActive: true,
+    isActive: { $ne: false },
+    isSubscriberExclusive: { $ne: true },
     endDate: { $gte: now },
   })
     .sort({ createdAt: -1 })

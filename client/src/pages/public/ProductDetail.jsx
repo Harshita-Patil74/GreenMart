@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { Star, Check, MapPin, ShoppingCart, Package } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import productApi from "../../api/productApi";
 import reviewApi from "../../api/reviewApi.js";
@@ -115,7 +117,12 @@ export default function ProductDetail() {
   return (
     <div className="gm-container space-y-5 py-6 pb-16">
       <BackButton fallback="/shop" />
-      <div className="grid gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2 md:p-5">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="grid gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:grid-cols-2 md:p-5"
+      >
           <div className="space-y-3">
             <div className="relative flex min-h-[240px] items-center justify-center overflow-hidden rounded-lg bg-gray-50">
               {mainImage ? <ImageWithFallback src={getImageUrl(mainImage)} alt={product.name} className="h-full max-h-[440px] w-full object-cover" /> : <Package className="h-10 w-10 text-gray-300" />}
@@ -175,9 +182,14 @@ export default function ProductDetail() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
-      <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+      >
         <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-semibold text-gray-900">Customer Reviews</h2><span className="text-[10px] text-gray-500">{reviews.length} review{reviews.length === 1 ? "" : "s"}</span></div>
         {reviewError ? <p role="alert" className="mb-3 text-xs text-red-700">{reviewError} <button onClick={loadReviews} className="font-semibold underline">Retry</button></p> : <ReviewList reviews={reviews} />}
         {canReview ? (
@@ -186,7 +198,7 @@ export default function ProductDetail() {
           eligibility?.eligible ? <ReviewForm onSubmit={handleReviewSubmit} submitting={reviewSubmitting} /> :
           <p className="mt-3 text-[11px] text-gray-500">{eligibility?.reason === "already_reviewed" ? "You have already reviewed this product." : "You can review this product after your order item has been delivered."}</p>
         ) : <p className="mt-3 text-[11px] text-gray-500">Sign in as a customer to write a review.</p>}
-      </section>
+      </motion.section>
     </div>
   );
 }

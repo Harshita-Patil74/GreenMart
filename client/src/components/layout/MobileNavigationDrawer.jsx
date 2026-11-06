@@ -1,6 +1,8 @@
 import React, { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import { motion } from "framer-motion";
+import { slideLeftVariants, fadeVariants } from "../../animations/variants.js";
 import { logout } from "../../features/auth/authSlice.js";
 import {
   BarChart3,
@@ -110,9 +112,12 @@ export default function MobileNavigationDrawer({
 
   return (
     <>
-      <button
+      <motion.button
         type="button"
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 lg:hidden ${
+        variants={fadeVariants}
+        initial="hidden"
+        animate={open ? "visible" : "hidden"}
+        className={`fixed inset-0 z-40 bg-black/40 lg:hidden ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
         onClick={onClose}
@@ -121,14 +126,21 @@ export default function MobileNavigationDrawer({
         disabled={!open}
         tabIndex={open ? 0 : -1}
       />
-      <aside
+      <motion.aside
         ref={drawerRef}
         id={id}
         role="dialog"
         aria-modal={open ? "true" : undefined}
         aria-hidden={!open}
         aria-label={label}
-        className={`fixed inset-y-0 left-0 z-50 flex h-[100vh] h-[100dvh] w-[min(280px,85vw)] max-w-[85vw] flex-col overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-[transform,visibility] duration-300 ease-in-out motion-reduce:transition-none lg:hidden ${
+        variants={{
+          hidden: { opacity: 0, x: "100%", pointerEvents: "none" },
+          visible: { opacity: 1, x: 0, pointerEvents: "auto" },
+        }}
+        initial={open ? "visible" : "hidden"}
+        animate={open ? "visible" : "hidden"}
+        exit={{ opacity: 0, x: "100%", transition: { duration: 0.2 } }}
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100vh] h-[100dvh] w-[min(280px,85vw)] max-w-[85vw] flex-col overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:hidden ${
           open ? "visible translate-x-0" : "invisible -translate-x-full"
         } ${className}`}
       >
@@ -221,7 +233,7 @@ export default function MobileNavigationDrawer({
             </div>
           </div>
         )}
-      </aside>
+      </motion.aside>
     </>
   );
 }

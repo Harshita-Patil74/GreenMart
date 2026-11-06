@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import { ShieldCheck, UserRound, MapPin, KeyRound } from "lucide-react";
 import authApi from "../../api/authApi";
@@ -109,12 +111,22 @@ export default function Profile() {
   return (
     <div className="mx-auto max-w-4xl space-y-4 pb-12">
       <BackButton fallback="/customer/dashboard" />
-      <div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="space-y-1"
+      >
         <h1 className="text-xl font-heading font-bold text-gray-900">My Profile</h1>
         <p className="mt-1 text-xs text-gray-500">Manage your account information and delivery addresses.</p>
-      </div>
+      </motion.div>
 
-      <section className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+      >
         <div className="h-14 w-14 overflow-hidden rounded-full border border-emerald-100 bg-emerald-50">
           {form.avatar ? <img src={avatarPreview} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><UserRound className="h-6 w-6 text-primary" /></div>}
         </div>
@@ -124,20 +136,32 @@ export default function Profile() {
         </div>
         {user?.status && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold capitalize text-emerald-700">{user.status}</span>}
         {user?.createdAt && <span className="text-[10px] text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>}
-      </section>
+      </motion.section>
 
-      <nav aria-label="Profile sections" className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-1 shadow-sm">
+      <motion.nav
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        aria-label="Profile sections"
+        className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-1 shadow-sm"
+      >
         {tabs.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${tab === id ? "bg-emerald-50 text-primary" : "text-gray-500 hover:bg-gray-50"}`}>
             <Icon className="h-3.5 w-3.5" />{label}
           </button>
         ))}
-      </nav>
+      </motion.nav>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error} <button onClick={loadProfile} className="ml-1 font-semibold underline">Retry</button></p>}
 
       {tab === "personal" && (
-        <form onSubmit={saveProfile} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <motion.form
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          onSubmit={saveProfile}
+          className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+        >
           <h2 className="text-sm font-semibold text-gray-900">Personal Information</h2>
           {loading ? <p className="mt-4 text-xs text-gray-500">Loading profile...</p> : (
             <>
@@ -161,13 +185,18 @@ export default function Profile() {
               <button disabled={saving || loading} className="mt-4 h-9 rounded-lg bg-primary px-4 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60">{saving ? "Saving..." : "Save Changes"}</button>
             </>
           )}
-        </form>
+        </motion.form>
       )}
 
       {tab === "addresses" && <SavedAddresses embedded />}
 
       {tab === "password" && (
-        <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <motion.section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+        >
           <h2 className="text-sm font-semibold text-gray-900">Change Password</h2>
           <p className="mt-2 max-w-xl text-xs leading-5 text-gray-500">For account security, we’ll email a password-reset link to your registered address. The link expires after one hour.</p>
           {resetSent ? (
@@ -175,7 +204,7 @@ export default function Profile() {
           ) : (
             <button onClick={sendPasswordReset} disabled={saving || !form.email} className="mt-4 h-9 rounded-lg bg-primary px-4 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-60">{saving ? "Sending..." : "Send Password Reset Link"}</button>
           )}
-        </section>
+        </motion.section>
       )}
     </div>
   );

@@ -288,7 +288,6 @@ describe("Home page offers", () => {
 });
 
 describe("Home page newsletter", () => {
-  const originalPushState = window.history.pushState;
   const originalLocalStorage = window.localStorage;
   const originalSessionStorage = window.sessionStorage;
 
@@ -298,104 +297,29 @@ describe("Home page newsletter", () => {
     });
     productApi.storefrontOffers.mockResolvedValue({ data: { items: [] } });
     productApi.serverTime.mockResolvedValue({ data: { serverTime: new Date().toISOString() } });
-    newsletterApi.subscribe.mockResolvedValue({});
-    newsletterApi.subscribe.mockClear();
-    window.history.pushState = vi.fn();
     Object.defineProperty(window, "localStorage", { value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }, writable: true });
     Object.defineProperty(window, "sessionStorage", { value: { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }, writable: true });
   });
 
   afterEach(() => {
-    window.history.pushState = originalPushState;
     Object.defineProperty(window, "localStorage", { value: originalLocalStorage, writable: true });
     Object.defineProperty(window, "sessionStorage", { value: originalSessionStorage, writable: true });
   });
 
-  it("subscribes a visitor with a valid email without logging in", async () => {
-    newsletterApi.subscribe.mockResolvedValue({});
+  it("does not render a public newsletter subscription form", () => {
     renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-
-    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
-    fireEvent.submit(emailInput.closest("form"));
-
-    await act(async () => {});
-    expect(newsletterApi.subscribe).toHaveBeenCalledWith("visitor@example.com");
-    expect(screen.getByText("Successfully subscribed to GreenMart updates!")).toBeInTheDocument();
-    expect(emailInput).toHaveValue("");
+    expect(screen.queryByPlaceholderText("Your email")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Join" })).not.toBeInTheDocument();
   });
 
-  it("rejects an invalid email address", async () => {
+  it("does not call newsletter subscription API from public Home", async () => {
     renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-
-    fireEvent.change(emailInput, { target: { value: "not-an-email" } });
-    fireEvent.submit(emailInput.closest("form"));
-
     await act(async () => {});
-    expect(screen.getByText("Please enter a valid email address")).toBeInTheDocument();
+    expect(newsletterApi.subscribe).not.toHaveBeenCalled();
   });
 
-  it("shows error when email is already subscribed", async () => {
-    newsletterApi.subscribe.mockRejectedValue({ response: { data: { message: "You are already subscribed to GreenMart updates" } } });
+  it("prompts guests to sign in for newsletter preferences", () => {
     renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-
-    fireEvent.change(emailInput, { target: { value: "existing@example.com" } });
-    fireEvent.submit(emailInput.closest("form"));
-
-    await act(async () => {});
-    expect(screen.getByText("You are already subscribed to GreenMart updates")).toBeInTheDocument();
-  });
-
-  it("shows error message when API fails", async () => {
-    newsletterApi.subscribe.mockRejectedValue(new Error("Network error"));
-    renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-
-    fireEvent.change(emailInput, { target: { value: "fail@example.com" } });
-    fireEvent.submit(emailInput.closest("form"));
-
-    await act(async () => {});
-    expect(screen.getByText("Unable to subscribe right now. Please try again later.")).toBeInTheDocument();
-  });
-
-  it("does not redirect when Join is clicked", async () => {
-    newsletterApi.subscribe.mockResolvedValue({});
-    renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-
-    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
-    fireEvent.submit(emailInput.closest("form"));
-
-    await act(async () => {});
-    expect(window.history.pushState).not.toHaveBeenCalled();
-  });
-
-  it("disables Join button during submission", async () => {
-    let resolveSubscribe;
-    newsletterApi.subscribe.mockReturnValue(new Promise((resolve) => { resolveSubscribe = resolve; }));
-    renderWithStore(<Home />);
-
-    const emailInput = screen.getByPlaceholderText("Your email");
-    const joinButton = screen.getByRole("button", { name: "Join" });
-
-    fireEvent.change(emailInput, { target: { value: "visitor@example.com" } });
-    fireEvent.submit(emailInput.closest("form"));
-
-    expect(joinButton).toHaveAttribute("disabled");
-    expect(joinButton).toHaveTextContent("Subscribing...");
-
-    await act(async () => {
-      resolveSubscribe({});
-    });
-    expect(joinButton).not.toHaveAttribute("disabled");
-    expect(joinButton).toHaveTextContent("Join");
+    expect(screen.getByText(/Sign in to manage your newsletter preferences/i)).toBeInTheDocument();
   });
 });
-

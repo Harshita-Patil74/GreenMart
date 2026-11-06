@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Leaf, Users, Truck, Recycle, ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -11,8 +11,8 @@ import { formatCurrency, formatDate } from "../../pages/farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
 import ContinuousMarquee from "../../components/common/ContinuousMarquee.jsx";
 import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../components/common/motionVariants.jsx";
+import { slideUpVariants, staggerContainer, staggerItem, sectionReveal } from "../../animations/variants.js";
 import categoryApi from "../../api/categoryApi";
-import newsletterApi from "../../api/newsletterApi";
 import CategoryCarousel from "../../components/common/CategoryCarousel.jsx";
 
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
@@ -36,6 +36,7 @@ function HomeOfferCard({ offer, serverTime }) {
   const navigate = useNavigate();
   const product = offer.product || {};
   const productId = product._id || product.id;
+  const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
   const originalPrice = Number((offer.originalPrice ?? product.price) || 0);
   const price = Number(offer.offerPrice ?? 0);
   const discountLabel = offer.discountType === "Percentage"
@@ -49,12 +50,6 @@ function HomeOfferCard({ offer, serverTime }) {
   const disabled = outOfStock || !active;
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
-
-  const shopNow = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    navigate(`/product/${productId}`);
-  };
 
   return (
     <motion.div
@@ -89,6 +84,7 @@ function HomeOfferCard({ offer, serverTime }) {
           {product.name || "Product"}
         </Link>
         <p className="mt-0.5 truncate text-[9px] leading-3 text-[#68756B] sm:text-[10px]">{offer.title}</p>
+        <p className="mt-0.5 text-[8px] text-[#8B9A8E]">{farmerName}</p>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           <span className="text-[13px] font-bold leading-4 text-[#245C3A] sm:text-sm">{formatCurrency(price)}</span>
@@ -114,14 +110,14 @@ function HomeOfferCard({ offer, serverTime }) {
         </div>
 
         <div className="mt-auto grid grid-cols-[1fr_auto] gap-1.5 pt-2">
-          <Link
-            to={`/product/${productId}`}
-            onClick={shopNow}
+          <button
+            type="button"
+            onClick={() => navigate(`/product/${productId}`)}
             disabled={disabled}
             className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-md bg-[#245C3A] px-2 text-[10px] font-semibold text-white transition hover:bg-[#1E4A30] disabled:cursor-not-allowed disabled:bg-[#D9E0D4] disabled:text-[#8B9A8E] sm:text-[11px]"
           >
             <span className="truncate">{disabled ? "Out of Stock" : "Shop Now"}</span>
-          </Link>
+          </button>
           <Link
             to={`/product/${productId}`}
             aria-label={`View ${product.name}`}
@@ -145,43 +141,8 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState(null);
-  const [newsletterEmail, setNewsletterEmail] = useState("");
-  const [newsletterLoading, setNewsletterLoading] = useState(false);
-  const [newsletterMessage, setNewsletterMessage] = useState("");
-  const [newsletterMessageType, setNewsletterMessageType] = useState("");
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState(null);
-
-  const handleNewsletterSubmit = async (e) => {
-    e.preventDefault();
-    const email = newsletterEmail.trim();
-    if (!email) return;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setNewsletterMessage("Please enter a valid email address");
-      setNewsletterMessageType("error");
-      return;
-    }
-    setNewsletterLoading(true);
-    setNewsletterMessage("");
-    try {
-      await newsletterApi.subscribe(email);
-      setNewsletterMessage("Successfully subscribed to GreenMart updates!");
-      setNewsletterMessageType("success");
-      setNewsletterEmail("");
-    } catch (err) {
-      const status = err?.response?.status;
-      const msg =
-        status === 409
-          ? "This email is already subscribed to GreenMart updates."
-          : err?.response?.data?.message ||
-            "Unable to subscribe right now. Please try again later.";
-      setNewsletterMessage(msg);
-      setNewsletterMessageType("error");
-    } finally {
-      setNewsletterLoading(false);
-    }
-  };
 
   useEffect(() => {
     let active = true;
@@ -221,30 +182,37 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  const offersActiveRef = useRef(true);
+
+  const fetchOffers = () => {
+    offersActiveRef.current = true;
     setOffersLoading(true);
     setOffersError("");
     productApi.storefrontOffers()
       .then(({ data }) => {
-        if (!active) return;
+        if (!offersActiveRef.current) return;
         setOffers(dedupeById(Array.isArray(data?.items) ? data.items : []));
       })
       .catch((requestError) => {
-        if (active) {
+        if (offersActiveRef.current) {
           setOffers([]);
           setOffersError(requestError?.message || "Offers couldn't be loaded right now.");
         }
       })
       .finally(() => {
-        if (active) setOffersLoading(false);
+        if (offersActiveRef.current) setOffersLoading(false);
       });
+  };
+
+  useEffect(() => {
+    offersActiveRef.current = true;
+    fetchOffers();
     productApi.serverTime()
       .then(({ data }) => {
-        if (active) setServerTime(data.serverTime);
+        if (offersActiveRef.current) setServerTime(data.serverTime);
       })
       .catch(() => { /* server time is optional */ });
-    return () => { active = false; };
+    return () => { offersActiveRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -287,7 +255,12 @@ export default function Home() {
   return (
     <div className="bg-[#FAF8F1] pb-16 min-h-screen">
       <div className="gm-container pt-5">
-        <div className="relative h-[340px] sm:h-[380px] rounded-[16px] overflow-hidden mb-6">
+        <motion.div
+          variants={slideUpVariants}
+          initial="hidden"
+          animate="visible"
+          className="relative h-[340px] sm:h-[380px] rounded-[16px] overflow-hidden mb-6"
+        >
           <img src={HERO} alt="Fresh Organic" className="absolute inset-0 w-full h-full object-cover" />
           <div
             className="absolute inset-0"
@@ -314,25 +287,35 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white mb-6 rounded-[16px] border border-[#E2E6DF] shadow-sm p-6 sm:p-8">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="bg-white mb-6 rounded-[16px] border border-[#E2E6DF] shadow-sm p-6 sm:p-8"
+        >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {features.map((f, i) => {
               const Icon = f.icon;
               return (
-                <div key={i} className="flex items-center gap-3">
+                <motion.div key={i} variants={staggerItem} initial="hidden" animate="visible" className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-[10px] bg-[#EAF2E7] flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5 text-[#245C3A]" />
                   </div>
                   <span className="text-[12px] sm:text-[13px] font-medium text-[#26352B] leading-snug">{f.title}</span>
-                </div>
+                </motion.div>
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
-        <div className="mb-6">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="mb-6"
+        >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold text-[#26352B]">Shop by Category</h2>
           </div>
@@ -347,9 +330,14 @@ export default function Home() {
           ) : (
             <p className="text-[12px] text-[#68756B] text-center py-4">No categories available.</p>
           )}
-        </div>
+        </motion.div>
 
-        <div className="mb-6">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="mb-6"
+        >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold text-[#26352B]">Special Offers &amp; Discounts</h2>
             <Link to="/customer/offers" className="text-[12px] font-medium text-[#245C3A] hover:underline">
@@ -358,9 +346,16 @@ export default function Home() {
           </div>
 
           {offersError && (
-            <p role="alert" className="rounded-lg border border-[#FBEDE5] bg-[#FBEDE5] px-3 py-2 text-xs text-[#C2410C] mb-4">
+            <div role="alert" className="rounded-lg border border-[#FBEDE5] bg-[#FBEDE5] px-3 py-2 text-xs text-[#C2410C] mb-4 flex items-center gap-2">
               {offersError}
-            </p>
+              <button
+                type="button"
+                onClick={fetchOffers}
+                className="ml-2 text-[10px] font-semibold underline decoration-[#245C3A] text-[#245C3A] hover:text-[#1E4A30]"
+              >
+                Retry
+              </button>
+            </div>
           )}
 
           {offersLoading ? (
@@ -378,9 +373,14 @@ export default function Home() {
           ) : (
             <EmptyState text="No active offers available right now. Check back soon!" />
           )}
-        </div>
+        </motion.div>
 
-        <div className="mb-6">
+        <motion.div
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="mb-6"
+        >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[18px] font-bold text-[#26352B]">Featured Products</h2>
             <Link to="/shop" className="text-[12px] font-medium text-[#245C3A] hover:underline">
@@ -407,9 +407,14 @@ export default function Home() {
           ) : (
             <EmptyState text="No featured products available right now. Check back soon!" />
           )}
-        </div>
+        </motion.div>
 
-        <section className="bg-[#245C3A] rounded-[16px] overflow-hidden">
+        <section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="bg-[#245C3A] rounded-[16px] overflow-hidden"
+        >
           <div className="p-6 sm:p-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <h2 className="text-[16px] sm:text-[18px] font-bold text-white">Fresh from Our Farms</h2>
@@ -420,29 +425,7 @@ export default function Home() {
             </div>
             <div className="border-l border-[#477A4E]/40 pl-6 sm:pl-8 pt-6 sm:pt-0">
               <p className="text-xs text-[#EAF2E7]/80 mb-3">Stay in touch</p>
-              <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="Your email"
-                  value={newsletterEmail}
-                  onChange={(e) => setNewsletterEmail(e.target.value)}
-                  className="flex-1 h-9 rounded-[6px] bg-white/10 border border-white/20 text-white placeholder-[#EAF2E7]/50 focus:outline-none focus:ring-2 focus:ring-white"
-                  disabled={newsletterLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={newsletterLoading}
-                  className="h-9 px-4 rounded-[6px] bg-white text-[#245C3A] text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {newsletterLoading ? "Subscribing..." : "Join"}
-                </button>
-               </form>
-               <p className="mt-2 text-[10px] text-[#EAF2E7]/70">By subscribing, you agree to receive GreenMart product updates, seasonal offers and newsletters. You can unsubscribe at any time.</p>
-               {newsletterMessage && (
-                 <p className={`mt-2 text-xs ${newsletterMessageType === "success" ? "text-[#16803C] bg-[#EAF2E7] px-3 py-2 rounded-md" : "text-[#C2410C] bg-[#FBEDE5] px-3 py-2 rounded-md"}`}>
-                   {newsletterMessage}
-                 </p>
-               )}
+              <p className="text-xs text-[#EAF2E7]/70">Sign in to manage your newsletter preferences and access exclusive subscriber offers.</p>
             </div>
           </div>
         </section>

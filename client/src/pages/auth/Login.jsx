@@ -3,6 +3,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import Logo from "../../components/common/Logo.jsx";
 import { login, logout } from "../../features/auth/authSlice.js";
 import { dashboardPathForRole } from "../../utils/roleAccess.js";
@@ -62,12 +64,30 @@ export default function Login() {
 
   return (
     <div className="w-[400px] max-w-full bg-white rounded-[18px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
-      <div className="flex justify-center mb-5">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex justify-center mb-5"
+      >
         <Logo subtitle={true} size="md" />
-      </div>
-      <h1 className="text-[22px] font-heading font-semibold text-center text-[#1F2937]">Welcome Back</h1>
-      <p className="text-[13px] text-muted text-center mt-1">Login to your account to continue</p>
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="space-y-1"
+      >
+        <h1 className="text-[22px] font-heading font-semibold text-center text-[#1F2937]">Welcome Back</h1>
+        <p className="text-[13px] text-muted text-center mt-1">Login to your account to continue</p>
+      </motion.div>
+      <motion.form
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        onSubmit={handleSubmit}
+        className="mt-6 space-y-4"
+      >
         <div>
           <label className="block text-[13px] font-medium text-text mb-1.5">Email Address</label>
           <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setValidationError(""); }} placeholder="Enter your email" autoComplete="username" required className="gm-input" />
@@ -106,11 +126,16 @@ export default function Login() {
         <button type="submit" disabled={loading} className="w-full h-11 bg-primary hover:bg-primary-hover text-white font-medium text-sm rounded-[8px] shadow-btn disabled:opacity-60">
           {loading ? "Logging in..." : "Login"}
         </button>
-      </form>
+      </motion.form>
 
-      <p className="text-xs text-center text-muted mt-5">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="text-xs text-center text-muted mt-5"
+      >
         Don't have an account? <Link to="/register" className="font-semibold text-primary hover:underline">Register</Link>
-      </p>
+      </motion.div>
     </div>
   );
 }

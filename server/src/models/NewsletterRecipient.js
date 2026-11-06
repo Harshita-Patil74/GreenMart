@@ -10,6 +10,7 @@ const newsletterRecipientSchema = new mongoose.Schema({
   acceptedAt: { type: Date, default: null },
   deliveredAt: { type: Date, default: null },
   failedAt: { type: Date, default: null },
+  readAt: { type: Date, default: null },
 }, { timestamps: true });
 
 newsletterRecipientSchema.index({ campaignId: 1, email: 1 }, { unique: true });

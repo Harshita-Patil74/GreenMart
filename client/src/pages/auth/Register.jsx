@@ -3,6 +3,8 @@ import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import Logo from "../../components/common/Logo.jsx";
 import { register } from "../../features/auth/authSlice.js";
@@ -70,12 +72,29 @@ export default function Register() {
   return (
     <div className="w-[420px] max-w-full bg-white rounded-[16px] p-8 shadow-card-lg">
       <BackButton fallback="/login" />
-      <div className="flex justify-center mb-6">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex justify-center mb-6"
+      >
         <Logo subtitle={true} size="md" />
-      </div>
-      <h1 className="text-[22px] font-semibold text-center text-text">Create Your Account</h1>
-      <p className="text-[13px] text-muted text-center mt-1">Join GreenMart and be a part of the organic movement</p>
-      <div className="flex border border-border rounded-lg h-10 mt-5 overflow-hidden">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="space-y-1"
+      >
+        <h1 className="text-[22px] font-semibold text-center text-text">Create Your Account</h1>
+        <p className="text-[13px] text-muted text-center mt-1">Join GreenMart and be a part of the organic movement</p>
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex border border-border rounded-lg h-10 mt-5 overflow-hidden"
+      >
         {roles.map((r) => (
           <button
             key={r}
@@ -86,8 +105,14 @@ export default function Register() {
             {r}
           </button>
         ))}
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4 mt-5">
+      </motion.div>
+      <motion.form
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        onSubmit={handleSubmit}
+        className="space-y-4 mt-5"
+      >
         <div>
           <label className="block text-[13px] font-medium text-text mb-1.5">Full Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" required className="w-full h-11 px-3.5 text-sm bg-gray-50 border border-border rounded-input focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition" />
@@ -122,13 +147,23 @@ export default function Register() {
         <button type="submit" disabled={loading || !formIsValid} className="w-full h-11 bg-primary hover:bg-primary-hover text-white font-medium text-sm rounded-btn shadow-btn transition disabled:cursor-not-allowed disabled:opacity-60 mt-3">
           {loading ? "Registering..." : "Register"}
         </button>
-      </form>
-      <p className="text-xs text-center text-muted mt-5">
+      </motion.form>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="text-xs text-center text-muted mt-5"
+      >
         Already have an account? <Link to="/login" className="font-semibold text-primary hover:underline">Login</Link>
-      </p>
-      <p className="text-xs text-center text-muted mt-3">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="text-xs text-center text-muted mt-3"
+      >
         Administrator? <Link to="/login" className="font-semibold text-primary hover:underline">Admin Login</Link>
-      </p>
+      </motion.div>
     </div>
   );
 }

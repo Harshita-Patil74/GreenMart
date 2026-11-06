@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import productApi from "../../api/productApi";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl";
-import { formatCurrency, getStatusClasses, unwrapList } from "./farmerUtils";
+import { formatCurrency, unwrapList } from "./farmerUtils";
+import StatusBadge from "../../components/common/StatusBadge.jsx";
 
 const PAGE_SIZE = 6;
 
@@ -154,7 +155,7 @@ export default function MyProducts() {
                       <td className="px-4 py-3 text-xs font-medium text-[#32443F]">{formatCurrency(product.price)} <span className="text-[10px] font-normal text-[#899691]">/ {product.unit || "unit"}</span></td>
                       <td className="px-4 py-3 text-xs text-[#52615D]">{product.stock ?? 0} {product.unit || ""}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold ${getStatusClasses(availability(product))}`}>{availability(product)}</span>
+                        <StatusBadge status={availability(product)} />
                       </td>
                       <td className="relative px-4 py-3 text-right">
                         <button type="button" aria-label={`Actions for ${product.name}`} onClick={() => setOpenActions(openActions === product._id ? "" : product._id)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#DDE6E2] text-[#61716C] hover:bg-[#F0F5F2]">

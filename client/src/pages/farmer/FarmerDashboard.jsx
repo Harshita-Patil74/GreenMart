@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { AlertTriangle, ArrowRight, Boxes, ClipboardList, MapPin, Package, Plus, ShoppingBag, Wallet } from "lucide-react";
 import farmerApi from "../../api/farmerApi";
 import orderApi from "../../api/orderApi";
@@ -53,6 +55,7 @@ export default function FarmerDashboard() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     if (isAdmin) {
       setLoading(false);
@@ -100,30 +103,50 @@ export default function FarmerDashboard() {
 
   return (
     <section className="space-y-3.5 pb-28 text-[13px] text-[#20312E]">
-      <header>
+      <motion.header
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+      >
         <h1 className="text-xl font-bold tracking-tight text-[#172A27]">Farmer Dashboard</h1>
         <p className="mt-1 text-xs text-[#71817D]">Welcome back, {user?.name || "Farmer"}. Here's what's happening with your farm and products.</p>
-      </header>
+      </motion.header>
 
       {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error} <button type="button" onClick={loadDashboard} className="ml-2 font-semibold underline">Try again</button></div>}
 
-      <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-2 gap-2.5 xl:grid-cols-4"
+      >
         {[
           { label: "Total Products", value: metrics.productCount, note: "Products in your catalog", icon: Package, accent: "text-[#07925B]", iconBg: "bg-emerald-50" },
           { label: "Pending Orders", value: metrics.pendingOrders, note: "Orders awaiting action", icon: ShoppingBag, accent: "text-[#D88A0A]", iconBg: "bg-amber-50" },
           { label: "Total Earnings", value: formatCurrency(metrics.earnings), note: "From delivered orders", icon: Wallet, accent: "text-[#1685A5]", iconBg: "bg-cyan-50" },
           { label: "Low Stock Items", value: metrics.lowStock, note: "Products to restock", icon: AlertTriangle, accent: "text-[#DF6A17]", iconBg: "bg-orange-50" },
         ].map(({ label, value, note, icon: Icon, accent, iconBg }) => (
-          <div key={label} className="rounded-lg border border-[#E7EEEC] bg-white p-3 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+          <motion.div
+            key={label}
+            variants={staggerItem}
+            initial="hidden"
+            animate="visible"
+            className="rounded-lg border border-[#E7EEEC] bg-white p-3 shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+          >
             <div className="flex items-start justify-between gap-2">
               <div><p className="text-[10px] text-[#788681]">{label}</p><p className="mt-1 text-lg font-bold leading-none text-[#20312E]">{loading || error ? "—" : value}</p></div>
               <span className={`flex h-8 w-8 items-center justify-center rounded-md ${iconBg} ${accent}`}><Icon size={16} /></span>
             </div>
             <p className="mt-2 text-[9px] text-[#8A9692]">{note}</p>
-          </div>
+          </motion.div>
         ))}
-      </div>
-      <div className="grid w-full grid-cols-1 items-stretch gap-4 xl:grid-cols-2">
+      </motion.div>
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="grid w-full grid-cols-1 items-stretch gap-4 xl:grid-cols-2"
+      >
         <section className="rounded-lg border border-[#E7EEEC] bg-white p-3.5 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div><h2 className="text-xs font-semibold text-[#2C3E39]">Sales Overview</h2><p className="text-[9px] text-[#86938E]">Order totals from your products</p></div>
@@ -147,7 +170,14 @@ export default function FarmerDashboard() {
               <div className="mt-1 flex justify-between text-[8px] text-[#91A09B]"><span>{range} days ago</span><span>Today</span></div>
             </div>
           )}
-        </section>        <section className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">          <div className="flex items-center justify-between px-3.5 py-3">            <h2 className="text-xs font-semibold text-[#2C3E39]">Recent Orders</h2>
+        </section>        <motion.section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+        >
+          <div className="flex items-center justify-between px-3.5 py-3">
+            <h2 className="text-xs font-semibold text-[#2C3E39]">Recent Orders</h2>
             <Link to="/farmer/orders" className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#07814E]">View all <ArrowRight size={12} /></Link>
           </div>
           <div className="overflow-x-auto">
@@ -155,14 +185,14 @@ export default function FarmerDashboard() {
               <thead className="border-y border-[#EDF1F0] bg-[#F7F9F8] text-[9px] font-semibold text-[#7A8883]">
                 <tr><th className="px-3 py-2">Order ID</th><th className="px-2 py-2">Date</th><th className="px-2 py-2">Status</th><th className="px-3 py-2 text-right">Total</th></tr>
               </thead>
-              <tbody className="divide-y divide-[#F0F3F2]">
+              <tbody className="divide-y divide-[#F0F3F2]" variants={staggerContainer} initial="hidden" animate="visible">
                 {!loading && !error && recentOrders.map((order) => (
-                  <tr key={order._id}>
+                  <motion.tr key={order._id} variants={staggerItem} initial="hidden" animate="visible">
                     <td className="px-3 py-2 font-medium text-[#455650]">{order.orderNumber || `#${String(order._id || "").slice(-7)}`}</td>
                     <td className="px-2 py-2 text-[#75837E]">{formatDate(order.createdAt, { day: "numeric", month: "short" })}</td>
                     <td className="px-2 py-2"><OrderStatusBadge status={order.status} className="text-[9px] px-1.5 py-0.5" /></td>
                     <td className="px-3 py-2 text-right font-semibold text-[#44564F]">{formatCurrency(getOrderAmount(order, farmerId))}</td>
-                  </tr>
+                  </motion.tr>
                 ))}
                 {!loading && error && <tr><td colSpan="4" className="px-3 py-7 text-center text-[10px] text-[#87938F]">Order data unavailable.</td></tr>}
                 {!loading && !error && !recentOrders.length && <tr><td colSpan="4" className="px-3 py-7 text-center text-[10px] text-[#87938F]">No orders yet.</td></tr>}
@@ -170,10 +200,15 @@ export default function FarmerDashboard() {
               </tbody>
             </table>
           </div>
-        </section>
-      </div>
+        </motion.section>
+      </motion.div>
 
-      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]"
+      >
         <section className="rounded-lg border border-[#E7EEEC] bg-white p-3.5 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
           <h2 className="mb-2.5 text-xs font-semibold text-[#2C3E39]">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -190,7 +225,12 @@ export default function FarmerDashboard() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+        <motion.section
+          variants={sectionReveal}
+          initial="hidden"
+          animate="visible"
+          className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+        >
           <div className="flex h-full min-h-[128px] flex-col sm:flex-row">
             <img src={getImageUrl(farm?.photo || "/images/default-farm.jpg")} alt={farm?.farmName || "Farm"} className="h-28 w-full object-cover sm:h-auto sm:w-[42%]" />
             <div className="flex flex-1 flex-col justify-center p-3">
@@ -200,8 +240,8 @@ export default function FarmerDashboard() {
               <Link to="/farmer/profile" className="mt-2 inline-flex h-7 items-center justify-center rounded bg-[#07814E] px-2.5 text-[10px] font-semibold text-white hover:bg-[#066B42]">View Farm Profile</Link>
             </div>
           </div>
-        </section>
-      </div>
+        </motion.section>
+      </motion.div>
     </section>
   );
 }

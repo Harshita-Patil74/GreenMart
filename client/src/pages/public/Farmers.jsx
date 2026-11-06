@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Star, ArrowRight, ShieldCheck, Tractor } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import farmerApi from "../../api/farmerApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
@@ -17,7 +19,12 @@ const [farmers, setFarmers] = useState([]);
   return (
     <div className="gm-container py-6 space-y-6 pb-12">
       <BackButton fallback="/" />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div>
           <h1 className="text-2xl sm:text-3xl font-heading font-extrabold text-gray-900 tracking-tight">
             Our Organic Farmers
@@ -33,12 +40,20 @@ const [farmers, setFarmers] = useState([]);
           <MapPin className="w-4 h-4" />
           <span>View on Interactive Map</span>
         </Link>
-      </div>
+      </motion.div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6"
+      >
         {farmers.map((farm) => (
-          <div
+          <motion.div
             key={farm.id || farm._id}
+            variants={staggerItem}
+            initial="hidden"
+            animate="visible"
             className="bg-white rounded-3xl border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg transition overflow-hidden flex flex-col justify-between"
           >
             <div className="p-6 space-y-4">
@@ -48,6 +63,7 @@ const [farmers, setFarmers] = useState([]);
                   alt={farm.farmName || farm.name}
                   className="w-16 h-16 rounded-2xl object-cover bg-emerald-100 border-2 border-emerald-200 shadow-sm shrink-0"
                   onError={(e) => { e.currentTarget.src = "/images/placeholder.svg"; }}
+                />
                 />
                 <div>
                   <h3 className="font-heading font-bold text-gray-900 text-lg">
@@ -87,9 +103,9 @@ const [farmers, setFarmers] = useState([]);
                 </Link>
               </div>
             </div>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }

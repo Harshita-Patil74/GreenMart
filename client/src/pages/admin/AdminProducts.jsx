@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { Plus } from "lucide-react";
 import productApi from "../../api/productApi";
 import farmerApi from "../../api/farmerApi";
@@ -154,9 +156,19 @@ export default function AdminProducts() {
   if (error && !products.length) return <ErrorState message={error} onRetry={load} />;
   return <div className="space-y-4 pb-10">
     <BackButton fallback="/admin/dashboard" />
-    <header className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-xl font-heading font-bold text-gray-900">Products Management</h1><p className="mt-1 text-xs text-gray-500">Review and manage products across the platform.</p></div><button onClick={() => openDialog()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-white"><Plus className="h-4 w-4"/>Add Product</button></header>
+    <motion.header
+      variants={sectionReveal}
+      initial="hidden"
+      animate="visible"
+      className="flex flex-wrap items-end justify-between gap-3"
+    ><div><h1 className="text-xl font-heading font-bold text-gray-900">Products Management</h1><p className="mt-1 text-xs text-gray-500">Review and manage products across the platform.</p></div><button onClick={() => openDialog()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-white"><Plus className="h-4 w-4"/>Add Product</button></motion.header>
     {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error} <button onClick={load} className="underline">Retry</button></p>}
-    <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
+    <motion.section
+      variants={sectionReveal}
+      initial="hidden"
+      animate="visible"
+      className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
+    >
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 p-3">
         <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, farmer, or status" ariaLabel="Search products" />
         <select aria-label="Filter by category" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs"><option value="">All Categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select>
@@ -171,7 +183,7 @@ export default function AdminProducts() {
         />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-[10px] text-gray-500"><span>Showing {filtered.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} products</span><div className="flex gap-1"><button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border px-2 py-1 disabled:opacity-40">Previous</button><span className="px-2 py-1">{page} / {pages}</span><button disabled={page >= pages} onClick={() => setPage(page + 1)} className="rounded border px-2 py-1 disabled:opacity-40">Next</button></div></div>
-    </section>
+    </motion.section>
     <Modal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingProduct ? "Edit Product" : "Add Product"}>
       <form onSubmit={saveProduct} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">

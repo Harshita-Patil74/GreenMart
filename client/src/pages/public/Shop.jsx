@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, SlidersHorizontal, X } from "lucide-react";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import FilterPanel from "../../components/product/FilterPanel.jsx";
@@ -93,11 +95,21 @@ export default function Shop() {
   return (
     <div className="gm-container py-5 pb-16">
       <BackButton fallback="/" />
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="mb-4 flex flex-wrap items-end justify-between gap-3"
+      >
         <button onClick={() => setMobileFilterOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 md:hidden"><SlidersHorizontal className="h-4 w-4 text-primary" />Filters</button>
-      </div>
+      </motion.div>
 
-      <div className="flex items-start gap-4">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex items-start gap-4"
+      >
         <aside className="hidden w-[220px] shrink-0 md:block"><FilterPanel {...filters} /></aside>
 
         {mobileFilterOpen && (
@@ -110,7 +122,12 @@ export default function Shop() {
         )}
 
         <main className="min-w-0 flex-1">
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+          <motion.div
+            variants={sectionReveal}
+            initial="hidden"
+            animate="visible"
+            className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm"
+          >
             <label className="relative min-w-[180px] flex-1">
               <span className="sr-only">Search products</span>
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
@@ -134,13 +151,13 @@ export default function Shop() {
               />
               Offers only
             </label>
-          </div>
-          <div className="mb-3 text-[11px] text-gray-500">{loading ? "Loading products..." : `Showing ${total ? (page - 1) * PAGE_SIZE + 1 : 0}–${Math.min(page * PAGE_SIZE, total)} of ${total} products`}</div>
+          </motion.div>
+          <motion.div variants={sectionReveal} initial="hidden" animate="visible" className="mb-3 text-[11px] text-gray-500">{loading ? "Loading products..." : `Showing ${total ? (page - 1) * PAGE_SIZE + 1 : 0}–${Math.min(page * PAGE_SIZE, total)} of ${total} products`}</motion.div>
           {error ? <ErrorState message={error} onRetry={() => setRetryCount((count) => count + 1)} /> : loading ? (
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((n) => <div key={n} className="h-64 animate-pulse rounded-xl bg-white" />)}</div>
           ) : items.length ? (
             <>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{items.map((product) => <ProductCard key={product._id} product={product} />)}</div>
+              <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-2 gap-3 lg:grid-cols-3">{items.map((product) => <motion.div key={product._id} variants={staggerItem} initial="hidden" animate="visible"><ProductCard key={product._id} product={product} /></motion.div>)}</motion.div>
               {pages > 1 && <div className="mt-5 flex items-center justify-center gap-2">
                 <button disabled={page <= 1} onClick={() => setParam("page", String(page - 1), false)} className="h-8 rounded-lg border border-gray-200 px-3 text-xs disabled:opacity-40">Previous</button>
                 {Array.from({ length: Math.min(5, pages) }, (_, index) => Math.min(Math.max(1, page - 2), Math.max(1, pages - 4)) + index).map((number) => <button key={number} onClick={() => setParam("page", String(number), false)} className={`h-8 min-w-8 rounded-lg px-2 text-xs ${page === number ? "bg-primary text-white" : "border border-gray-200 bg-white text-gray-700"}`}>{number}</button>)}
@@ -149,7 +166,7 @@ export default function Shop() {
             </>
           ) : <div className="rounded-xl border border-gray-100 bg-white p-10 text-center text-sm text-gray-500">No products match these filters.</div>}
         </main>
-      </div>
+      </motion.div>
     </div>
   );
 }

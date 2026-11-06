@@ -19,6 +19,7 @@ import {
   Truck,
   User,
   Users,
+  Mail,
 } from "lucide-react";
 
 const navigationByRole = {
@@ -26,6 +27,7 @@ const navigationByRole = {
     { label: "Customer Dashboard", path: "/customer/dashboard", icon: LayoutDashboard },
     { label: "Shop", path: "/shop", icon: ShoppingBag },
     { label: "Offers", path: "/customer/offers", icon: Tag },
+    { label: "My Newsletters", path: "/customer/newsletters", icon: Mail },
     { label: "My Orders", path: "/customer/orders", icon: Package },
     { label: "Cart", path: "/cart", icon: ShoppingCart },
     { label: "Wishlist", path: "/customer/wishlist", icon: Heart },

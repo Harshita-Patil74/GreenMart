@@ -4,7 +4,8 @@ import BackButton from "../../components/common/BackButton.jsx";
 import toast from "react-hot-toast";
 import productApi from "../../api/productApi";
 import getImageUrl from "../../utils/imageUrl";
-import { getStatusClasses, unwrapList } from "./farmerUtils";
+import StatusBadge from "../../components/common/StatusBadge.jsx";
+import { unwrapList } from "./farmerUtils";
 
 function stockState(product) {
   const stock = Number(product.stock) || 0;
@@ -147,7 +148,7 @@ export default function Inventory() {
                           </div>
                         ) : `${item.lowStockThreshold ?? 5} ${item.unit || ""}`}
                       </td>
-                      <td className="px-3 py-2"><span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getStatusClasses(state)}`}>{state}</span></td>
+                      <td className="px-3 py-2"><StatusBadge status={state} /></td>
                       <td className="px-3 py-2 text-right">
                         {isEditing ? (
                           <span className="inline-flex items-center gap-1">

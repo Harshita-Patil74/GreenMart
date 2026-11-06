@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, Leaf, Mail, MapPin } from "lucide-react";
+import { motion } from "framer-motion";
+import { staggerContainer, staggerItem } from "../../animations/variants.js";
 import Logo from "../common/Logo.jsx";
 import categoryApi from "../../api/categoryApi.js";
 
@@ -74,8 +76,8 @@ export default function Footer() {
         <Leaf className="mb-2 h-14 w-14 rotate-[18deg] sm:h-20 sm:w-20" strokeWidth={1} />
       </div>
 
-      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-x-8 gap-y-9 px-5 py-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1.15fr_1.15fr_1fr_1.2fr] lg:gap-x-6 lg:py-12">
-        <section className="min-w-0 sm:col-span-2 lg:col-span-1" aria-labelledby="footer-brand">
+      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-x-8 gap-y-9 px-5 py-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1.15fr_1.15fr_1fr_1.2fr] lg:gap-x-6 lg:py-12" variants={staggerContainer} initial="hidden" animate="visible">
+        <section key="brand" id="footer-brand" className="min-w-0 sm:col-span-2 lg:col-span-1" aria-labelledby="footer-brand" variants={staggerItem} initial="hidden" animate="visible">
           <div className="inline-flex max-w-full rounded-lg bg-white/80 p-1.5">
             <Logo to={null} subtitle size="sm" className="w-[190px]" />
           </div>
@@ -88,8 +90,8 @@ export default function Footer() {
           </Link>
         </section>
 
-        {linkGroups.map((group) => (
-          <nav key={group.label} aria-label={group.label} className="min-w-0">
+        {linkGroups.map((group, i) => (
+          <nav key={group.label} aria-label={group.label} className="min-w-0" variants={staggerItem} initial="hidden" animate="visible">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#176B3A]">{group.title}</h2>
             <ul className="space-y-2">
               {group.links.map(({ label, to }) => (
@@ -99,7 +101,7 @@ export default function Footer() {
           </nav>
         ))}
 
-        <div className="min-w-0">
+        <div className="min-w-0" variants={staggerItem} initial="hidden" animate="visible">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#176B3A]">Get in touch</h2>
           <p className="text-[13px] leading-5 text-[#315846]">
             Questions about an order or your account? We’re here to help.
@@ -119,7 +121,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <nav aria-label="Shop categories" className="min-w-0 sm:col-span-2 lg:col-span-6">
+        <nav aria-label="Shop categories" className="min-w-0 sm:col-span-2 lg:col-span-6" variants={staggerItem} initial="hidden" animate="visible">
           <div className="border-t border-[#A5C9AA] pt-5">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-[#176B3A]">Shop by category</h2>
             {categoryError ? (

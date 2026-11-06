@@ -49,6 +49,7 @@ export const NOTIFICATION_TYPE_ICONS = {
   profileUpdated: User,
   supportRequestSubmitted: FileText,
   paymentSuccess: CreditCard,
+  newsletter_unsubscribed_admin: Bell,
 };
 
 const TYPE_COLORS = {
@@ -84,6 +85,7 @@ const TYPE_COLORS = {
   farmerAccountActivated: { icon: "text-emerald-600", background: "bg-emerald-50" },
   farmerCertificationSubmitted: { icon: "text-amber-600", background: "bg-amber-50" },
   wishlistOffer: { icon: "text-emerald-600", background: "bg-emerald-50" },
+  newsletter_unsubscribed_admin: { icon: "text-slate-600", background: "bg-slate-100" },
 };
 
 export function getNotificationIcon(type) {
@@ -167,6 +169,7 @@ export const TYPE_TO_CATEGORY = {
   profileUpdated: "account",
   supportRequestSubmitted: "support",
   paymentSuccess: "payments",
+  newsletter_unsubscribed_admin: "newsletter",
 };
 
 export function normalizeCategory(notification) {

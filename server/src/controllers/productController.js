@@ -100,7 +100,7 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
   const now = new Date();
   const offers = await Offer.find({
     status: "Active",
-    isActive: true,
+    isActive: { $ne: false },
     endDate: { $gte: now },
   })
     .sort({ createdAt: -1 })

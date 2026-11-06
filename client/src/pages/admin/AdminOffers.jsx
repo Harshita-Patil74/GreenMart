@@ -8,6 +8,7 @@ import ErrorState from "../../components/common/ErrorState.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import Modal from "../../components/common/Modal.jsx";
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
+import StatusBadge from "../../components/common/StatusBadge.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
 
 const PAGE_SIZE = 10;
@@ -24,15 +25,6 @@ const actionSuccessMessages = {
   approve: "Offer approved.",
   reject: "Offer rejected.",
   deactivate: "Offer deactivated.",
-};
-
-const statusStyles = {
-  Active: "bg-emerald-50 text-emerald-700",
-  Pending: "bg-amber-50 text-amber-700",
-  Rejected: "bg-red-50 text-red-700",
-  Expired: "bg-gray-100 text-gray-600",
-  Inactive: "bg-slate-100 text-slate-600",
-  Scheduled: "bg-blue-50 text-blue-700",
 };
 
 function formatCurrency(value) {
@@ -74,13 +66,6 @@ function inputClass(hasError = false) {
   return `mt-1 h-9 w-full rounded-md border bg-white px-2.5 text-xs text-[#263B34] outline-none focus:border-[#14905B] ${hasError ? "border-red-400" : "border-[#DDE6E2]"}`;
 }
 
-function OfferStatus({ status }) {
-  return (
-    <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${statusStyles[status] || statusStyles.Inactive}`}>
-      {status || "Inactive"}
-    </span>
-  );
-}
 
 export default function AdminOffers() {
   const [offers, setOffers] = useState([]);
@@ -497,7 +482,7 @@ export default function AdminOffers() {
                       {offer.startAt && offer.effectiveStatus === "Upcoming" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
                       {offer.endAt && offer.effectiveStatus === "Active" && <OfferCountdown key={offer._id} startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} className="mt-1" />}
                     </td>
-                    <td className="px-3 py-2.5"><OfferStatus status={status} /></td>
+                    <td className="px-3 py-2.5"><StatusBadge status={status} /></td>
                     <td className="min-w-[255px] whitespace-nowrap px-3 py-2.5">
                       <div className="flex items-center gap-1.5">
                         {needsReview && (

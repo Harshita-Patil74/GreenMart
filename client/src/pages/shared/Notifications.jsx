@@ -1,6 +1,8 @@
 import React, { useEffect, useCallback, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import notificationApi from "../../api/notificationApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction, markRead as markReadAction } from "../../features/notifications/notificationsSlice.js";
@@ -72,7 +74,12 @@ export default function Notifications() {
   return (
     <div className="flex flex-col gap-2">
       <BackButton fallback="/" />
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <motion.header
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-wrap items-center justify-between gap-3"
+      >
         <div>
           <h1 className="text-xl font-bold tracking-tight text-[#172A27]">Notifications</h1>
           <p className="mt-1 text-xs text-[#71817D]">Updates about your orders and account activity.</p>
@@ -82,15 +89,23 @@ export default function Notifications() {
             Mark all read
           </button>
         )}
-      </header>
+      </motion.header>
 
-      <nav aria-label="Notification categories" className="flex min-w-0 gap-1.5 overflow-x-auto rounded-xl border border-[#E5ECE8] bg-white p-2 scrollbar-hide">
+      <motion.nav
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        aria-label="Notification categories"
+        className="flex min-w-0 gap-1.5 overflow-x-auto rounded-xl border border-[#E5ECE8] bg-white p-2 scrollbar-hide"
+      >
         {CUSTOMER_CATEGORIES.map((cat) => {
           const Icon = CATEGORY_ICONS[cat] || Bell;
           const unread = cat === "all" ? unreadCount : filtered.filter((n) => !n.isRead && String(n.category || "").toLowerCase() === cat).length;
           return (
-            <button
+            <motion.button
               key={cat}
+              whileHover={{ scale: 1.02, transition: { duration: 0.15 } }}
+              whileTap={{ scale: 0.98 }}
               type="button"
               aria-pressed={category === cat}
               onClick={() => { setCategory(cat); setPage(1); }}
@@ -103,19 +118,29 @@ export default function Notifications() {
               {cat === "all" ? <Bell aria-hidden="true" className="h-3.5 w-3.5" /> : <Icon aria-hidden="true" className="h-3.5 w-3.5" />}
               <span>{CATEGORY_LABELS[cat]}</span>
               {unread > 0 && <span className={`min-w-4 rounded-full px-1 text-center text-[9px] leading-4 ${category === cat ? "bg-white/20 text-white" : "bg-[#EAF6ED] text-[#087449]"}`}>{unread}</span>}
-            </button>
+            </motion.button>
           );
         })}
-      </nav>
+      </motion.nav>
 
-      <div className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+      <motion.div
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
+      >
         {currentPageItems.length ? (
-          <ul className="divide-y divide-[#EDF1F0]">
+          <ul className="divide-y divide-[#EDF1F0]" variants={staggerContainer} initial="hidden" animate="visible">
             {currentPageItems.map((notification) => {
               const Icon = getNotificationIcon(notification.type);
               const style = getNotificationStyle(notification.type);
               return (
-                <li key={notification._id}>
+                <motion.li
+                  key={notification._id}
+                  variants={staggerItem}
+                  initial="hidden"
+                  animate="visible"
+                >
                   <div className={`flex items-start gap-3 px-4 py-3.5 ${notification.isRead ? "bg-white" : "bg-[#F6FAF8]"}`}>
                     <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.background} ${style.color}`}>
                       <Icon size={15} />
@@ -138,18 +163,23 @@ export default function Notifications() {
                       <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={(e) => { e.stopPropagation(); markRead(notification._id); }} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />
                     )}
                   </div>
-                </li>
+                </motion.li>
               );
             })}
           </ul>
         ) : (
-          <div className="px-4 py-12 text-center">
+          <motion.div
+            variants={sectionReveal}
+            initial="hidden"
+            animate="visible"
+            className="px-4 py-12 text-center"
+          >
             <span className="mx-auto h-7 w-7 text-[#A5B3AE]">🔔</span>
             <p className="mt-2 text-xs font-medium text-[#52615D]">You're all caught up</p>
             <p className="mt-1 text-[11px] text-[#899691]">New updates will appear here.</p>
-          </div>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
 
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between px-4 py-3 text-xs text-[#475852]">
