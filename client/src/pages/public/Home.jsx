@@ -431,12 +431,13 @@ export default function Home() {
                 >
                   {newsletterLoading ? "Subscribing..." : "Join"}
                 </button>
-              </form>
-              {newsletterMessage && (
-                <p className={`mt-2 text-xs ${newsletterMessageType === "success" ? "text-[#16803C] bg-[#EAF2E7] px-3 py-2 rounded-md" : "text-[#C2410C] bg-[#FBEDE5] px-3 py-2 rounded-md"}`}>
-                  {newsletterMessage}
-                </p>
-              )}
+               </form>
+               <p className="mt-2 text-[10px] text-[#EAF2E7]/70">By subscribing, you agree to receive GreenMart product updates, seasonal offers and newsletters. You can unsubscribe at any time.</p>
+               {newsletterMessage && (
+                 <p className={`mt-2 text-xs ${newsletterMessageType === "success" ? "text-[#16803C] bg-[#EAF2E7] px-3 py-2 rounded-md" : "text-[#C2410C] bg-[#FBEDE5] px-3 py-2 rounded-md"}`}>
+                   {newsletterMessage}
+                 </p>
+               )}
             </div>
           </div>
         </section>

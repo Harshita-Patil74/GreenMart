@@ -54,6 +54,7 @@ const navigationByRole = {
     { label: "Inventory", path: "/admin/inventory", icon: Boxes },
     { label: "Analytics", path: "/admin/analytics", icon: BarChart3 },
     { label: "Reports", path: "/admin/reports", icon: BarChart3 },
+    { label: "Newsletter", path: "/admin/newsletter", icon: Tag },
     { label: "Offers Management", path: "/admin/offers", icon: Tag },
     { label: "Settings", path: "/admin/settings", icon: Settings },
     { label: "Customer Home", path: "/customer/dashboard", icon: Store },
