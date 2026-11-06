@@ -58,6 +58,7 @@ import AdminReports from "../pages/admin/AdminReports.jsx";
 import AdminNewsletter from "../pages/admin/AdminNewsletter.jsx";
 import AdminAnalytics from "../pages/admin/AdminAnalytics.jsx";
 import AdminOffers from "../pages/admin/AdminOffers.jsx";
+import AdminSettings from "../pages/admin/AdminSettings.jsx";
 
 export default function AppRoutes() {
   return (
@@ -139,6 +140,7 @@ export default function AppRoutes() {
             <Route path="/admin/analytics" element={<AdminAnalytics />} />
             <Route path="/admin/reports" element={<AdminReports />} />
             <Route path="/admin/offers" element={<AdminOffers />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/newsletter" element={<AdminNewsletter />} />
           </Route>
         </Route>
