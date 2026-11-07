@@ -98,7 +98,7 @@ export default function CustomerDashboard() {
     setOrdersError(null);
     try {
       const { data } = await orderApi.mine();
-      setOrders(Array.isArray(data) ? data : []);
+      setOrders(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
     } catch (requestError) {
       setOrdersError(requestError?.message || "Couldn't load recent orders.");
       setOrders([]);

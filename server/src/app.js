@@ -17,7 +17,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json());
-app.use(rateLimit({ windowMs: 15*60*1000, max: env.nodeEnv === "development" ? 3000 : 300 }));
+app.use(rateLimit({ windowMs: 15*60*1000, max: env.nodeEnv === "development" ? 3000 : 1000 }));
 app.get("/", (req, res) => res.json({ status: "ok", service: "GreenMart API" }));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use("/api", routes);
