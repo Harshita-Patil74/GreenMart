@@ -16,6 +16,7 @@ import { fetchWishlist, toggleWishlist } from "../../features/wishlist/wishlistS
 import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import { formatCurrency, formatDate } from "../farmer/farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
+import Pagination from "../../components/common/Pagination.jsx";
 
 const HERO_IMAGE = "/images/banners/hero-basket.jpg";
 const OFFER_TYPES = [
@@ -62,6 +63,10 @@ export default function CustomerOffers() {
   const [onlyActive, setOnlyActive] = useState(false);
   const [addingId, setAddingId] = useState("");
   const [serverTime, setServerTime] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalActive, setTotalActive] = useState(0);
+  const [totalUpcoming, setTotalUpcoming] = useState(0);
   const offersRef = useRef(null);
 
   useEffect(() => {
@@ -93,14 +98,16 @@ export default function CustomerOffers() {
     let active = true;
     setLoading(true);
     setError("");
-    offerApi.list()
+    offerApi.list({ page, limit: pageSize })
       .then(({ data }) => {
         if (!active) return;
         const serverTime = data.serverTime;
-        const activeList = Array.isArray(data?.active) ? data.active.filter((o) => o.effectiveStatus === "Active") : [];
-        const upcomingList = Array.isArray(data?.upcoming) ? data.upcoming.filter((o) => o.effectiveStatus === "Scheduled") : [];
+        const activeList = Array.isArray(data?.active) ? data.active : [];
+        const upcomingList = Array.isArray(data?.upcoming) ? data.upcoming : [];
         setActiveOffers(activeList);
         setUpcomingOffers(upcomingList);
+        setTotalActive(Number(data?.pagination?.activeTotal) || activeList.length);
+        setTotalUpcoming(Number(data?.pagination?.upcomingTotal) || upcomingList.length);
         setServerTime(serverTime);
       })
       .catch((requestError) => {
@@ -114,7 +121,7 @@ export default function CustomerOffers() {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [retry]);
+  }, [page, pageSize, retry]);
 
   useEffect(() => {
     if (user?.role === "customer" && token && token !== "demo-token" && !wishlist.loaded && !wishlist.loading) {
@@ -123,6 +130,7 @@ export default function CustomerOffers() {
   }, [dispatch, token, user?.role, wishlist.loaded, wishlist.loading]);
 
   const currentOffers = tab === "active" ? activeOffers : upcomingOffers;
+  const currentTotal = tab === "active" ? totalActive : totalUpcoming;
 
   const availableCategories = useMemo(
     () => categories.length
@@ -230,20 +238,20 @@ export default function CustomerOffers() {
         animate="visible"
         className="flex gap-2 border-b border-[#E6ECE4] pb-2 mb-3"
       >
-        <button
-          type="button"
-          onClick={() => setTab("active")}
-          className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "active" ? "bg-[#16803C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
-        >
-          Active Offers ({activeOffers.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("upcoming")}
-          className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "upcoming" ? "bg-[#C2410C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
-        >
-          Coming Soon ({upcomingOffers.length})
-        </button>
+          <button
+            type="button"
+            onClick={() => { setTab("active"); setPage(1); }}
+            className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "active" ? "bg-[#16803C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
+          >
+            Active Offers ({totalActive})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTab("upcoming"); setPage(1); }}
+            className={`px-4 py-2 rounded-md text-[11px] font-semibold transition ${tab === "upcoming" ? "bg-[#C2410C] text-white" : "bg-white text-gray-600 border border-gray-200"}`}
+          >
+            Coming Soon ({totalUpcoming})
+          </button>
       </motion.div>
 
       <motion.section
@@ -259,7 +267,7 @@ export default function CustomerOffers() {
               key={offerType.value || "all"}
               type="button"
               aria-pressed={type === offerType.value}
-              onClick={() => setType(offerType.value)}
+              onClick={() => { setType(offerType.value); setPage(1); }}
               className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-[10px] font-semibold transition sm:text-[11px] ${
                 type === offerType.value
                   ? "border-[#CBE8D2] bg-[#E6F5E9] text-[#146B37]"
@@ -279,7 +287,7 @@ export default function CustomerOffers() {
               type="search"
               aria-label="Search offers"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
               placeholder="Search farmer or product"
               className="h-8 w-full rounded-full border border-[#E0E7E1] bg-white pl-8 pr-2.5 text-[10px] outline-none focus:border-[#16803C] sm:text-[11px]"
             />
@@ -289,7 +297,7 @@ export default function CustomerOffers() {
             <select
               aria-label="Filter product category"
               value={category}
-              onChange={(event) => setCategory(event.target.value)}
+              onChange={(event) => { setCategory(event.target.value); setPage(1); }}
               disabled={categoriesLoading}
               className="h-10 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[11px] text-[#526258] outline-none focus:border-[#16803C] disabled:cursor-wait disabled:bg-gray-50 sm:h-8 sm:text-[11px]"
             >
@@ -304,7 +312,7 @@ export default function CustomerOffers() {
             <select
               aria-label="Sort offers"
               value={sort}
-              onChange={(event) => setSort(event.target.value)}
+              onChange={(event) => { setSort(event.target.value); setPage(1); }}
               className="h-8 w-full appearance-none rounded-full border border-[#E0E7E1] bg-white px-3 pr-7 text-[10px] text-[#526258] outline-none focus:border-[#16803C] sm:text-[11px]"
             >
               <option value="newest">Sort: Newest</option>
@@ -364,21 +372,24 @@ export default function CustomerOffers() {
             {[1, 2, 3, 4].map((item) => <div key={item} className="h-[245px] animate-pulse rounded-xl border border-[#E7EEEC] bg-white" />)}
           </div>
         ) : visibleOffers.length ? (
-          <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            {visibleOffers.map((offer) => (
-              <motion.div key={offer._id} variants={staggerItem} initial="hidden" animate="visible">
-                <OfferCard
-                  key={offer._id}
-                  offer={offer}
-                  wished={isWished(wishlist, getId(offer.product))}
-                  adding={addingId === String(offer._id)}
-                  onAdd={() => addOfferToCart(offer)}
-                  onWishlist={() => toggleProductWishlist(offer)}
-                  serverTime={serverTime}
-                />
-              </motion.div>
-            ))}
-          </motion.div>
+          <>
+            <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              {visibleOffers.map((offer) => (
+                <motion.div key={offer._id} variants={staggerItem} initial="hidden" animate="visible">
+                  <OfferCard
+                    key={offer._id}
+                    offer={offer}
+                    wished={isWished(wishlist, getId(offer.product))}
+                    adding={addingId === String(offer._id)}
+                    onAdd={() => addOfferToCart(offer)}
+                    onWishlist={() => toggleProductWishlist(offer)}
+                    serverTime={serverTime}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+            <Pagination page={page} pageSize={pageSize} totalRecords={currentTotal} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
+          </>
         ) : (
           <div className="rounded-xl border border-[#E6ECE4] bg-white px-5 py-10 text-center">
             <Leaf aria-hidden="true" className="mx-auto h-8 w-8 text-[#8BAF83]" />
@@ -416,7 +427,7 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
           alt={product.name || "Fresh product"}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
-        <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py-1 text-[9px] font-bold leading-none shadow-sm ${offerBadgeClasses[offerType] || "bg-[#16803C] text-white"}`}>
+        <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py=1 text-[9px] font-bold leading-none shadow-sm ${offerBadgeClasses[offerType] || "bg-[#16803C] text-white"}`}>
           {offerType}
         </span>
         <button

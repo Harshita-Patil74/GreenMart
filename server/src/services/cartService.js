@@ -1,11 +1,13 @@
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
 const { enrichCart } = require("./offerService");
-async function populatedCart(cart) {
+const { isPremiumCustomer } = require("./premiumService");
+async function populatedCart(cart, userId) {
   if (!cart) return null;
-  return enrichCart(await cart.populate("items.product"));
+  const premium = await isPremiumCustomer(userId);
+  return enrichCart(await cart.populate("items.product"), premium);
 }
-async function getCart(userId){ return populatedCart(await Cart.findOne({ user: userId })); }
+async function getCart(userId){ return populatedCart(await Cart.findOne({ user: userId }), userId); }
 async function addItem(userId, productId, qty){
   let cart = await Cart.findOne({ user: userId });
   if(!cart) cart = await Cart.create({ user: userId, items: [] });
@@ -14,7 +16,7 @@ async function addItem(userId, productId, qty){
   const idx = cart.items.findIndex(i=>String(i.product)===String(productId));
   if(idx>-1) cart.items[idx].quantity += qty; else cart.items.push({ product: productId, quantity: qty });
   await cart.save();
-  return populatedCart(cart);
+  return populatedCart(cart, userId);
 }
 async function updateItem(userId, productId, qty){
   const cart = await Cart.findOne({ user: userId });
@@ -28,13 +30,13 @@ async function updateItem(userId, productId, qty){
     }
   }
   await cart.save();
-  return populatedCart(cart);
+  return populatedCart(cart, userId);
 }
 async function removeItem(userId, productId){
   const cart = await Cart.findOne({ user: userId });
   cart.items = cart.items.filter(i=>String(i.product)!==String(productId));
   await cart.save();
-  return populatedCart(cart);
+  return populatedCart(cart, userId);
 }
 async function clearCart(userId){ await Cart.deleteOne({ user: userId }); }
 module.exports = { getCart, addItem, updateItem, removeItem, clearCart };

@@ -34,6 +34,7 @@ import MyOrders from "../pages/customer/MyOrders.jsx";
 import MyNewsletters from "../pages/customer/MyNewsletters.jsx";
 import NewsletterDetail from "../pages/customer/NewsletterDetail.jsx";
 import NewsletterPreferences from "../pages/shared/NewsletterPreferences.jsx";
+import SubscriptionCheckout from "../pages/customer/SubscriptionCheckout.jsx";
 import Wishlist from "../pages/customer/Wishlist.jsx";
 import Profile from "../pages/customer/Profile.jsx";
 import SavedAddresses from "../pages/customer/SavedAddresses.jsx";
@@ -104,9 +105,10 @@ export default function AppRoutes() {
             <Route path="/order-confirmation/:id" element={<OrderConfirmation />} />
             <Route path="/orders/:id" element={<OrderDetails />} />
           </Route>
-          <Route element={<RoleRoute role="customer" />}>
+            <Route element={<RoleRoute role="customer" />}>
             <Route path="/customer/offers" element={<CustomerOffers />} />
             <Route path="/customer/orders" element={<MyOrders />} />
+            <Route path="/customer/subscription-checkout" element={<SubscriptionCheckout />} />
             <Route path="/customer/newsletters" element={<MyNewsletters />} />
             <Route path="/customer/newsletters/:campaignId" element={<NewsletterDetail />} />
             <Route path="/customer/newsletter-preferences" element={<NewsletterPreferences />} />

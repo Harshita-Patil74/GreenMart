@@ -100,38 +100,46 @@ exports.create = asyncHandler(async (req,res) => {
   res.status(201).json(order);
 });
 exports.mine = asyncHandler(async (req,res) => {
-  const { search } = req.query;
-  let orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 }).populate("items.product","name category images unit");
+  const { search, page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const query = { user: req.user._id };
   if (search && search.trim()) {
     const s2 = search.trim().toLowerCase();
     const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    orders = orders.filter(o => {
-      const orderNumberMatch = o.orderNumber && regex.test(o.orderNumber);
-      const paymentMethodMatch = o.paymentMethod && regex.test(o.paymentMethod);
-      const statusMatch = o.status && regex.test(o.status);
-      const productNames = (o.items || []).map(i => (i.product && i.product.name) ? i.product.name.toLowerCase() : "").join(" ");
-      const productMatch = productNames.includes(s2);
-      return orderNumberMatch || paymentMethodMatch || statusMatch || productMatch;
-    });
+    query.$or = [
+      { orderNumber: regex },
+      { paymentMethod: regex },
+      { status: regex },
+      { "items.product.name": regex },
+    ];
   }
-  res.json(orders);
+  const [orders, total] = await Promise.all([
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("items.product","name category images unit"),
+    Order.countDocuments(query),
+  ]);
+  res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
 exports.farmer = asyncHandler(async (req,res) => {
-  const { search } = req.query;
-  let orders = await Order.find({ "items.farmer": req.user._id }).sort({ createdAt: -1 }).populate("items.product","name category images unit");
+  const { search, page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const query = { "items.farmer": req.user._id };
   if (search && search.trim()) {
     const s2 = search.trim().toLowerCase();
     const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    orders = orders.filter(o => {
-      const orderNumberMatch = o.orderNumber && regex.test(o.orderNumber);
-      const paymentMethodMatch = o.paymentMethod && regex.test(o.paymentMethod);
-      const statusMatch = o.status && regex.test(o.status);
-      const productNames = (o.items || []).map(i => (i.product && i.product.name) ? i.product.name.toLowerCase() : "").join(" ");
-      const productMatch = productNames.includes(s2);
-      return orderNumberMatch || paymentMethodMatch || statusMatch || productMatch;
-    });
+    query.$or = [
+      { orderNumber: regex },
+      { paymentMethod: regex },
+      { status: regex },
+      { "items.product.name": regex },
+    ];
   }
-  res.json(orders.map((order) => farmerOrderView(order, req.user._id)));
+  const [orders, total] = await Promise.all([
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("items.product","name category images unit"),
+    Order.countDocuments(query),
+  ]);
+  res.json({ items: orders.map((order) => farmerOrderView(order, req.user._id)), total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
 exports.get = asyncHandler(async (req,res) => {
   const mongoose = require("mongoose");
@@ -156,7 +164,9 @@ exports.updateStatus = asyncHandler(async (req,res) => {
   if (typeof reason !== "string" || reason.length > 500) return res.status(400).json({ message: "Delivery failure reason must be 500 characters or fewer." });
 
   let updated;
-  if (req.user.role === "farmer") {
+  if (req.user.role === "customer") {
+    updated = await orderService.updateCustomerStatus(req.params.id, req.user._id, status);
+  } else if (req.user.role === "farmer") {
     updated = await orderService.updateFarmerStatus(req.params.id, req.user._id, status, reason);
   } else {
     updated = await orderService.updateStatus(req.params.id, status);
@@ -238,26 +248,28 @@ exports.updateLocation = asyncHandler(async (req,res) => {
   res.json(req.user.role === "farmer" ? farmerOrderView(order, req.user._id) : order);
 });
 exports.adminAll = asyncHandler(async (req,res) => {
-  const { search } = req.query;
-  let orders = await Order.find().sort({ createdAt: -1 }).populate("user","name email").populate("items.product","name category images unit");
+  const { search, page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const query = {};
   if (search && search.trim()) {
     const s2 = search.trim().toLowerCase();
     const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    orders = orders.filter(o => {
-      const orderNumberMatch = o.orderNumber && regex.test(o.orderNumber);
-      const paymentMethodMatch = o.paymentMethod && regex.test(o.paymentMethod);
-      const statusMatch = o.status && regex.test(o.status);
-      const userName = (o.user && o.user.name) ? o.user.name.toLowerCase() : "";
-      const userEmail = (o.user && o.user.email) ? o.user.email.toLowerCase() : "";
-      const productNames = (o.items || []).map(i => (i.product && i.product.name) ? i.product.name.toLowerCase() : "").join(" ");
-      const productMatch = productNames.includes(s2);
-      return orderNumberMatch || paymentMethodMatch || statusMatch || userName.includes(s2) || userEmail.includes(s2) || productMatch;
-    });
+    query.$or = [
+      { orderNumber: regex },
+      { paymentMethod: regex },
+      { status: regex },
+      { "user.name": regex },
+      { "user.email": regex },
+      { "items.product.name": regex },
+    ];
   }
-  res.json(orders);
+  const [orders, total] = await Promise.all([
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("user","name email").populate("items.product","name category images unit"),
+    Order.countDocuments(query),
+  ]);
+  res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
-module.exports = exports;
-
 exports.analytics = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") return res.status(403).json({ message: "Forbidden" });
   const days = Number(req.query.days) || 30;
@@ -265,18 +277,25 @@ exports.analytics = asyncHandler(async (req, res) => {
   const since = new Date();
   since.setDate(since.getDate() - days + 1);
   since.setHours(0, 0, 0, 0);
-  const orders = await Order.find({ "items.farmer": req.user._id, status: "Delivered", createdAt: { $gte: since } });
+  const now = new Date();
+  const orders = await Order.find({
+    "items.farmer": req.user._id,
+    status: { $nin: ["Cancelled", "Delivery Failed"] },
+    paymentStatus: { $ne: "Failed" },
+    createdAt: { $gte: since, $lte: now },
+  }).populate({ path: "items.product", select: "category" });
   let revenue = 0;
   let units = 0;
   let orderCount = 0;
   const byDate = {};
   const byProduct = {};
+  const byCategory = {};
   orders.forEach((order) => {
     const owned = (order.items || []).filter((item) => String(item.farmer) === String(req.user._id));
     if (!owned.length) return;
     orderCount += 1;
     owned.forEach((item) => {
-      const amount = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+      const amount = Number(item.offerSnapshot?.finalLineTotal ?? (item.price || 0) * (item.quantity || 0));
       revenue += amount;
       units += Number(item.quantity) || 0;
       const key = new Date(order.createdAt).toISOString().slice(0, 10);
@@ -285,11 +304,17 @@ exports.analytics = asyncHandler(async (req, res) => {
       if (!byProduct[name]) byProduct[name] = { name, units: 0, revenue: 0 };
       byProduct[name].units += Number(item.quantity) || 0;
       byProduct[name].revenue += amount;
+      const category = (item.product && item.product.category) || "Uncategorized";
+      if (!byCategory[category]) byCategory[category] = { category, units: 0, revenue: 0 };
+      byCategory[category].units += Number(item.quantity) || 0;
+      byCategory[category].revenue += amount;
     });
   });
   const topProducts = Object.values(byProduct).sort((a, b) => b.units - a.units).slice(0, 5);
-  res.json({ revenue, orders: orderCount, units, byDate, topProducts, days });
+  const topCategories = Object.values(byCategory).sort((a, b) => b.revenue - a.revenue);
+  res.json({ revenue, orders: orderCount, units, byDate, topProducts, topCategories, days });
 });
+module.exports = exports;
 
 async function findInvoiceOrder(id) {
   const isObjectId = /^[a-f\d]{24}$/i.test(id);

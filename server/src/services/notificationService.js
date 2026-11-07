@@ -35,6 +35,9 @@ const EVENT_KEY_PREFIXES = {
   farmerAccountActivated: "farmer:account-activated",
   farmerCertificationSubmitted: "farmer:certification-submitted",
   wishlistOffer: "offer:wishlist",
+  subscriptionPaymentSuccess: "subscription:payment-success",
+  subscriptionPaymentFailed: "subscription:payment-failed",
+  subscriptionExpired: "subscription:expired",
 };
 
 async function createNotification({

@@ -75,9 +75,9 @@ describe("public farmer profile privacy", () => {
     const response = await request(app).get("/api/farmers");
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expectPublicFarmerProfile(response.body[0]);
-    expect(response.body[0]).not.toHaveProperty("certification");
+    expect(response.body.items).toHaveLength(1);
+    expectPublicFarmerProfile(response.body.items[0]);
+    expect(response.body.items[0]).not.toHaveProperty("certification");
   });
 
   it("returns public fields only from a farmer profile detail", async () => {

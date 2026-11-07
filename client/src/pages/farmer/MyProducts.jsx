@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, MoreVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, MoreVertical, Plus, Trash2, RotateCcw } from "lucide-react";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import toast from "react-hot-toast";
 import productApi from "../../api/productApi";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl";
-import { formatCurrency, unwrapList } from "./farmerUtils";
+import { formatCurrency } from "./farmerUtils";
 import StatusBadge from "../../components/common/StatusBadge.jsx";
+import Pagination from "../../components/common/Pagination.jsx";
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 10;
 
 function availability(product) {
   if (Number(product.stock) <= 0) return "Out of stock";
@@ -20,12 +21,16 @@ function availability(product) {
 export default function MyProducts() {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All Categories");
   const [status, setStatus] = useState("All Status");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [serverPages, setServerPages] = useState(1);
   const [openActions, setOpenActions] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState({});
 
@@ -33,8 +38,12 @@ export default function MyProducts() {
     setLoading(true);
     setError("");
     try {
-      const response = await productApi.mine();
-      setProducts(unwrapList(response.data));
+      const response = await productApi.mine({ search, category, status, page, limit: pageSize, showDeleted: showDeleted ? "true" : undefined });
+      const data = response.data;
+      setProducts(Array.isArray(data?.items) ? data.items : []);
+      setTotal(Number(data?.total) || 0);
+      setServerPages(Number(data?.pages) || 1);
+      if (page > Number(data?.pages || 1)) setPage(Number(data?.pages || 1));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "We couldn't load your products.");
     } finally {
@@ -42,28 +51,14 @@ export default function MyProducts() {
     }
   };
 
-  useEffect(() => { loadProducts(); }, []);
+  useEffect(() => { loadProducts(); }, [search, category, status, page, pageSize, showDeleted]);
 
   const categories = useMemo(
     () => [...new Set(products.map((product) => product.category).filter(Boolean))].sort(),
     [products]
   );
-  const filteredProducts = useMemo(() => products.filter((product) => {
-    const searchable = `${product.name || ""} ${product.category || ""}`.toLowerCase();
-    const productStatus = availability(product);
-    return (!search || searchable.includes(search.toLowerCase()))
-      && (category === "All Categories" || product.category === category)
-      && (status === "All Status"
-        || (status === "Active" && productStatus.toLowerCase() === "active")
-        || (status === "Inactive" && productStatus.toLowerCase() === "inactive")
-        || (status === "Out of stock" && productStatus === "Out of stock")
-        || (status === "Low stock" && Number(product.stock) > 0 && Number(product.stock) <= Number(product.lowStockThreshold ?? 5)));
-  }), [products, search, category, status]);
-  const pages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
-  const visibleProducts = filteredProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  useEffect(() => {
-    if (page > pages) setPage(pages);
-  }, [page, pages]);
+  const visibleProducts = products;
+  const pages = serverPages;
 
   const removeProduct = async (product) => {
     if (!window.confirm(`Delete ${product.name}? This cannot be undone.`)) return;
@@ -94,6 +89,36 @@ export default function MyProducts() {
     }
   };
 
+  const restoreProduct = async (product) => {
+    setUpdatingStatus((current) => ({ ...current, [product._id]: true }));
+    try {
+      await productApi.restore(product._id);
+      setProducts((current) => current.map((item) => item._id === product._id ? { ...item, isDeleted: false } : item));
+      setOpenActions("");
+      toast.success("Product restored successfully.");
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || "Couldn't restore this product.");
+    } finally {
+      setUpdatingStatus((current) => ({ ...current, [product._id]: false }));
+    }
+  };
+
+  const restoreAllProducts = async () => {
+    if (!window.confirm("Restore all deleted products? This cannot be undone.")) return;
+    setUpdatingStatus((current) => ({ ...Object.fromEntries(products.filter(p => p.isDeleted).map(p => [p._id, true])) }));
+    try {
+      const { data } = await productApi.restoreAll();
+      setProducts((current) => current.map((item) => ({ ...item, isDeleted: false })));
+      setOpenActions("");
+      toast.success(data.message || "All deleted products restored.");
+      await loadProducts();
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || "Couldn't restore all products.");
+    } finally {
+      setUpdatingStatus({});
+    }
+  };
+
   return (
     <section className="mx-auto w-full max-w-[1440px] space-y-5 pb-8 text-sm text-[#20312E]">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -113,13 +138,20 @@ export default function MyProducts() {
       <div className="overflow-hidden rounded-xl border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F0] p-4">
           <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, farmer, or status" ariaLabel="Search products" />
-          <select aria-label="Filter by category" value={category} onChange={(event) => { setCategory(e.target.value); setPage(1); }} className="h-9 min-w-[150px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
+          <select aria-label="Filter by category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className="h-9 min-w-[150px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
             <option>All Categories</option>
             {categories.map((item) => <option key={item}>{item}</option>)}
           </select>
-          <select aria-label="Filter by status" value={status} onChange={(event) => { setStatus(e.target.value); setPage(1); }} className="h-9 min-w-[140px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
+          <select aria-label="Filter by status" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="h-9 min-w-[140px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
             {["All Status", "Active", "Inactive", "Low stock", "Out of stock"].map((item) => <option key={item}>{item}</option>)}
           </select>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={showDeleted} onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); }} className="rounded border-[#DDE6E2] text-[#07814E] focus:ring-[#07814E]" />
+            <span className="text-xs text-[#41514D]">Show deleted products</span>
+          </label>
+          {showDeleted && products.some((p) => p.isDeleted) && (
+            <button type="button" onClick={restoreAllProducts} disabled={Object.values(updatingStatus).some(Boolean)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#07814E] hover:bg-[#F0F5F2] disabled:opacity-50"><RotateCcw size={14} /> Restore All</button>
+          )}
         </div>
 
         {error ? (
@@ -167,24 +199,20 @@ export default function MyProducts() {
                             <button type="button" disabled={updatingStatus[product._id]} onClick={() => toggleAvailability(product)} className="block w-full rounded px-2.5 py-2 text-left text-xs hover:bg-[#F4F8F6] disabled:opacity-50">
                               {updatingStatus[product._id] ? "Saving…" : product.status === "Inactive" ? "Activate listing" : "Deactivate"}
                             </button>
+                            {product.isDeleted && (
+                              <button type="button" onClick={() => restoreProduct(product)} className="block w-full rounded px-2.5 py-2 text-left text-xs hover:bg-[#F4F8F6]"><RotateCcw size={14} /> Restore product</button>
+                            )}
                             <button type="button" onClick={() => removeProduct(product)} className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left text-xs text-red-700 hover:bg-red-50"><Trash2 size={14} /> Delete</button>
                           </div>
                         )}
                       </td>
                     </tr>
                   ))}
-                  {!visibleProducts.length && <tr><td colSpan="7" className="px-4 py-12 text-center text-xs text-[#82908B]">No products match these filters.</td></tr>}
+                  {!visibleProducts.length && <tr><td colSpan="7" className="px-4 py-12 text-center text-xs text-[#82908B]">{showDeleted ? "No deleted products found." : "No products match these filters."}</td></tr>}
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#EDF1F0] px-4 py-3 text-[10px] text-[#788782]">
-              <span>Showing {filteredProducts.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filteredProducts.length)} of {filteredProducts.length} products</span>
-              <div className="flex items-center gap-1.5">
-                <button type="button" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((current) => current - 1)} className="rounded border border-[#DFE8E4] p-1.5 disabled:opacity-40"><ChevronLeft size={15} /></button>
-                <span className="px-2">{page} / {pages}</span>
-                <button type="button" aria-label="Next page" disabled={page >= pages} onClick={() => setPage((current) => current + 1)} className="rounded border border-[#DFE8E4] p-1.5 disabled:opacity-40"><ChevronRight size={15} /></button>
-              </div>
-            </div>
+            <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
           </>
         )}
       </div>

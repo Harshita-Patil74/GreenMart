@@ -8,6 +8,7 @@ import orderApi from "../../api/orderApi";
 import productApi from "../../api/productApi";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import AdminCharts from "../../components/admin/AdminCharts.jsx";
+import { ChatAssistant } from "../../components/assistant/ChatAssistant.jsx";
 import { formatCurrency } from "../../utils/constants.js";
 
 const card = "rounded-xl border border-[#E5ECE8] bg-white p-4 shadow-sm";
@@ -31,7 +32,7 @@ export default function AdminDashboard() {
         adminApi.lowStock(),
       ]);
       setStats(statsResponse.data);
-      setOrders(Array.isArray(ordersResponse.data) ? ordersResponse.data : []);
+      setOrders(Array.isArray(ordersResponse.data?.items) ? ordersResponse.data.items : (Array.isArray(ordersResponse.data) ? ordersResponse.data : []));
       setProducts(Array.isArray(productsResponse.data?.items) ? productsResponse.data.items : []);
       setAlerts(Array.isArray(alertsResponse.data) ? alertsResponse.data : []);
     } catch (requestError) {
@@ -54,10 +55,10 @@ export default function AdminDashboard() {
       const end = new Date(now);
       end.setDate(now.getDate() - week * 7);
       labels.push(start.toLocaleDateString("en-IN", { day: "numeric", month: "short" }));
-      const weeklyOrders = orders.filter((order) => {
-        const date = new Date(order.createdAt);
-        return date >= start && date < end && order.status !== "Cancelled";
-      });
+       const weeklyOrders = orders.filter((order) => {
+         const date = new Date(order.createdAt);
+         return date >= start && date < end && order.status !== "Cancelled" && order.status !== "Delivery Failed" && order.paymentStatus !== "Failed";
+       });
       counts.push(weeklyOrders.length);
       totals.push(weeklyOrders.reduce((sum, order) => sum + Number(order.total || 0), 0));
     }
@@ -149,6 +150,15 @@ export default function AdminDashboard() {
           <p className="mt-1 text-xs leading-relaxed text-white/90">Supporting local farmers and bringing fresh produce to customers.</p>
           <Link to="/admin/products" className="mt-3 inline-flex rounded-md bg-primary px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-primary-hover">Explore Products</Link>
         </div>
+      </motion.section>
+
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="rounded-xl border border-[#E2E6DF] bg-white p-6 shadow-sm"
+      >
+        <ChatAssistant />
       </motion.section>
     </div>
   );

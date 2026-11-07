@@ -46,7 +46,8 @@ export default function FarmerOffers() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [total, setTotal] = useState(0);
   const [actionsFor, setActionsFor] = useState("");
   const [dialog, setDialog] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -77,7 +78,7 @@ export default function FarmerOffers() {
         page, limit: PAGE_SIZE, search: search.trim(), type: typeFilter, status: statusFilter,
       });
       setOffers(Array.isArray(data?.items) ? data.items : []);
-      setPages(Math.max(1, Number(data?.pages) || 1));
+      setTotal(Number(data?.total) || 0);
       setStats(data?.stats || stats);
     } catch (requestError) {
       setError(requestError?.message || "Couldn't load your offers.");
@@ -301,7 +302,7 @@ export default function FarmerOffers() {
             </table>
           </div>
         )}
-        {!loading && pages > 1 && <div className="border-t border-[#EDF1F0] p-3"><Pagination page={page} pages={pages} onChange={setPage} /></div>}
+        {!loading && total > 0 && <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />}
       </motion.section>
 
       <Modal open={dialog?.mode === "form"} onClose={() => !saving && setDialog(null)} title={editing ? "Edit Offer" : "Create Offer"}>

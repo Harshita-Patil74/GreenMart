@@ -6,7 +6,8 @@ import notificationApi from "../../api/notificationApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction, markRead as markReadAction, removeNotification as removeNotificationAction } from "../../features/notifications/notificationsSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
-import { Bell, Package, Users, Boxes, AlertCircle, FileText, ShieldAlert, BadgePercent, Link as LinkIcon, Trash2, Check } from "lucide-react";
+import { Bell, Package, Users, Boxes, AlertCircle, FileText, ShieldAlert, BadgePercent, Link as LinkIcon, Trash2, Check, Wallet } from "lucide-react";
+import Pagination from "../../components/common/Pagination.jsx";
 
 const CATEGORY_ICONS = {
   orders: Package,
@@ -17,6 +18,7 @@ const CATEGORY_ICONS = {
   support: FileText,
   reviews: FileText,
   security: ShieldAlert,
+  subscription_payments: Wallet,
 };
 
 const CATEGORY_LABELS = {
@@ -28,9 +30,10 @@ const CATEGORY_LABELS = {
   support: "Support",
   reviews: "Reviews",
   security: "Security",
+  subscription_payments: "Subscription Payments",
 };
 
-const ALL_CATEGORIES = ["all", "orders", "farmers", "products", "inventory", "offers", "support", "reviews", "security"];
+const ALL_CATEGORIES = ["all", "orders", "farmers", "products", "inventory", "offers", "support", "reviews", "security", "subscription_payments"];
 
 function categoryKey(category) {
   return String(category || "").trim().toLowerCase();
@@ -65,6 +68,10 @@ function routeForNotification(n) {
       return "/admin/offers";
     case "newContactAdmin":
       return `/admin/orders`;
+    case "newsletter_subscription_payment_success":
+    case "newsletter_subscription_payment_failed":
+    case "newsletter_subscription_expired":
+      return "/admin/notifications?category=subscription_payments";
     case "newReviewAdmin":
       return `/admin/products`;
     default:
@@ -78,7 +85,7 @@ export default function AdminNotifications() {
   const { items, loading, error } = useSelector((s) => s.notifications || { items: [], loading: false, error: null });
   const [category, setCategory] = useState("all");
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
+  const [pageSize, setPageSize] = useState(20);
 
   const load = useCallback(() => {
     dispatch(fetchNotifications());
@@ -134,8 +141,8 @@ export default function AdminNotifications() {
     return categoryKey(n.category) === category;
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
   const unreadCount = items.filter((n) => !n.isRead).length;
   const unreadByCategory = items.reduce((counts, notification) => {
     if (!notification.isRead) {
@@ -287,26 +294,8 @@ export default function AdminNotifications() {
         )}
       </section>
 
-      {filtered.length > PAGE_SIZE && (
-        <div className="flex items-center justify-between px-4 py-3 text-xs text-[#475852]">
-          <span>Page {page} of {totalPages}</span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="rounded-md border border-[#E5ECE8] px-2 py-1 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F6FAF8]"
-            >
-              Prev
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="rounded-md border border-[#E5ECE8] px-2 py-1 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#F6FAF8]"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+      {filtered.length > pageSize && (
+        <Pagination page={page} pageSize={pageSize} totalRecords={filtered.length} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
       )}
     </div>
   );

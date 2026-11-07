@@ -41,8 +41,8 @@ function formatAmount(amount) {
 function getCellRows(type, { orders, products, users }) {
   if (type === "Order Report") {
     return {
-      headers: ["Order ID", "Date", "Customer", "Total", "Status"],
-      rows: orders.map((order) => [order.orderNumber || "", formatDate(order.createdAt), order.user?.name || "Customer", formatAmount(order.total), order.status || ""]),
+      headers: ["Order ID", "Customer", "Date", "Items", "Total", "Payment Method", "Payment Status", "Status"],
+      rows: orders.map((order) => [order.orderNumber || "", order.user?.name || "Customer", formatDate(order.createdAt), String((order.items || []).length), formatAmount(order.total), order.paymentMethod || "", order.paymentStatus || "", order.status || ""]),
     };
   }
   if (type === "Product Report") {
@@ -63,20 +63,18 @@ function getCellRows(type, { orders, products, users }) {
   }
   if (type === "User Report") {
     return {
-      headers: ["Role", "Account Status", "Count"],
-      rows: ["customer", "farmer", "admin"].flatMap((role) => ["active", "blocked"].map((status) => [
-        role,
-        status,
-        String(users.filter((user) => user.role === role && (user.status || "active") === status).length),
-      ])),
+      headers: ["Name", "Email", "Role", "Account Status", "Registration Date"],
+      rows: users.map((user) => [user.name || "", user.email || "", user.role || "", user.status || "active", formatDate(user.createdAt)]),
     };
   }
   return {
-    headers: ["Order ID", "Date", "Revenue", "Status"],
-    rows: orders.filter((order) => order.status !== "Cancelled").map((order) => [
+    headers: ["Order ID", "Date", "Customer", "Revenue", "Payment Status", "Status"],
+    rows: orders.filter((order) => order.status !== "Cancelled" && order.status !== "Delivery Failed" && order.paymentStatus !== "Failed").map((order) => [
       order.orderNumber || "",
       formatDate(order.createdAt),
+      order.user?.name || "Customer",
       formatAmount(order.total),
+      order.paymentStatus || "",
       order.status || "",
     ]),
   };
@@ -105,7 +103,9 @@ async function buildReportPdf({ type, from = "", to = "", category = "" }) {
     ["Product Report", "Inventory Report"].includes(type) || category
       ? Product.find(category ? { category } : {}).sort({ name: 1 }).lean()
       : Promise.resolve([]),
-    type === "User Report" ? User.find().select("role status").lean() : Promise.resolve([]),
+    type === "User Report"
+      ? User.find(dateFilter).select("name email role status createdAt").sort({ createdAt: -1 }).lean()
+      : Promise.resolve([]),
     ["Sales Report", "Order Report"].includes(type)
       ? Order.find(dateFilter).populate("user", "name").sort({ createdAt: -1 }).lean()
       : Promise.resolve([]),

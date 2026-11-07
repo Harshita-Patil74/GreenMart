@@ -6,15 +6,21 @@ import { sectionReveal, staggerContainer, staggerItem } from "../../animations/v
 import farmerApi from "../../api/farmerApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
+import Pagination from "../../components/common/Pagination.jsx";
 
 export default function Farmers() {
-const [farmers, setFarmers] = useState([]);
+  const [farmers, setFarmers] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   useEffect(() => {
-    farmerApi.list().then((r) => {
-      const d = r.data || [];
-      if (d.length) setFarmers(d);
+    farmerApi.list({ page, limit: pageSize }).then((r) => {
+      const data = r.data || {};
+      const d = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+      setFarmers(d);
+      setTotal(Number(data?.total) || 0);
     }).catch(() => setFarmers([]));
-  }, []);
+  }, [page, pageSize]);
 
   return (
     <div className="gm-container py-6 space-y-6 pb-12">
@@ -106,6 +112,7 @@ const [farmers, setFarmers] = useState([]);
           </motion.div>
         ))}
       </motion.div>
+      <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
     </div>
   );
 }

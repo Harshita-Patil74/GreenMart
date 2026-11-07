@@ -27,6 +27,8 @@ const OfferSchema = new mongoose.Schema({
     index: true,
   },
   isSubscriberExclusive: { type: Boolean, default: false, index: true },
+  exclusiveDiscountType: { type: String, enum: ["Percentage", "Fixed Amount"], default: null },
+  exclusiveDiscountValue: { type: Number, default: null, min: 0 },
   isActive: { type: Boolean, default: true, index: true },
   submittedAt: { type: Date, default: Date.now },
   approvedAt: Date,

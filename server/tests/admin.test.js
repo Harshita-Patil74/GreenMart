@@ -86,7 +86,7 @@ describe("Admin farmer verification", () => {
       .set("Authorization", authHeader(adminToken));
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.arrayContaining([
+    expect(response.body.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         _id: String(profile._id),
         farmName: "Listed Farm",
@@ -100,7 +100,7 @@ describe("Admin farmer verification", () => {
         certification: expect.objectContaining({ body: "Organic", number: "CERT-123" }),
       }),
     ]));
-    const listedResponse = response.body.find((item) => item.user?._id === String(listedFarmer._id));
+    const listedResponse = response.body.items.find((item) => item.user?._id === String(listedFarmer._id));
     expect(listedResponse.user).not.toHaveProperty("passwordHash");
     expect(listedResponse.user).not.toHaveProperty("activationTokenHash");
     expect(listedResponse.user).not.toHaveProperty("resetTokenHash");
@@ -134,7 +134,7 @@ describe("Admin farmer verification", () => {
     const adminUsers = await request(app)
       .get("/api/admin/users?role=farmer")
       .set("Authorization", authHeader(adminToken));
-    const createdResponseUser = adminUsers.body.find((item) => item.email === email);
+    const createdResponseUser = adminUsers.body.items.find((item) => item.email === email);
     expect(createdResponseUser).toBeDefined();
     expect(createdResponseUser).not.toHaveProperty("passwordHash");
     expect(createdResponseUser).not.toHaveProperty("activationTokenHash");
@@ -172,7 +172,7 @@ describe("Admin farmer verification", () => {
     const listed = await request(app)
       .get("/api/admin/farmers")
       .set("Authorization", authHeader(adminToken));
-    const listedProfile = listed.body.find((item) => String(item.user._id) === String(createdUser._id));
+    const listedProfile = listed.body.items.find((item) => String(item.user._id) === String(createdUser._id));
     expect(listedProfile.certification.body).toBe("Organic Farming Certificate");
     expect(listedProfile.certification.number).toBe("OFC2026KA5724");
   });

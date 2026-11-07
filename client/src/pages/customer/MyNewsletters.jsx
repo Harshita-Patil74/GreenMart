@@ -68,7 +68,7 @@ export default function MyNewsletters({ role = "customer" } = {}) {
   if (loading) return <div className="p-6 text-xs text-[#68756B]">Loading newsletters...</div>;
 
   return (
-    <div className="space-y-4 pb-12">
+    <div className="space-y-4 pb-12 mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
       <BackButton fallback={`/${role}/dashboard`} />
       <motion.header
         variants={sectionReveal}
@@ -153,14 +153,22 @@ export default function MyNewsletters({ role = "customer" } = {}) {
             className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
           >
             {items.map((item) => (
-              <motion.div
-                key={item._id}
-                variants={staggerItem}
-                initial="hidden"
-                animate="visible"
-                className={`rounded-xl border p-4 shadow-sm ${item.isRead ? "bg-white border-gray-100" : "bg-[#F6FAF8] border-[#D9E7DE]"}`}
-              >
-                <div className="flex items-start justify-between gap-3">
+                <motion.div
+                  key={item._id}
+                  variants={staggerItem}
+                  initial="hidden"
+                  animate="visible"
+                  className={`min-h-[340px] rounded-xl border p-4 shadow-sm flex flex-col ${item.isRead ? "bg-white border-gray-100" : "bg-[#F6FAF8] border-[#D9E7DE]"}`}
+                >
+                  {(item.bannerImage || item.bannerImageUrl) && (
+                    <img
+                      src={item.bannerImage || item.bannerImageUrl}
+                      alt=""
+                      className="mb-3 h-36 w-full rounded-lg object-cover border border-[#E2E6DF]"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                  <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="px-2 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider" style={{ color: item.campaignType === "offers" ? "#16803C" : "#6B7280", backgroundColor: item.campaignType === "offers" ? "#EAF2E7" : "#F3F4F6" }}>

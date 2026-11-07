@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
-import { Plus } from "lucide-react";
+import { Plus, RotateCcw } from "lucide-react";
 import productApi from "../../api/productApi";
 import farmerApi from "../../api/farmerApi";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
@@ -11,6 +11,7 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import ProductManagementSection from "../../components/admin/ProductManagementSection.jsx";
 import Modal from "../../components/common/Modal.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
+import Pagination from "../../components/common/Pagination.jsx";
 import toast from "react-hot-toast";
 import { showDeleteConfirm, showSuccess, showError } from "../../utils/alertUtils";
 
@@ -26,6 +27,7 @@ export default function AdminProducts() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [savingId, setSavingId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -40,7 +42,7 @@ export default function AdminProducts() {
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      const { data } = await productApi.list({ search, category, status: status === "Active" ? "Active" : status === "Inactive" ? "Inactive" : undefined, page, limit: PAGE_SIZE });
+      const { data } = await productApi.list({ search, category, status: status === "Active" ? "Active" : status === "Inactive" ? "Inactive" : undefined, page, limit: PAGE_SIZE, showDeleted: showDeleted ? "true" : undefined });
       setProducts(Array.isArray(data?.items) ? data.items : []);
     } catch (requestError) { setError(requestError?.message || "Couldn't load products."); }
     finally { setLoading(false); }
@@ -48,7 +50,7 @@ export default function AdminProducts() {
   useEffect(() => {
     load();
     farmerApi.list().then(({ data }) => setFarmers(Array.isArray(data) ? data : [])).catch((requestError) => setError(requestError?.message || "Couldn't load farmer options."));
-  }, [search, category, status, page]);
+  }, [search, category, status, page, showDeleted]);
 
   const totalImageCount = () => existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).length + imageFiles.length;
 
@@ -153,6 +155,29 @@ export default function AdminProducts() {
     finally { setSavingId(""); }
   };
 
+  const restoreProduct = async (product) => {
+    setSavingId(product._id);
+    try {
+      await productApi.restore(product._id);
+      setProducts((current) => current.map((item) => item._id === product._id ? { ...item, isDeleted: false } : item));
+      showSuccess("Restored", `${product.name} has been restored.`);
+    } catch (requestError) { showError("Restore failed", requestError?.message || "Couldn't restore this product."); }
+    finally { setSavingId(""); }
+  };
+
+  const restoreAllProducts = async () => {
+    if (!window.confirm("Restore all deleted products? This cannot be undone.")) return;
+    const deletedIds = products.filter(p => p.isDeleted).map(p => p._id);
+    deletedIds.forEach(id => setSavingId(id));
+    try {
+      const { data } = await productApi.restoreAll();
+      setProducts((current) => current.map((item) => ({ ...item, isDeleted: false })));
+      showSuccess("Restored", data.message || "All deleted products restored.");
+      await load();
+    } catch (requestError) { showError("Restore failed", requestError?.message || "Couldn't restore all products."); }
+    finally { setSavingId(""); }
+  };
+
   if (error && !products.length) return <ErrorState message={error} onRetry={load} />;
   return <div className="space-y-4 pb-10">
     <BackButton fallback="/admin/dashboard" />
@@ -173,16 +198,24 @@ export default function AdminProducts() {
         <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, farmer, or status" ariaLabel="Search products" />
         <select aria-label="Filter by category" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs"><option value="">All Categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select>
         <select aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs"><option value="">All Status</option><option>Active</option><option>Inactive</option></select>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={showDeleted} onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); }} className="rounded border-gray-200 text-primary focus:ring-primary" />
+            <span className="text-xs text-gray-600">Show deleted products</span>
+          </label>
+          {showDeleted && products.some((p) => p.isDeleted) && (
+            <button type="button" onClick={restoreAllProducts} disabled={Boolean(savingId)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs text-primary hover:bg-gray-50 disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" /> Restore All</button>
+          )}
       </div>
       <div className="overflow-x-auto">
-        <ProductManagementSection
-          products={visible}
-          onEdit={openDialog}
-          onDelete={remove}
-          isLoading={savingForm}
-        />
+          <ProductManagementSection
+            products={visible}
+            onEdit={openDialog}
+            onDelete={remove}
+            onRestore={restoreProduct}
+            isLoading={savingForm}
+          />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-[10px] text-gray-500"><span>Showing {filtered.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} products</span><div className="flex gap-1"><button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border px-2 py-1 disabled:opacity-40">Previous</button><span className="px-2 py-1">{page} / {pages}</span><button disabled={page >= pages} onClick={() => setPage(page + 1)} className="rounded border px-2 py-1 disabled:opacity-40">Next</button></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-[10px] text-gray-500"><Pagination page={page} pageSize={PAGE_SIZE} totalRecords={filtered.length} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} /></div>
     </motion.section>
     <Modal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingProduct ? "Edit Product" : "Add Product"}>
       <form onSubmit={saveProduct} className="space-y-3">

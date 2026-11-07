@@ -55,8 +55,9 @@ function extractPublicId(secureUrl) {
 }
 
 async function listProducts(req, res, activeOnly) {
-  const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12 } = req.query;
-  const q = activeOnly ? { status: "Active" } : {};
+  const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12, showDeleted } = req.query;
+  const q = activeOnly ? { status: "Active", $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] } : {};
+  if (showDeleted !== "true") q.$or = [{ isDeleted: false }, { isDeleted: { $exists: false } }];
   if (search) {
     const trimmed = String(search).trim();
     if (trimmed) {
@@ -166,17 +167,36 @@ exports.storefrontGet = asyncHandler(async (req,res) => {
   res.json((await attachProductOffers([p]))[0]);
 });
 exports.mine = asyncHandler(async (req,res) => {
-  const { search } = req.query;
-  const query = { farmer: req.user._id };
+  const { search, category, page=1, limit=10, showDeleted, status } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
+  const and = [];
+  if (showDeleted !== "true") {
+    and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
+  }
   if (search && search.trim()) {
     const trimmed = String(search).trim();
-    query.$or = [
-      { $text: { $search: trimmed } },
-      { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
-    ];
+    and.push({
+      $or: [
+        { $text: { $search: trimmed } },
+        { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
+      ],
+    });
   }
-  const items = await Product.find(query).sort({ createdAt: -1 });
-  res.json(items);
+  if (category && category !== "All Products" && category !== "All Categories") and.push({ category });
+  if (status && status !== "All Status") {
+    if (status === "Active") and.push({ status: "Active" });
+    else if (status === "Inactive") and.push({ status: "Inactive" });
+    else if (status === "Out of stock") and.push({ stock: { $lte: 0 } });
+    else if (status === "Low stock") and.push({ $expr: { $and: [{ $gt: ["$stock", 0] }, { $lte: ["$stock", "$lowStockThreshold"] }] } });
+  }
+  const query = { farmer: req.user._id, ...(and.length ? { $and: and } : {}) };
+  const skip = (pageNum - 1) * limitNum;
+  const [items, total] = await Promise.all([
+    Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+    Product.countDocuments(query),
+  ]);
+  res.json({ items, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
 });
 exports.get = asyncHandler(async (req,res) => {
   const p = await Product.findById(req.params.id).populate("farmer","name");
@@ -406,16 +426,8 @@ exports.remove = asyncHandler(async (req,res) => {
   if (req.user.role !== "admin" && String(p.farmer) !== String(req.user._id)) return res.status(403).json({ message: "Forbidden" });
   const productName = p.name;
   const productId = p._id;
-  const imageUrls = Array.isArray(p.images) ? p.images : [];
-  const publicIdsToDelete = imageUrls.map((url) => extractPublicId(url)).filter(Boolean);
-  await p.deleteOne();
-  // Delete Cloudinary images only if no other product still references them
-  for (const publicId of publicIdsToDelete) {
-    const stillReferenced = await Product.exists({ images: new RegExp(publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) });
-    if (!stillReferenced) {
-      await deleteFile(publicId).catch(() => {});
-    }
-  }
+  p.isDeleted = true;
+  await p.save();
   // Notify all admins about the deleted product
   const admins = await User.find({ role: "admin", status: { $ne: "blocked" } });
   for (const admin of admins) {
@@ -430,6 +442,21 @@ exports.remove = asyncHandler(async (req,res) => {
     });
   }
   res.json({ message: "Deleted" });
+});
+
+exports.restore = asyncHandler(async (req,res) => {
+  const p = await Product.findById(req.params.id);
+  if (!p) return res.status(404).json({ message: "Not found" });
+  if (req.user.role !== "admin" && String(p.farmer) !== String(req.user._id)) return res.status(403).json({ message: "Forbidden" });
+  p.isDeleted = false;
+  await p.save();
+  res.json({ message: "Restored", product: p });
+});
+
+exports.restoreAll = asyncHandler(async (req,res) => {
+  const farmerId = req.user.role === "admin" ? (req.query.farmer || req.user._id) : req.user._id;
+  const result = await Product.updateMany({ farmer: farmerId, isDeleted: true }, { $set: { isDeleted: false } });
+  res.json({ message: "All deleted products restored", restoredCount: result.modifiedCount });
 });
 
 exports.serverTime = asyncHandler(async (req, res) => {

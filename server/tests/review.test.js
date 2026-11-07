@@ -79,8 +79,8 @@ describe("Review workflow", () => {
   it("lists reviews for the product", async () => {
     const res = await request(app).get(`/api/products/${productId}/reviews`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThan(0);
-    expect(res.body[0].rating).toBe(5);
+    expect(res.body.items.length).toBeGreaterThan(0);
+    expect(res.body.items[0].rating).toBe(5);
   });
 
   it("updates product rating average after review", async () => {

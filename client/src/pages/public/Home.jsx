@@ -14,6 +14,8 @@ import { cardItemVariants, cardHover, imageHover, badgeHover } from "../../compo
 import { slideUpVariants, staggerContainer, staggerItem, sectionReveal } from "../../animations/variants.js";
 import categoryApi from "../../api/categoryApi";
 import CategoryCarousel from "../../components/common/CategoryCarousel.jsx";
+import { useSelector } from "react-redux";
+import newsletterApi from "../../api/newsletterApi";
 
 const HERO = "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80";
 
@@ -143,6 +145,10 @@ export default function Home() {
   const [categoriesError, setCategoriesError] = useState(null);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState(null);
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+
+  const { user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     let active = true;
@@ -181,6 +187,23 @@ export default function Home() {
     fetchAllProducts();
     return () => { active = false; };
   }, []);
+
+  const loadSubscription = async () => {
+    if (!user?.role === "customer") return;
+    setSubscriptionLoading(true);
+    try {
+      const { data } = await newsletterApi.subscriptionMe();
+      setSubscription(data);
+    } catch (e) {
+      setSubscription(null);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === "customer") loadSubscription();
+  }, [user]);
 
   const offersActiveRef = useRef(true);
 
@@ -424,8 +447,41 @@ export default function Home() {
               </Link>
             </div>
             <div className="border-l border-[#477A4E]/40 pl-6 sm:pl-8 pt-6 sm:pt-0">
-              <p className="text-xs text-[#EAF2E7]/80 mb-3">Stay in touch</p>
-              <p className="text-xs text-[#EAF2E7]/70">Sign in to manage your newsletter preferences and access exclusive subscriber offers.</p>
+              {subscriptionLoading ? (
+                <p className="text-xs text-[#EAF2E7]/80 mb-3">Loading...</p>
+              ) : user?.role === "customer" && subscription?.subscribed ? (
+                <>
+                  <p className="text-xs font-semibold text-[#EAF2E7] mb-1">You're a GreenMart Premium Member!</p>
+                  <p className="text-xs text-[#EAF2E7]/90">Your premium subscription is active.</p>
+                  <Link to="/customer/dashboard" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-[11px] font-semibold text-[#245C3A] hover:bg-[#EAF2E7]">
+                    Manage Subscription <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
+              ) : user?.role === "customer" && subscription?.status === "expired" ? (
+                <>
+                  <p className="text-xs font-semibold text-[#EAF2E7] mb-1">Your premium membership has expired.</p>
+                  <p className="text-xs text-[#EAF2E7]/90">Renew to regain exclusive subscriber benefits.</p>
+                  <Link to="/customer/subscription-checkout" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-[11px] font-semibold text-[#245C3A] hover:bg-[#EAF2E7]">
+                    Renew Subscription <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
+              ) : user?.role === "customer" ? (
+                <>
+                  <p className="text-xs font-semibold text-[#EAF2E7] mb-1">Join GreenMart Premium</p>
+                  <p className="text-xs text-[#EAF2E7]/90">Get exclusive benefits for ₹199/month.</p>
+                  <Link to="/customer/subscription-checkout" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-[11px] font-semibold text-[#245C3A] hover:bg-[#EAF2E7]">
+                    Subscribe Now <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold text-[#EAF2E7] mb-1">Discover GreenMart Premium</p>
+                  <p className="text-xs text-[#EAF2E7]/90">Subscribe for ₹199/month to unlock exclusive subscriber benefits.</p>
+                  <Link to="/login" className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-[11px] font-semibold text-[#245C3A] hover:bg-[#EAF2E7]">
+                    Login to Subscribe <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </section>

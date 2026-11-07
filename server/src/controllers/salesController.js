@@ -14,7 +14,15 @@ exports.overview = asyncHandler(async (req,res) => {
   res.json({ totalRevenue: revenue, totalOrders: orders.length, totalProductsSold: count, totalQuantitySold: qty });
 });
 exports.list = asyncHandler(async (req,res) => {
-  const orders = await Order.find({ "items.farmer": req.user._id }).sort({ createdAt: -1 });
+  const { page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
+  const skip = (pageNum - 1) * limitNum;
+  const query = { "items.farmer": req.user._id };
+  const [orders, total] = await Promise.all([
+    Order.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+    Order.countDocuments(query),
+  ]);
   const result = orders.map((o) => ({
     _id: o._id,
     orderNumber: o.orderNumber,
@@ -22,6 +30,6 @@ exports.list = asyncHandler(async (req,res) => {
     status: o.status,
     items: o.items.filter((it) => String(it.farmer) === String(req.user._id)),
   }));
-  res.json(result);
+  res.json({ items: result, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
 });
 module.exports = exports;

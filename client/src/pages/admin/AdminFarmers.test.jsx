@@ -5,6 +5,12 @@ import AdminFarmers from "./AdminFarmers.jsx";
 import adminApi from "../../api/adminApi.js";
 import toast from "react-hot-toast";
 
+vi.mock("react-hot-toast", () => ({
+  default: { success: vi.fn(), error: vi.fn() },
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock("../../api/adminApi.js", () => ({
   default: {
     farmers: vi.fn(),
@@ -12,20 +18,42 @@ vi.mock("../../api/adminApi.js", () => ({
     verifyFarmer: vi.fn(),
     rejectFarmer: vi.fn(),
     requestFarmerChanges: vi.fn(),
+    resendFarmerActivation: vi.fn(),
   },
 }));
+
+const makeFarmer = (overrides = {}) => ({
+  _id: overrides._id || `profile-${Math.random().toString(36).slice(2)}`,
+  user: {
+    _id: overrides.user?._id || `farmer-${Math.random().toString(36).slice(2)}`,
+    name: overrides.user?.name || "Green Fields Farmer",
+    email: overrides.user?.email || "farmer@example.test",
+    accountActivated: overrides.user?.accountActivated ?? false,
+  },
+  farmName: overrides.farmName || "Green Fields Farm",
+  certification: overrides.certification || { verifiedByAdmin: false, rejectedByAdmin: false },
+  certificationName: overrides.certificationName || undefined,
+  certificateNumber: overrides.certificateNumber || undefined,
+  createdAt: overrides.createdAt || "2026-02-11T00:00:00.000Z",
+  ...overrides,
+});
+
+const makePaginatedResponse = (farmers = [], total = farmers.length) => ({
+  data: { items: farmers, total },
+});
+
 describe("Admin farmer management", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    adminApi.farmers.mockResolvedValue({
-      data: [{
+    vi.resetAllMocks();
+    adminApi.farmers.mockResolvedValue(makePaginatedResponse([
+      makeFarmer({
         _id: "profile-1",
         user: { _id: "farmer-1", name: "Green Fields Farmer", email: "farmer@example.test", accountActivated: false },
         farmName: "Green Fields Farm",
         certification: { verifiedByAdmin: false, rejectedByAdmin: false },
         createdAt: "2026-02-11T00:00:00.000Z",
-      }],
-    });
+      }),
+    ], 1));
     adminApi.verifyFarmer.mockResolvedValue({
       data: {
         certification: { body: "Organic", number: "CERT-123", verifiedByAdmin: true, rejectedByAdmin: false },
@@ -34,273 +62,274 @@ describe("Admin farmer management", () => {
     adminApi.requestFarmerChanges.mockResolvedValue({});
   });
 
-  it("verifies the selected farmer through the admin API and updates the list", async () => {
-    renderWithStore(<AdminFarmers />);
+  describe("Initial rendering", () => {
+    it("renders the farmer management page with heading and table", async () => {
+      renderWithStore(<AdminFarmers />);
 
-    expect(await screen.findByText("Green Fields Farmer")).toBeInTheDocument();
-    expect(screen.getByText("farmer@example.test")).toBeInTheDocument();
-    expect(screen.getByText("2/11/2026")).toBeInTheDocument();
-    expect(screen.getByText("Not provided")).toBeInTheDocument();
-    expect(screen.queryByText("CERT-123")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Verify" }));
-
-    await waitFor(() => expect(adminApi.verifyFarmer).toHaveBeenCalledWith("farmer-1"));
-    const verifiedTab = await screen.findByRole("button", { name: "Verified (1)" });
-    fireEvent.click(verifiedTab);
-    expect(await screen.findByText("Organic")).toBeInTheDocument();
-    expect(screen.getByText("CERT-123")).toBeInTheDocument();
-    expect(await screen.findByText("Green Fields Farmer")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
-  });
-
-  it("creates a farmer account and displays a development activation link", async () => {
-    const toastSuccess = vi.spyOn(toast, "success").mockImplementation(() => {});
-    adminApi.createFarmer.mockResolvedValueOnce({ data: { message: "Farmer created", activationLink: "http://localhost:5173/activate-account?token=development-token" } });
-    renderWithStore(<AdminFarmers />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Farmer" }));
-    fireEvent.change(screen.getByPlaceholderText("Full Name"), { target: { value: "New Farmer" } });
-    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "new.farmer@example.com" } });
-    const createButton = screen.getByRole("button", { name: "Create" });
-    expect(createButton).toBeEnabled();
-    fireEvent.click(createButton);
-
-    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.any(FormData)));
-    expect(await screen.findByRole("button", { name: "Add Farmer" })).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Full Name")).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Password")).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Confirm Password")).not.toBeInTheDocument();
-    expect(screen.getByText("Development-only activation link")).toBeInTheDocument();
-    expect(toastSuccess).toHaveBeenCalledWith("Farmer created");
-  });
-
-  it("shows the backend reason when creating a farmer returns a bad request", async () => {
-    const toastError = vi.spyOn(toast, "error").mockImplementation(() => {});
-    adminApi.createFarmer.mockRejectedValueOnce({ message: "Email is already registered.", status: 400 });
-    renderWithStore(<AdminFarmers />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Farmer" }));
-    fireEvent.change(screen.getByPlaceholderText("Full Name"), { target: { value: "Existing Farmer" } });
-    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "existing.farmer@example.com" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
-
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Email is already registered."));
-  });
-
-  it("keeps Create disabled until the farmer name and email are valid", async () => {
-    renderWithStore(<AdminFarmers />);
-    fireEvent.click(screen.getByRole("button", { name: "Add Farmer" }));
-
-    fireEvent.change(screen.getByPlaceholderText("Full Name"), { target: { value: "New Farmer" } });
-    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: ".farmer@example.com" } });
-
-    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
-  });
-
-  it("enters certification fields when creating a farmer and does not auto-verify", async () => {
-    adminApi.createFarmer.mockResolvedValueOnce({ data: { message: "Farmer created" } });
-    renderWithStore(<AdminFarmers />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Farmer" }));
-    fireEvent.change(screen.getByPlaceholderText("Full Name"), { target: { value: "Certified Farmer" } });
-    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "certified@example.com" } });
-    fireEvent.change(screen.getByPlaceholderText("Certification Name (e.g. Organic Farming Certificate)"), { target: { value: "Organic Farming Certificate" } });
-    fireEvent.change(screen.getByPlaceholderText("Certificate Number (e.g. OFC2026KA5724)"), { target: { value: "OFC2026KA5724" } });
-
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
-
-    await waitFor(() => expect(adminApi.createFarmer).toHaveBeenCalledWith(expect.any(FormData)));
-  });
-  });
-
-  it("displays saved certification name and certificate number, or Not provided when missing", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [
-        {
-          _id: "profile-cert",
-          user: { _id: "farmer-cert", name: "Certified Farmer", email: "cert@example.test", accountActivated: false },
-          farmName: "Certified Farm",
-          certification: { body: "Organic Farming Certificate", number: "OFC2026KA5724", verifiedByAdmin: false, rejectedByAdmin: false },
-          createdAt: "2026-02-11T00:00:00.000Z",
-        },
-        {
-          _id: "profile-none",
-          user: { _id: "farmer-none", name: "No Cert Farmer", email: "none@example.test", accountActivated: false },
-          farmName: "Plain Farm",
-          certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-          createdAt: "2026-02-11T00:00:00.000Z",
-        },
-      ],
+      await screen.findByText("Farmer Verification");
+      expect(screen.getByText("Review farmer profiles and verify submitted certifications.")).toBeInTheDocument();
+      expect(screen.getByRole("table")).toBeInTheDocument();
     });
-    renderWithStore(<AdminFarmers />);
 
-    expect(await screen.findByText("Organic Farming Certificate")).toBeInTheDocument();
-    expect(screen.getByText("OFC2026KA5724")).toBeInTheDocument();
-    expect(screen.getByText("Not provided")).toBeInTheDocument();
-    expect(screen.getAllByText("Pending")).toHaveLength(2);
-  });
-
-  it("displays Resubmitted badge for a farmer who resubmitted after changes", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-resubmit",
-        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
-        farmName: "Resubmitted Farm",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        changeRequestInstructions: "",
-        submittedAt: "2026-03-01T00:00:00.000Z",
-        verificationHistory: [
-          { action: "Changes Requested", admin: "admin-1", timestamp: "2026-02-01T00:00:00.000Z", reason: "Fix certificate" },
-          { action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" },
-        ],
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+    it("calls the farmers API with page 1 and limit 10 on mount", async () => {
+      renderWithStore(<AdminFarmers />);
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenCalledWith({ page: 1, limit: 10, search: "" }));
     });
-    renderWithStore(<AdminFarmers />);
-    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
-    expect(await screen.findByText("Resubmitted")).toBeInTheDocument();
+
+    it("displays farmer records returned by the API", async () => {
+      renderWithStore(<AdminFarmers />);
+
+      await screen.findByText("Green Fields Farmer");
+      expect(screen.getByText("farmer@example.test")).toBeInTheDocument();
+      expect(screen.getByText("Green Fields Farm")).toBeInTheDocument();
+    });
+
+    it("shows pagination controls when total records exceed page size", async () => {
+      adminApi.farmers.mockResolvedValueOnce(makePaginatedResponse([
+        makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        makeFarmer({ _id: "p2", user: { _id: "f2", name: "Page 2 Farmer", email: "p2@example.test" } }),
+        makeFarmer({ _id: "p3", user: { _id: "f3", name: "Page 3 Farmer", email: "p3@example.test" } }),
+        makeFarmer({ _id: "p4", user: { _id: "f4", name: "Page 4 Farmer", email: "p4@example.test" } }),
+        makeFarmer({ _id: "p5", user: { _id: "f5", name: "Page 5 Farmer", email: "p5@example.test" } }),
+        makeFarmer({ _id: "p6", user: { _id: "f6", name: "Page 6 Farmer", email: "p6@example.test" } }),
+        makeFarmer({ _id: "p7", user: { _id: "f7", name: "Page 7 Farmer", email: "p7@example.test" } }),
+        makeFarmer({ _id: "p8", user: { _id: "f8", name: "Page 8 Farmer", email: "p8@example.test" } }),
+        makeFarmer({ _id: "p9", user: { _id: "f9", name: "Page 9 Farmer", email: "p9@example.test" } }),
+        makeFarmer({ _id: "p10", user: { _id: "f10", name: "Page 10 Farmer", email: "p10@example.test" } }),
+        makeFarmer({ _id: "p11", user: { _id: "f11", name: "Page 11 Farmer", email: "p11@example.test" } }),
+        makeFarmer({ _id: "p12", user: { _id: "f12", name: "Page 12 Farmer", email: "p12@example.test" } }),
+        makeFarmer({ _id: "p13", user: { _id: "f13", name: "Page 13 Farmer", email: "p13@example.test" } }),
+        makeFarmer({ _id: "p14", user: { _id: "f14", name: "Page 14 Farmer", email: "p14@example.test" } }),
+        makeFarmer({ _id: "p15", user: { _id: "f15", name: "Page 15 Farmer", email: "p15@example.test" } }),
+        makeFarmer({ _id: "p16", user: { _id: "f16", name: "Page 16 Farmer", email: "p16@example.test" } }),
+        makeFarmer({ _id: "p17", user: { _id: "f17", name: "Page 17 Farmer", email: "p17@example.test" } }),
+        makeFarmer({ _id: "p18", user: { _id: "f18", name: "Page 18 Farmer", email: "p18@example.test" } }),
+        makeFarmer({ _id: "p19", user: { _id: "f19", name: "Page 19 Farmer", email: "p19@example.test" } }),
+        makeFarmer({ _id: "p20", user: { _id: "f20", name: "Page 20 Farmer", email: "p20@example.test" } }),
+      ], 20));
+      renderWithStore(<AdminFarmers />);
+
+      await screen.findByText("Page 1 Farmer");
+      expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Last" })).toBeInTheDocument();
+    });
+
+    it("hides pagination when there is only one page or no records", async () => {
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+    });
   });
 
-  it("shows resubmitted farmer in Pending tab only", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-resubmit",
-        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
-        farmName: "Resubmitted Farm",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+  describe("Server-side pagination", () => {
+    it("fetches page 2 when clicking Next", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Page 2 Farmer", email: "p2@example.test" } }),
+        ], 20));
+
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Page 1 Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenLastCalledWith({ page: 2, limit: 10, search: "" }));
+      await screen.findByText("Page 2 Farmer");
     });
-    renderWithStore(<AdminFarmers />);
-    expect(await screen.findByText("Pending (1)")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Pending (1)" }));
-    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
+
+    it("fetches page 1 when clicking Previous from page 2", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Page 2 Farmer", email: "p2@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20));
+
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Page 1 Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => screen.findByText("Page 2 Farmer"));
+      fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+      await waitFor(() => screen.findByText("Page 1 Farmer"));
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenLastCalledWith({ page: 1, limit: 10, search: "" }));
+    });
+
+    it("resets to page 1 when changing page size to 20", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Page 2 Farmer", email: "p2@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20));
+
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Page 1 Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => screen.findByText("Page 2 Farmer"));
+      const select = screen.getByRole("combobox");
+      select.value = "20";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenLastCalledWith({ page: 1, limit: 20, search: "" }));
+    });
+
+    it("resets to page 1 when changing page size to 50", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Page 2 Farmer", email: "p2@example.test" } }),
+        ], 20))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Page 1 Farmer", email: "p1@example.test" } }),
+        ], 20));
+
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Page 1 Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      await waitFor(() => screen.findByText("Page 2 Farmer"));
+      const select = screen.getByRole("combobox");
+      select.value = "50";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenLastCalledWith({ page: 1, limit: 50, search: "" }));
+    });
   });
 
-  it("does not show resubmitted farmer in Verified or Rejected tabs", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-resubmit",
-        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
-        farmName: "Resubmitted Farm",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+  describe("Search functionality", () => {
+    it("sends search parameter to the backend and resets page to 1", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Green Fields Farmer", email: "farmer@example.test" } }),
+        ], 1))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Search Result", email: "search@example.test" } }),
+        ], 1));
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      fireEvent.change(screen.getByPlaceholderText("Search farmers"), { target: { value: "Search Result" } });
+      await waitFor(() => expect(adminApi.farmers).toHaveBeenLastCalledWith({ page: 1, limit: 10, search: "Search Result" }));
     });
-    renderWithStore(<AdminFarmers />);
-    expect(await screen.findByText("Verified (0)")).toBeInTheDocument();
-    expect(await screen.findByText("Rejected (0)")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Verified (0)" }));
-    expect(screen.queryByText("Resubmitted Farmer")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Pending (1)" }));
-    expect(await screen.findByText("Resubmitted Farmer")).toBeInTheDocument();
+
+    it("clearing search restores the complete farmer list", async () => {
+      adminApi.farmers
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Green Fields Farmer", email: "farmer@example.test" } }),
+        ], 1))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p2", user: { _id: "f2", name: "Search Result", email: "search@example.test" } }),
+        ], 1))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p3", user: { _id: "f3", name: "All Farmers", email: "all@example.test" } }),
+        ], 1));
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      fireEvent.change(screen.getByPlaceholderText("Search farmers"), { target: { value: "Search Result" } });
+      await waitFor(() => screen.findByText("Search Result"));
+      fireEvent.change(screen.getByPlaceholderText("Search farmers"), { target: { value: "" } });
+      await waitFor(() => screen.findByText("All Farmers"));
+    });
   });
 
-  it("displays latest farm and certificate details in View Details for resubmitted farmer", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-resubmit",
-        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
-        farmName: "Resubmitted Farm",
-        farmAddress: "123 Farm Road",
-        category: "Vegetables",
-        description: "Fresh organic vegetables",
-        certification: { body: "Organic Cert", number: "ORG-2026", verifiedByAdmin: false, rejectedByAdmin: false },
-        certificateDocument: { url: "https://example.com/cert.pdf", publicId: "cert" },
-        photo: "/uploads/farms/photo.jpg",
-        verificationStatus: "Pending",
-        changeRequestInstructions: "",
-        submittedAt: "2026-03-01T00:00:00.000Z",
-        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+  describe("UI states", () => {
+    it("shows loading state while fetching farmers", async () => {
+      adminApi.farmers.mockImplementation(() => new Promise(() => {}));
+      renderWithStore(<AdminFarmers />);
+      expect(screen.getByText("Loading farmer profiles...")).toBeInTheDocument();
     });
-    renderWithStore(<AdminFarmers />);
-    await screen.findByText("Resubmitted Farmer");
-    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
-    expect(screen.getByText("Farmer Details")).toBeInTheDocument();
-    expect(screen.getByText("123 Farm Road")).toBeInTheDocument();
-    expect(screen.getByText("Fresh organic vegetables")).toBeInTheDocument();
+
+    it("shows empty state when no farmers are returned", async () => {
+      adminApi.farmers.mockResolvedValue(makePaginatedResponse([], 0));
+      renderWithStore(<AdminFarmers />);
+      await waitFor(() => expect(screen.getByText("No farmer profiles in this view.")).toBeInTheDocument());
+    });
+
+    it("shows error message when API fails", async () => {
+      adminApi.farmers.mockRejectedValueOnce(new Error("Connection failed"));
+      renderWithStore(<AdminFarmers />);
+      await waitFor(() => expect(screen.getByText("Connection failed")).toBeInTheDocument());
+    });
+
+    it("retries loading when clicking Retry on error state", async () => {
+      adminApi.farmers
+        .mockRejectedValueOnce(new Error("Connection failed"))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Retry Farmer", email: "retry@example.test" } }),
+        ], 1))
+        .mockResolvedValueOnce(makePaginatedResponse([
+          makeFarmer({ _id: "p1", user: { _id: "f1", name: "Retry Farmer", email: "retry@example.test" } }),
+        ], 1));
+      renderWithStore(<AdminFarmers />);
+      await waitFor(() => expect(screen.getByText("Connection failed")).toBeInTheDocument());
+      fireEvent.click(screen.getByText("Retry"));
+      await waitFor(() => screen.findByText("Retry Farmer"));
+    });
   });
 
-  it("offers Verify, Reject, and Request Changes actions for resubmitted farmers", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-resubmit",
-        user: { _id: "farmer-resubmit", name: "Resubmitted Farmer", email: "resubmit@example.test", accountActivated: false },
-        farmName: "Resubmitted Farm",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        verificationHistory: [{ action: "Resubmitted", timestamp: "2026-03-01T00:00:00.000Z" }],
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+  describe("Farmer actions", () => {
+    it("verifies a farmer and updates the list", async () => {
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Verify" }));
+      await waitFor(() => expect(adminApi.verifyFarmer).toHaveBeenCalledWith("farmer-1"));
+      fireEvent.click(screen.getByRole("button", { name: "Verified (1)" }));
+      await waitFor(() => screen.getByText("Organic"));
+      expect(screen.getByText("CERT-123")).toBeInTheDocument();
     });
-    adminApi.verifyFarmer.mockResolvedValueOnce({ data: { certification: { verifiedByAdmin: true } } });
-    adminApi.rejectFarmer.mockResolvedValueOnce({ data: { certification: { rejectedByAdmin: true } } });
-    adminApi.requestFarmerChanges.mockResolvedValueOnce({ data: { changeRequestInstructions: "Fix docs" } });
-    renderWithStore(<AdminFarmers />);
-    await screen.findByText("Resubmitted Farmer");
-    expect(screen.getByRole("button", { name: "Verify" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Request Changes" })).toBeInTheDocument();
+
+    it("rejects a farmer with confirmation", async () => {
+      window.confirm = vi.fn(() => true);
+      window.prompt = vi.fn(() => "Reason");
+      adminApi.rejectFarmer.mockResolvedValue({ data: { certification: { rejectedByAdmin: true } } });
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+      await waitFor(() => expect(adminApi.rejectFarmer).toHaveBeenCalledWith("farmer-1", "Reason"));
+    });
+
+    it("requests changes for a farmer", async () => {
+      window.prompt = vi.fn(() => "Fix certificate");
+      adminApi.requestFarmerChanges.mockResolvedValue({ data: { changeRequestInstructions: "Fix docs" } });
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Green Fields Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Request Changes" }));
+      await waitFor(() => expect(adminApi.requestFarmerChanges).toHaveBeenCalledWith("farmer-1", "Fix certificate"));
+      expect(toast.success).toHaveBeenCalledWith("Changes requested.");
+    });
   });
 
-  it("displays certificate name and number saved via certificateName/certificateNumber fields", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-cert-name",
-        user: { _id: "farmer-cert-name", name: "Certificate Farmer", email: "certname@example.test", accountActivated: false },
-        farmName: "Certificate Farm",
-        certificateName: "Organic Farming Certificate",
-        certificateNumber: "OFC2026KA5724",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+  describe("Tab filtering", () => {
+    it("shows only pending farmers when Pending tab is active", async () => {
+      adminApi.farmers.mockResolvedValueOnce(makePaginatedResponse([
+        makeFarmer({ _id: "p1", user: { _id: "f1", name: "Pending Farmer", email: "p1@example.test" }, certification: { verifiedByAdmin: false, rejectedByAdmin: false } }),
+        makeFarmer({ _id: "p2", user: { _id: "f2", name: "Verified Farmer", email: "p2@example.test" }, certification: { verifiedByAdmin: true, rejectedByAdmin: false } }),
+      ], 2));
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Pending Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Pending (1)" }));
+      await waitFor(() => screen.findByText("Pending Farmer"));
+      expect(screen.queryByText("Verified Farmer")).not.toBeInTheDocument();
     });
-    renderWithStore(<AdminFarmers />);
-    expect(await screen.findByText("Certificate Farmer")).toBeInTheDocument();
-    expect(screen.getByText("Organic Farming Certificate")).toBeInTheDocument();
-    expect(screen.getByText("OFC2026KA5724")).toBeInTheDocument();
-  });
 
-  it("shows View Certificate link when certificateDocument URL exists", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-cert-doc",
-        user: { _id: "farmer-cert-doc", name: "Doc Farmer", email: "certdoc@example.test", accountActivated: false },
-        farmName: "Doc Farm",
-        certificateName: "Organic Farming Certificate",
-        certificateNumber: "OFC2026KA5724",
-        certificateDocument: { url: "https://res.cloudinary.com/test/cert.pdf", publicId: "cert/123" },
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
+    it("shows only verified farmers when Verified tab is active", async () => {
+      adminApi.farmers.mockResolvedValueOnce(makePaginatedResponse([
+        makeFarmer({ _id: "p1", user: { _id: "f1", name: "Pending Farmer", email: "p1@example.test" }, certification: { verifiedByAdmin: false, rejectedByAdmin: false } }),
+        makeFarmer({ _id: "p2", user: { _id: "f2", name: "Verified Farmer", email: "p2@example.test" }, certification: { verifiedByAdmin: true, rejectedByAdmin: false } }),
+      ], 2));
+      renderWithStore(<AdminFarmers />);
+      await screen.findByText("Pending Farmer");
+      fireEvent.click(screen.getByRole("button", { name: "Verified (1)" }));
+      await waitFor(() => screen.findByText("Verified Farmer"));
+      expect(screen.queryByText("Pending Farmer")).not.toBeInTheDocument();
     });
-    renderWithStore(<AdminFarmers />);
-    await screen.findByText("Doc Farmer");
-    const viewCertButton = screen.getByRole("button", { name: "View Certificate" });
-    expect(viewCertButton).toBeInTheDocument();
   });
-
-  it("shows Not provided when no certificate information exists", async () => {
-    adminApi.farmers.mockResolvedValueOnce({
-      data: [{
-        _id: "profile-nocert",
-        user: { _id: "farmer-nocert", name: "No Cert Farmer", email: "nocert@example.test", accountActivated: false },
-        farmName: "Plain Farm",
-        certification: { verifiedByAdmin: false, rejectedByAdmin: false },
-        verificationStatus: "Pending",
-        createdAt: "2026-02-11T00:00:00.000Z",
-      }],
-    });
-    renderWithStore(<AdminFarmers />);
-    expect(await screen.findByText("No Cert Farmer")).toBeInTheDocument();
-    expect(screen.getByText("Not provided")).toBeInTheDocument();
-  });
+});

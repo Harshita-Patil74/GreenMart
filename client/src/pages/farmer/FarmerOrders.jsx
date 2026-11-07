@@ -9,6 +9,7 @@ import { useSelector } from "react-redux";
 import { LoaderCircle, Search } from "lucide-react";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
+import Pagination from "../../components/common/Pagination.jsx";
 
 const filters = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Delivery Failed", "Cancelled"];
 const nextActions = {
@@ -29,12 +30,15 @@ export default function FarmerOrders() {
   const { user } = useSelector((state) => state.auth);
   const farmerId = user?._id || user?.id;
   const [orders, setOrders] = useState([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("All Orders");
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [expandedOrder, setExpandedOrder] = useState("");
   const [updatingOrder, setUpdatingOrder] = useState("");
   const [failureOrder, setFailureOrder] = useState("");
@@ -73,8 +77,11 @@ export default function FarmerOrders() {
     setLoading(true);
     setError("");
     try {
-      const response = await orderApi.farmer({ search });
-      setOrders(unwrapList(response.data));
+      const response = await orderApi.farmer({ search, page, limit: pageSize });
+      const data = response.data;
+      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setOrders(items);
+      setTotal(Array.isArray(data) ? data.length : Number(data?.total) || 0);
     } catch (requestError) {
       setError(requestError?.response?.data?.message || "We couldn't load your orders.");
     } finally {
@@ -82,7 +89,7 @@ export default function FarmerOrders() {
     }
   };
 
-  useEffect(() => { loadOrders(); }, [search]);
+  useEffect(() => { loadOrders(); }, [search, page, pageSize]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const ownItems = getOwnedItems(order, farmerId);
@@ -118,7 +125,7 @@ export default function FarmerOrders() {
         className="flex flex-wrap gap-1 border-b border-[#DFE8E4]"
       >
         {filters.map((filter) => (
-          <button key={filter} type="button" onClick={() => setActiveFilter(filter)} className={`rounded-t-md px-3 py-2 text-[11px] font-medium ${activeFilter === filter ? "border-b-2 border-[#07814E] bg-white text-[#087449]" : "text-[#778680] hover:bg-white/70"}`}>
+          <button key={filter} type="button" onClick={() => { setActiveFilter(filter); setPage(1); }} className={`rounded-t-md px-3 py-2 text-[11px] font-medium ${activeFilter === filter ? "border-b-2 border-[#07814E] bg-white text-[#087449]" : "text-[#778680] hover:bg-white/70"}`}>
             {filter}
           </button>
         ))}
@@ -131,9 +138,9 @@ export default function FarmerOrders() {
         className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F0] p-3">
-          <SearchBar value={search} onChange={(val) => setSearch(val)} placeholder="Search orders by ID, customer, product, or status" ariaLabel="Search orders" />
-          <label className="flex items-center gap-1 text-[10px] text-[#74827E]">From <input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
-          <label className="flex items-center gap-1 text-[10px] text-[#74827E]">To <input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
+          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by ID, customer, product, or status" ariaLabel="Search orders" />
+          <label className="flex items-center gap-1 text-[10px] text-[#74827E]">From <input aria-label="From date" type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
+          <label className="flex items-center gap-1 text-[10px] text-[#74827E]">To <input aria-label="To date" type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
         </div>
 
         {error ? (
@@ -233,7 +240,7 @@ export default function FarmerOrders() {
             </table>
           </div>
         )}
-        {!error && !loading && <div className="border-t border-[#EDF1F0] px-3 py-2 text-[10px] text-[#788782]">Showing {visibleOrders.length} orders</div>}
+        {!error && !loading && <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />}
       </motion.div>
     </section>
   );

@@ -62,12 +62,12 @@ export default function Checkout() {
     setAddressError(null);
     try {
       const { data } = await addressApi.list();
-      const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
       setAddresses(list);
-      setSelectedAddressId((current) => current || list[0]?._id || "");
+      setSelectedAddressId((current) => current || list.find((a) => a.isDefault)?._id || list[0]?._id || "");
       if (!list.length) setAddressFormOpen(true);
     } catch (requestError) {
-      setAddressError(requestError?.message || "Couldn't load your saved addresses.");
+      setAddressError(requestError?.response?.data?.message || requestError?.message || "Couldn't load your saved addresses.");
     } finally {
       setAddressLoading(false);
     }
@@ -94,23 +94,24 @@ const validateAddress = (addr) => {
   return errors;
 };
 
-const saveNewAddress = async (event) => {
-  event.preventDefault();
-  const errors = validateAddress(addressForm);
-  setAddressErrors(errors);
-  if (Object.keys(errors).length) return;
-  setSavingAddress(true);
+  const saveNewAddress = async (event) => {
+    event.preventDefault();
+    const errors = validateAddress(addressForm);
+    setAddressErrors(errors);
+    if (Object.keys(errors).length) return;
+    setSavingAddress(true);
     setAddressError(null);
     try {
       const { data } = await addressApi.create(addressForm);
-      const saved = data;
-      setAddresses((current) => [saved, ...current]);
-      setSelectedAddressId(saved._id);
+      const saved = data && data._id ? data : null;
+      await loadAddresses();
+      if (saved?._id) setSelectedAddressId(saved._id);
       setAddressFormOpen(false);
       setAddressForm(blankAddress);
+      setAddressErrors({});
       toast.success("Delivery address saved.");
     } catch (requestError) {
-      setError(requestError?.message || "Couldn't save this address.");
+      setAddressError(requestError?.response?.data?.message || requestError?.message || "Couldn't save this address.");
     } finally {
       setSavingAddress(false);
     }

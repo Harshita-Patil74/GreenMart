@@ -1,13 +1,23 @@
 const express = require("express");
 const router = express.Router();
 const c = require("../controllers/newsletterController");
+const sc = require("../controllers/newsletterSubscriptionController");
 const { auth } = require("../middleware/auth");
 const { role } = require("../middleware/role");
+const { uploadProduct } = require("../middleware/upload");
 
 // Customer newsletter preferences & subscription (authenticated customers only)
 router.get("/preferences", auth, role("customer"), c.preferences);
 router.post("/preferences/subscribe", auth, role("customer"), c.customerSubscribe);
 router.post("/preferences/unsubscribe", auth, role("customer"), c.customerUnsubscribe);
+
+// Customer paid subscription (authenticated customers only)
+router.get("/subscription/plan", sc.getPlan);
+router.get("/subscription/me", auth, role("customer"), sc.getMySubscription);
+router.post("/subscription/checkout", auth, role("customer"), sc.createCheckout);
+router.post("/subscription/confirm-payment", auth, role("customer"), sc.confirmPayment);
+router.post("/subscription/cancel", auth, role("customer"), sc.cancelSubscription);
+router.get("/subscription/payments", auth, role("customer"), sc.getMyPayments);
 
 // Customer newsletter inbox (authenticated customers only)
 router.get("/customer/newsletters", auth, role("customer"), c.customerNewsletters);
@@ -15,6 +25,12 @@ router.get("/customer/newsletters/:id", auth, role("customer"), c.customerNewsle
 router.patch("/customer/newsletters/:id/read", auth, role("customer"), c.markNewsletterRead);
 router.get("/customer/offers", auth, role("customer"), c.customerExclusiveOffers);
 
+// Admin subscription management
+router.get("/admin/subscriptions", auth, role("admin"), sc.listSubscriptions);
+router.get("/admin/subscriptions/stats", auth, role("admin"), sc.subscriptionStats);
+router.get("/admin/payments", auth, role("admin"), sc.listPayments);
+
+// Admin newsletter management
 router.get("/admin/subscribers", auth, role("admin"), c.list);
 router.get("/admin/stats", auth, role("admin"), c.stats);
 router.get("/admin/products", auth, role("admin"), c.products);
@@ -32,6 +48,6 @@ router.post("/admin/campaigns/:id/send", auth, role("admin"), c.sendCampaign);
 router.post("/admin/campaigns/:id/cancel", auth, role("admin"), c.cancelCampaign);
 router.get("/admin/campaigns/:id/recipients", auth, role("admin"), c.recipients);
 
-router.get("/", auth, role("admin"), c.list);
+router.post("/admin/newsletter-banner/upload", auth, role("admin"), uploadProduct.single("banner"), c.uploadBanner);
 
 module.exports = router;

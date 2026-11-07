@@ -320,6 +320,6 @@ describe("Home page newsletter", () => {
 
   it("prompts guests to sign in for newsletter preferences", () => {
     renderWithStore(<Home />);
-    expect(screen.getByText(/Sign in to manage your newsletter preferences/i)).toBeInTheDocument();
+    expect(screen.getByText(/Subscribe for ₹199\/month to unlock exclusive subscriber benefits/i)).toBeInTheDocument();
   });
 });

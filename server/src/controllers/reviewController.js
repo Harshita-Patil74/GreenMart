@@ -16,8 +16,15 @@ exports.eligibility = asyncHandler(async (req,res) => {
   res.json({ eligible: true });
 });
 exports.list = asyncHandler(async (req,res) => {
-  const reviews = await Review.find({ product: req.params.id }).populate("user","name avatar");
-  res.json(reviews);
+  const { page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
+  const skip = (pageNum - 1) * limitNum;
+  const [reviews, total] = await Promise.all([
+    Review.find({ product: req.params.id }).populate("user","name avatar").sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+    Review.countDocuments({ product: req.params.id }),
+  ]);
+  res.json({ items: reviews, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
 });
 exports.create = asyncHandler(async (req,res) => {
   const Order = require("../models/Order");

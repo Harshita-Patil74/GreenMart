@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import notificationApi from "../../api/notificationApi";
 import BackButton from "../../components/common/BackButton.jsx";
-import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction, markRead as markReadAction } from "../../features/notifications/notificationsSlice.js";
+import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction, markRead as markReadAction, removeNotification as removeNotificationAction } from "../../features/notifications/notificationsSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import {
   getNotificationIcon, getNotificationStyle, CUSTOMER_CATEGORIES, CATEGORY_LABELS, CATEGORY_ICONS,
@@ -35,6 +35,16 @@ export default function Notifications() {
       dispatch(fetchUnreadCount());
     } catch (e) {
       // handled by toast in component if needed
+    }
+  };
+
+  const remove = async (id) => {
+    try {
+      await notificationApi.remove(id);
+      dispatch(removeNotificationAction(id));
+      dispatch(fetchUnreadCount());
+    } catch (e) {
+      // handled by toast
     }
   };
 
@@ -161,6 +171,16 @@ export default function Notifications() {
                     </div>
                     {!notification.isRead && (
                       <button type="button" aria-label={`Mark ${notification.title || "notification"} as read`} onClick={(e) => { e.stopPropagation(); markRead(notification._id); }} className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#0A9A60] ring-2 ring-[#DDF3E9] hover:ring-4" />
+                    )}
+                    {notification.category === "newsletter" && (
+                      <>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); goToNotification(notification); markRead(notification._id); }} className="h-7 min-w-[fit-content] items-center gap-1 rounded-md border border-[#C9DCD4] bg-white px-2 text-[10px] text-[#087449] hover:bg-[#F3FAF5]">
+                          View Newsletter
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); remove(notification._id); }} className="h-7 min-w-[fit-content] items-center gap-1 rounded-md border border-[#E5E8E6] bg-white px-2 text-[10px] text-[#64716B] hover:border-red-200 hover:text-red-700">
+                          Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </motion.li>

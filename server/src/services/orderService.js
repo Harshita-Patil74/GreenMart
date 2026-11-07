@@ -5,6 +5,7 @@ const generateOrderNumber = require("../utils/generateOrderNumber");
 const { generateInvoiceNumber } = require("../utils/invoiceNumbers");
 const { STATUS_FLOW, FARMER_TRANSITIONS } = require("../constants/orderStatus");
 const { getActiveOffers, calculateOffer, money } = require("./offerService");
+const { isPremiumCustomer } = require("./premiumService");
 
 const DELIVERY_FAILED = "Delivery Failed";
 
@@ -36,8 +37,9 @@ async function createOrder(userId, { address, coordinates, paymentMethod, paymen
   const activeOffers = await getActiveOffers(cart.items.map((item) => item.product._id), placedAt);
   const cartSubtotal = cart.items.reduce((sum, item) =>
     sum + Number(item.product.price) * Number(item.quantity), 0);
+  const premium = await isPremiumCustomer(userId);
   const items = cart.items.map((it) => {
-    const appliedOffer = calculateOffer(it.product, it.quantity, activeOffers, cartSubtotal);
+    const appliedOffer = calculateOffer(it.product, it.quantity, activeOffers, cartSubtotal, premium);
     return {
       product: it.product._id,
       name: it.product.name,
@@ -54,8 +56,10 @@ async function createOrder(userId, { address, coordinates, paymentMethod, paymen
           discountValue: appliedOffer.offer.discountValue,
           originalUnitPrice: Number(it.product.price),
           appliedDiscount: appliedOffer.discount,
+          premiumDiscount: appliedOffer.premiumDiscount,
           finalUnitPrice: appliedOffer.finalUnitPrice,
           finalLineTotal: appliedOffer.finalLineTotal,
+          isPremium: premium,
         },
       } : {}),
       fulfillmentStatus: "Order Placed",
@@ -200,4 +204,32 @@ async function updateFarmerStatus(orderId, farmerId, status, reason = "") {
   throw error;
 }
 
-module.exports = { createOrder, updateStatus, updateFarmerStatus, getItemStatus };
+async function updateCustomerStatus(orderId, userId, status) {
+  if (status !== "Cancelled") {
+    const error = new Error("Customers can only cancel orders.");
+    error.status = 403;
+    throw error;
+  }
+  const order = await Order.findById(orderId);
+  if (!order) return null;
+  if (String(order.user) !== String(userId)) {
+    const error = new Error("You are not authorized to update this order.");
+    error.status = 403;
+    throw error;
+  }
+  if (["Delivered", "Cancelled", "Delivery Failed"].includes(order.status)) {
+    const error = new Error(`Cannot cancel an order that is ${order.status}.`);
+    error.status = 409;
+    throw error;
+  }
+  order.status = "Cancelled";
+  order.statusHistory.push({ status: "Cancelled", at: new Date() });
+  for (const item of order.items) {
+    item.fulfillmentStatus = "Cancelled";
+    item.fulfillmentHistory.push({ status: "Cancelled", at: new Date() });
+  }
+  await order.save();
+  return order;
+}
+
+module.exports = { createOrder, updateStatus, updateFarmerStatus, updateCustomerStatus, getItemStatus };

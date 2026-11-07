@@ -38,6 +38,11 @@ const TYPE_CATEGORY_MAP = {
   profileUpdated: "account",
   supportRequestSubmitted: "support",
   paymentSuccess: "payments",
+  newsletter_campaign: "newsletter",
+  newsletter_unsubscribed_admin: "newsletter",
+  newsletter_subscription_payment_success: "subscription_payments",
+  newsletter_subscription_payment_failed: "subscription_payments",
+  newsletter_subscription_expired: "subscription_payments",
 };
 
 exports.list = asyncHandler(async (req, res) => {

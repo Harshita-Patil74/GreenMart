@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "../../animations/variants.js";
 import Logo from "../common/Logo.jsx";
 import categoryApi from "../../api/categoryApi.js";
+import { useSelector } from "react-redux";
+import newsletterApi from "../../api/newsletterApi";
 
 const linkClass = "inline-flex min-h-6 items-center gap-1 rounded-sm text-[13px] leading-5 text-[#315846] transition-colors hover:text-[#176B3A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#176B3A] focus-visible:ring-offset-2 focus-visible:ring-offset-[#B7D9BC]";
 const categoriesFallbackMessage = "Categories are temporarily unavailable.";
@@ -55,6 +57,22 @@ const linkGroups = [
 export default function Footer() {
   const [categories, setCategories] = useState([]);
   const [categoryError, setCategoryError] = useState("");
+  const { user } = useSelector((state) => state.auth);
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+
+  const loadSubscription = async () => {
+    if (!user?.role === "customer") return;
+    setSubscriptionLoading(true);
+    try {
+      const { data } = await newsletterApi.subscriptionMe();
+      setSubscription(data);
+    } catch (e) {
+      setSubscription(null);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -68,6 +86,10 @@ export default function Footer() {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (user?.role === "customer") loadSubscription();
+  }, [user]);
 
   return (
     <footer className="relative isolate mt-12 overflow-hidden border-t border-[#A5C9AA] bg-[#B7D9BC] text-[#24483A]">
@@ -143,14 +165,31 @@ export default function Footer() {
         </nav>
       </div>
 
-      <div className="border-t border-[#91B998] bg-[#A5CFA9]">
+        <div className="border-t border-[#91B998] bg-[#A5CFA9]">
         <div className="mx-auto flex max-w-[1200px] flex-col gap-2 px-5 py-4 text-xs text-[#315846] sm:flex-row sm:items-center sm:justify-between">
+          {user?.role === "customer" && !subscriptionLoading && (
+            <div className="flex items-center gap-2">
+              {subscription?.subscribed ? (
+                <span className="flex items-center gap-1.5 text-[#176B3A] font-medium text-xs">
+                  <span className="h-2 w-2 rounded-full bg-[#16803C]"></span> GreenMart Premium Active
+                </span>
+              ) : subscription?.status === "expired" ? (
+                <span className="flex items-center gap-1.5 text-[#C2410C] font-medium text-xs">
+                  <span className="h-2 w-2 rounded-full bg-[#C2410C]"></span> Premium Expired
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-[#405E4D] font-medium text-xs">
+                  <span className="h-2 w-2 rounded-full bg-[#9CA3AF]"></span> Not Subscribed
+                </span>
+              )}
+            </div>
+          )}
           <p>© {new Date().getFullYear()} GreenMart. Fresh produce from local farmers.</p>
           <p className="inline-flex items-center gap-1.5 font-medium text-[#176B3A]">
             <Leaf aria-hidden="true" className="h-3.5 w-3.5" /> Go Green <span aria-hidden="true">•</span> Choose Organic
           </p>
         </div>
-      </div>
+        </div>
     </footer>
   );
 }

@@ -8,6 +8,7 @@ const newsletterCampaignSchema = new mongoose.Schema({
   heading: { type: String, trim: true, default: "" },
   content: { type: String, default: "" },
   bannerImage: { type: String, trim: true, default: "" },
+  bannerImageFileId: { type: String, trim: true, default: "" },
   buttonText: { type: String, trim: true, default: "" },
   buttonUrl: { type: String, trim: true, default: "" },
   selectedProducts: [{

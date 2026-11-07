@@ -15,4 +15,6 @@ router.get("/:id", c.get);
 router.post("/", auth, role("farmer","admin"), approvedFarmer, uploadProduct.array("images",6), c.create);
 router.put("/:id", auth, role("farmer","admin"), approvedFarmer, uploadProduct.array("images",6), c.update);
 router.delete("/:id", auth, role("farmer","admin"), approvedFarmer, c.remove);
+router.patch("/:id/restore", auth, role("farmer","admin"), approvedFarmer, c.restore);
+router.patch("/restore-all", auth, role("farmer","admin"), approvedFarmer, c.restoreAll);
 module.exports = router;

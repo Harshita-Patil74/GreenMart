@@ -1,7 +1,9 @@
 const crypto = require("crypto");
 const Newsletter = require("../models/Newsletter");
+const NewsletterSubscription = require("../models/NewsletterSubscription");
 const NewsletterCampaign = require("../models/NewsletterCampaign");
 const NewsletterRecipient = require("../models/NewsletterRecipient");
+const NewsletterPayment = require("../models/NewsletterPayment");
 const Product = require("../models/Product");
 const Offer = require("../models/Offer");
 const User = require("../models/User");
@@ -23,16 +25,6 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
-}
-
-function isValidUrl(value) {
-  if (!value) return true;
-  try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function buildEmail(campaign, unsubscribeUrl) {
@@ -71,6 +63,29 @@ function buildEmail(campaign, unsubscribeUrl) {
 </body></html>`;
   const text = `${campaign.heading || campaign.subject}\n\n${campaign.content}\n\n${campaign.buttonText ? campaign.buttonText + ": " + (campaign.buttonUrl || env.clientUrl) + "\n\n" : ""}Unsubscribe: ${unsubscribeUrl}`;
   return { html, text };
+}
+
+function isValidUrl(value) {
+  if (!value) return true;
+  const trimmed = String(value).trim();
+  if (trimmed.startsWith("/")) return true;
+  try {
+    const u = new URL(trimmed);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function defaultCtaUrl(campaignType) {
+  switch (campaignType) {
+    case "offers": return "/offers";
+    case "new-products": return "/shop";
+    case "fresh-harvest": return "/shop";
+    case "announcements": return "/shop";
+    case "farmer-spotlight": return "/farmers";
+    default: return "";
+  }
 }
 
 exports.preferences = asyncHandler(async (req, res) => {
@@ -233,22 +248,71 @@ exports.createCampaign = asyncHandler(async (req, res) => {
 
 exports.stats = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
-  const [total, active, unsubscribed, campaignsSent, deliveredAgg, failedAgg] = await Promise.all([
-    Newsletter.countDocuments({}),
-    Newsletter.countDocuments({ isActive: true }),
-    Newsletter.countDocuments({ isActive: false }),
-    NewsletterCampaign.countDocuments({ status: "sent" }),
-    NewsletterRecipient.aggregate([{ $group: { _id: null, delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } }, accepted: { $sum: { $cond: [{ $eq: ["$status", "accepted"] }, 1, 0] } } } }]),
-    NewsletterRecipient.countDocuments({ status: "failed" }),
+  const now = new Date();
+
+  // Get all active, paid Premium subscriptions within validity period
+  const paidSubscriptions = await NewsletterSubscription.find({
+    status: "active",
+    endDate: { $gte: now },
+  }).populate("user", "name email role lastPaymentId");
+
+  // Get unique customer IDs with active paid subscriptions and confirmed payments
+  const eligibleCustomerIds = new Set();
+  paidSubscriptions.forEach((s) => {
+    if (s.user && s.user.role === "customer" && s.user.email && s.lastPaymentId) {
+      eligibleCustomerIds.add(String(s.user._id));
+    }
+  });
+
+  const totalPaid = eligibleCustomerIds.size;
+  const activePaid = totalPaid;
+
+  // Count eligible recipients: active paid subscription + active newsletter preference + valid email + customer role
+  let eligibleRecipients = 0;
+  if (eligibleCustomerIds.size > 0) {
+    const eligibleUsers = await User.find({
+      _id: { $in: Array.from(eligibleCustomerIds) },
+      role: "customer",
+    }).select("_id email");
+
+    const eligibleUserEmails = new Set(eligibleUsers.map((u) => String(u.email).toLowerCase()).filter(Boolean));
+
+    const activeNewsletters = await Newsletter.find({
+      email: { $in: Array.from(eligibleUserEmails) },
+      isActive: true,
+    }).select("email");
+
+    const activeNewsletterEmails = new Set(activeNewsletters.map((n) => String(n.email).toLowerCase()));
+
+    eligibleRecipients = [...eligibleUserEmails].filter((email) => activeNewsletterEmails.has(email)).length;
+  }
+
+  const expired = await NewsletterSubscription.countDocuments({ status: "expired" });
+  const cancelled = await NewsletterSubscription.countDocuments({ status: "cancelled" });
+  const pending = await NewsletterSubscription.countDocuments({ status: "pending" });
+  const campaignsSent = await NewsletterCampaign.countDocuments({ status: "sent" });
+  const deliveredAgg = await NewsletterRecipient.aggregate([{ $group: { _id: null, delivered: { $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] } }, accepted: { $sum: { $cond: [{ $eq: ["$status", "accepted"] }, 1, 0] } } } }]);
+  const failedAgg = await NewsletterRecipient.countDocuments({ status: "failed" });
+
+  // Simulated revenue from successful payments
+  const revenueAgg = await NewsletterPayment.aggregate([
+    { $match: { status: "successful" } },
+    { $group: { _id: null, total: { $sum: "$amount" } } },
   ]);
+
   res.json({
-    totalSubscribers: total,
-    activeSubscribers: active,
-    unsubscribed,
+    totalSubscribers: totalPaid,
+    activeSubscribers: activePaid,
+    expired: expired,
+    pending: pending,
+    unsubscribed: cancelled,
     campaignsSent,
+    eligibleRecipients,
     totalEmailsDelivered: (deliveredAgg[0]?.delivered || 0) + (deliveredAgg[0]?.accepted || 0),
     failedEmails: failedAgg,
+    simulatedRevenue: revenueAgg[0]?.total || 0,
     mode: env.newsletterEmailMode,
+    activePaidSubscriptions: activePaid,
   });
 });
 
@@ -283,9 +347,10 @@ exports.getCampaign = asyncHandler(async (req, res) => {
 
 exports.createCampaign = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "admin") return res.status(403).json({ message: "Unauthorized" });
-  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds, audienceType, selectedSubscriberIds } = req.body;
+  const { campaignName, subject, preheader, heading, content, bannerImage, bannerImageUrl, bannerImageFileId, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds, audienceType } = req.body;
   if (!campaignName || !subject) return res.status(400).json({ message: "Campaign name and subject are required" });
-  if (!isValidUrl(bannerImage) || !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid URL" });
+  const resolvedBanner = String(bannerImage || bannerImageUrl || "").trim();
+  if (!isValidUrl(resolvedBanner) || !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid URL" });
 
   const products = selectedProductIds?.length ? await Product.find({ _id: { $in: selectedProductIds }, status: "Active" }) : [];
   if (selectedProductIds?.length && products.length !== selectedProductIds.length) {
@@ -297,13 +362,23 @@ exports.createCampaign = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "One or more selected offers are invalid" });
   }
 
-  let selectedSubscribers = [];
-  if (audienceType === "selected" && Array.isArray(selectedSubscriberIds)) {
-    selectedSubscribers = await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true, subscriberType: "customer" });
-    if (selectedSubscribers.length !== selectedSubscriberIds.length) {
-      return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
-    }
-  }
+  // Premium campaigns are delivered only to customers with an active paid subscription
+  const now = new Date();
+  const activeSubscriptions = await NewsletterSubscription.find({
+    status: "active",
+    endDate: { $gte: now },
+  }).populate("user", "name email role");
+
+  const eligibleCustomerIds = new Set(
+    activeSubscriptions
+      .filter((s) => s.user && s.user.role === "customer" && s.user.email)
+      .map((s) => String(s.user._id))
+  );
+
+  const eligibleCustomers = await User.find({
+    _id: { $in: Array.from(eligibleCustomerIds) },
+    role: "customer",
+  }).select("name email");
 
   const campaign = await NewsletterCampaign.create({
     campaignName: String(campaignName).trim(),
@@ -312,13 +387,14 @@ exports.createCampaign = asyncHandler(async (req, res) => {
     preheader: String(preheader || "").trim(),
     heading: String(heading || "").trim(),
     content: String(content || ""),
-    bannerImage: String(bannerImage || "").trim(),
+    bannerImage: String(bannerImage || bannerImageUrl || "").trim(),
+    bannerImageFileId: String(bannerImageFileId || "").trim(),
     buttonText: String(buttonText || "").trim(),
-    buttonUrl: String(buttonUrl || "").trim(),
+    buttonUrl: String(buttonUrl || "").trim() || defaultCtaUrl(campaignType),
     selectedProducts: products.map((p) => ({ productId: p._id, snapshot: snapshotProduct(p) })),
     selectedOffers: offers.map((o) => ({ offerId: o._id, snapshot: snapshotOffer(o) })),
-    audienceType: audienceType === "selected" ? "selected" : "all",
-    selectedSubscribers: selectedSubscribers.map((s) => s._id),
+    audienceType: "all",
+    selectedSubscribers: eligibleCustomers.map((c) => c._id),
     createdBy: req.user._id,
   });
   res.status(201).json(campaign);
@@ -329,20 +405,24 @@ exports.updateCampaign = asyncHandler(async (req, res) => {
   const campaign = await NewsletterCampaign.findById(req.params.id);
   if (!campaign) return res.status(404).json({ message: "Campaign not found" });
   if (campaign.status !== "draft") return res.status(400).json({ message: "Only drafts can be edited" });
-  const { campaignName, subject, preheader, heading, content, bannerImage, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds, audienceType, selectedSubscriberIds } = req.body;
-  if (bannerImage !== undefined && !isValidUrl(bannerImage)) return res.status(400).json({ message: "Invalid banner URL" });
-  if (buttonUrl !== undefined && !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid button URL" });
+  const { campaignName, subject, preheader, heading, content, bannerImage, bannerImageUrl, bannerImageFileId, buttonText, buttonUrl, campaignType, selectedProductIds, selectedOfferIds } = req.body;
+  if (bannerImage !== undefined || bannerImageUrl !== undefined) {
+    const resolved = String(bannerImage || bannerImageUrl || "").trim();
+    if (resolved && !isValidUrl(resolved)) return res.status(400).json({ message: "Invalid banner URL" });
+  }
+  if (buttonUrl !== undefined && !isValidUrl(buttonUrl)) return res.status(400).json({ message: "Invalid URL" });
   const updates = {};
   if (campaignName !== undefined) updates.campaignName = String(campaignName).trim();
   if (subject !== undefined) updates.subject = String(subject).trim();
   if (preheader !== undefined) updates.preheader = String(preheader).trim();
-  if (heading !== undefined) updates.heading = String(heading).trim();
+  if (heading !== undefined) updates.heading = String(heading || "").trim();
   if (content !== undefined) updates.content = String(content);
-  if (bannerImage !== undefined) updates.bannerImage = String(bannerImage).trim();
-  if (buttonText !== undefined) updates.buttonText = String(buttonText).trim();
-  if (buttonUrl !== undefined) updates.buttonUrl = String(buttonUrl).trim();
+  if (bannerImage !== undefined || bannerImageUrl !== undefined) updates.bannerImage = String(bannerImage || bannerImageUrl || "").trim();
+  if (bannerImageFileId !== undefined) updates.bannerImageFileId = String(bannerImageFileId || "").trim();
+  if (buttonText !== undefined) updates.buttonText = String(buttonText || "").trim();
+  if (buttonUrl !== undefined) updates.buttonUrl = String(buttonUrl || "").trim() || defaultCtaUrl(campaignType || updates.campaignType);
   if (campaignType !== undefined) updates.campaignType = campaignType;
-  if (audienceType !== undefined) updates.audienceType = audienceType === "selected" ? "selected" : "all";
+  updates.audienceType = "all";
 
   if (selectedProductIds !== undefined) {
     const products = selectedProductIds.length ? await Product.find({ _id: { $in: selectedProductIds }, status: "Active" }) : [];
@@ -354,13 +434,26 @@ exports.updateCampaign = asyncHandler(async (req, res) => {
     if (offers.length !== selectedOfferIds.length) return res.status(400).json({ message: "One or more selected offers are invalid" });
     updates.selectedOffers = offers.map((o) => ({ offerId: o._id, snapshot: snapshotOffer(o) }));
   }
-  if (audienceType === "selected" && selectedSubscriberIds !== undefined) {
-    const subs = selectedSubscriberIds.length ? await Newsletter.find({ _id: { $in: selectedSubscriberIds }, isActive: true, subscriberType: "customer" }) : [];
-    if (subs.length !== selectedSubscriberIds.length) return res.status(400).json({ message: "One or more selected subscribers are invalid or unsubscribed" });
-    updates.selectedSubscribers = subs.map((s) => s._id);
-  } else if (audienceType === "all") {
-    updates.selectedSubscribers = [];
-  }
+
+  // Premium campaigns are delivered only to customers with an active paid subscription
+  const now = new Date();
+  const activeSubscriptions = await NewsletterSubscription.find({
+    status: "active",
+    endDate: { $gte: now },
+  }).populate("user", "name email role");
+
+  const eligibleCustomerIds = new Set(
+    activeSubscriptions
+      .filter((s) => s.user && s.user.role === "customer" && s.user.email)
+      .map((s) => String(s.user._id))
+  );
+
+  const eligibleCustomers = await User.find({
+    _id: { $in: Array.from(eligibleCustomerIds) },
+    role: "customer",
+  }).select("name email");
+
+  updates.selectedSubscribers = eligibleCustomers.map((c) => c._id);
 
   const updated = await NewsletterCampaign.findByIdAndUpdate(req.params.id, updates, { new: true });
   res.json(updated);
@@ -377,6 +470,7 @@ exports.duplicateCampaign = asyncHandler(async (req, res) => {
     heading: campaign.heading,
     content: campaign.content,
     bannerImage: campaign.bannerImage,
+    bannerImageFileId: campaign.bannerImageFileId,
     buttonText: campaign.buttonText,
     buttonUrl: campaign.buttonUrl,
     createdBy: req.user._id,
@@ -435,9 +529,26 @@ exports.sendCampaign = asyncHandler(async (req, res) => {
     }
   }
 
-  const subscribers = campaign.audienceType === "selected"
-    ? await Newsletter.find({ _id: { $in: campaign.selectedSubscribers }, isActive: true, subscriberType: "customer" })
-    : await Newsletter.find({ isActive: true, subscriberType: "customer" });
+  // Only customers with an active, successfully paid GreenMart Premium subscription can receive campaigns
+  const now = new Date();
+  const activeSubscriptions = await NewsletterSubscription.find({
+    status: "active",
+    endDate: { $gte: now },
+  }).populate("user", "name email role");
+
+  const eligibleCustomerIds = new Set(
+    activeSubscriptions
+      .filter((s) => s.user && s.user.role === "customer" && s.user.email)
+      .map((s) => String(s.user._id))
+  );
+
+  const eligibleCustomers = await User.find({
+    _id: { $in: Array.from(eligibleCustomerIds) },
+    role: "customer",
+  }).select("name email");
+
+  const subscribers = eligibleCustomers;
+
   campaign.status = "sending";
   campaign.startedAt = new Date();
   campaign.recipientCount = subscribers.length;
@@ -673,6 +784,7 @@ exports.customerNewsletters = asyncHandler(async (req, res) => {
       heading: r.campaignId.heading || r.campaignId.subject,
       content: r.campaignId.content,
       bannerImage: r.campaignId.bannerImage,
+      bannerImageUrl: r.campaignId.bannerImage,
       buttonText: r.campaignId.buttonText,
       buttonUrl: r.campaignId.buttonUrl,
       createdAt: r.campaignId.createdAt,
@@ -724,6 +836,7 @@ exports.customerNewsletterDetail = asyncHandler(async (req, res) => {
     heading: recipient.campaignId.heading || recipient.campaignId.subject,
     content: recipient.campaignId.content,
     bannerImage: recipient.campaignId.bannerImage,
+    bannerImageUrl: recipient.campaignId.bannerImage,
     buttonText: recipient.campaignId.buttonText,
     buttonUrl: recipient.campaignId.buttonUrl,
     createdAt: recipient.campaignId.createdAt,
@@ -751,17 +864,30 @@ exports.markNewsletterRead = asyncHandler(async (req, res) => {
 exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
   const email = String(req.user.email || "").trim().toLowerCase();
-  const sub = await Newsletter.findOne({ email });
-  if (!sub || !sub.isActive) {
-    return res.json({ items: [], subscribed: false, message: "Not subscribed" });
-  }
+
+  // Require an active paid premium subscription (not just free newsletter signup).
+  const subscription = await NewsletterSubscription.findOne({ user: req.user._id }).sort({ createdAt: -1 });
   const now = new Date();
-  const nowMs = now.getTime();
+  const user = await User.findById(req.user._id).select("status email");
+  let newsletter = null;
+  if (user?.email) newsletter = await Newsletter.findOne({ email: String(user.email).toLowerCase() });
+  const hasActivePaidSubscription = Boolean(
+    subscription &&
+    subscription.status === "active" &&
+    subscription.endDate &&
+    now <= subscription.endDate &&
+    (!user?.status || user.status === "active") &&
+    newsletter && newsletter.isActive
+  );
+
+  if (!hasActivePaidSubscription) {
+    return res.json({ items: [], subscribed: false, message: "Active premium subscription required." });
+  }
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
-    isSubscriberExclusive: true,
     endDate: { $gte: now },
+    $or: [{ isSubscriberExclusive: true }, { exclusiveDiscountValue: { $gt: 0 } }],
   })
     .populate("farmer", "name")
     .populate({
@@ -801,12 +927,32 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
     const perUnitDiscount = offer.discountType === "Percentage"
       ? originalPrice * Number(offer.discountValue) / 100
       : Number(offer.discountValue);
-    const discount = money(Math.min(
+    const publicDiscount = money(Math.min(
       originalPrice * quantity,
       perUnitDiscount * quantity,
       offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
     ));
-    if (!Number.isFinite(originalPrice) || originalPrice <= 0 || !Number.isFinite(discount) || discount <= 0) continue;
+    const publicPrice = money((originalPrice * quantity - publicDiscount) / quantity);
+
+    let exclusivePrice = null;
+    let exclusiveDiscountAmount = null;
+    let additionalSavings = null;
+    if (offer.exclusiveDiscountType && Number.isFinite(offer.exclusiveDiscountValue) && offer.exclusiveDiscountValue > 0) {
+      const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
+        ? publicPrice * Number(offer.exclusiveDiscountValue) / 100
+        : Number(offer.exclusiveDiscountValue);
+      const exclusiveDiscount = money(Math.min(
+        publicPrice * quantity,
+        exclusivePerUnit * quantity,
+        offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
+      ));
+      if (exclusiveDiscount != null && exclusiveDiscount > 0) {
+        exclusivePrice = money(publicPrice - exclusiveDiscount / quantity);
+        if (!Number.isFinite(exclusivePrice) || exclusivePrice < 0) exclusivePrice = 0;
+        exclusiveDiscountAmount = money(exclusiveDiscount / quantity);
+        additionalSavings = publicPrice != null ? money(publicPrice - exclusivePrice) : null;
+      }
+    }
 
     items.push({
       _id: offer._id,
@@ -817,9 +963,17 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
       discountValue: offer.discountValue,
       minimumQuantity: offer.minimumQuantity,
       originalPrice,
-      offerPrice: money((originalPrice * quantity - discount) / quantity),
-      discountAmount: money(discount / quantity),
-      discountPercent: Math.round((discount / (originalPrice * quantity)) * 100),
+      publicPrice,
+      offerPrice: exclusivePrice || publicPrice,
+      publicDiscountAmount: money(publicDiscount / quantity),
+      publicDiscountPercent: Math.round((publicDiscount / (originalPrice * quantity)) * 100),
+      exclusiveDiscountType: offer.exclusiveDiscountType || null,
+      exclusiveDiscountValue: offer.exclusiveDiscountValue || null,
+      exclusivePrice,
+      exclusiveDiscountAmount,
+      additionalSavings,
+      discountAmount: money(exclusiveDiscountAmount != null ? exclusiveDiscountAmount : publicDiscount / quantity),
+      discountPercent: Math.round((exclusiveDiscountAmount != null ? exclusiveDiscountAmount : publicDiscount) / (originalPrice * quantity) * 100),
       startDate: offer.startDate,
       endDate: offer.endDate,
       startAt: offer.startAt,
@@ -933,6 +1087,17 @@ exports.customerUnsubscribe = asyncHandler(async (req, res) => {
     } catch (e) { /* ignore */ }
   }
   res.json({ message: "You have successfully unsubscribed from GreenMart updates.", isSubscribed: false });
+});
+
+exports.uploadBanner = asyncHandler(async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No image file provided." });
+  const { uploadNewsletterBanner } = require("../services/imagekitUpload");
+  try {
+    const { url, fileId } = await uploadNewsletterBanner(req.file.path, req.file.originalname);
+    res.json({ url, fileId });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message || "Image upload failed." });
+  }
 });
 
 module.exports = exports;

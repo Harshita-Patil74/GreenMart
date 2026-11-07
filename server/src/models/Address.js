@@ -1,9 +1,14 @@
 const mongoose = require("mongoose");
 module.exports = mongoose.model("Address", new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  name: String, line1: String, city: String, phone: String,
+  name: { type: String, required: true, trim: true },
+  line1: { type: String, required: true, trim: true },
+  city: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
   coordinates: { lat: Number, lng: Number },
-  isDemo: { type: Boolean, default: false } }, { timestamps: true }));
+  isDefault: { type: Boolean, default: false },
+  isDemo: { type: Boolean, default: false }
+}, { timestamps: true }));
 
 
 

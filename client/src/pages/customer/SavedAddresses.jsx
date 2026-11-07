@@ -23,7 +23,7 @@ export default function SavedAddresses({ embedded = false }) {
     setError(null);
     try {
       const { data } = await addressApi.list();
-      setAddresses(Array.isArray(data) ? data : []);
+      setAddresses(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
     } catch (requestError) {
       setError(requestError?.message || "Couldn't load saved addresses.");
     } finally {

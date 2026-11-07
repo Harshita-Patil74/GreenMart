@@ -55,7 +55,7 @@ describe("Admin Notifications", () => {
     expect(categoryNav).toHaveClass("overflow-x-auto");
     const categoryButtons = within(categoryNav).getAllByRole("button");
     expect(categoryButtons.map((button) => button.textContent.replace(/\d+/g, "").trim())).toEqual([
-      "All", "Orders", "Farmers", "Products", "Inventory", "Offers", "Support", "Reviews", "Security",
+      "All", "Orders", "Farmers", "Products", "Inventory", "Offers", "Support", "Reviews", "Security", "Subscription Payments",
     ]);
     expect(categoryButtons[5]).toHaveTextContent("Offers");
     expect(categoryButtons[5]).toHaveTextContent("1");

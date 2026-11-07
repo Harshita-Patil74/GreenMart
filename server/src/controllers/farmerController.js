@@ -7,10 +7,20 @@ const { haversine } = require("../utils/haversine");
 const { createNotification } = require("../services/notificationService");
 
 exports.list = asyncHandler(async (req,res) => {
-  const profiles = await FarmerProfile.find()
-    .select("user farmName category description address photo")
-    .populate("user", "_id avatar");
-  res.json(profiles);
+  const { page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
+  const skip = (pageNum - 1) * limitNum;
+  const [profiles, total] = await Promise.all([
+    FarmerProfile.find()
+      .select("user farmName category description address photo")
+      .populate("user", "_id avatar")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+    FarmerProfile.countDocuments(),
+  ]);
+  res.json({ items: profiles, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
 });
 exports.get = asyncHandler(async (req,res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ message: "Farmer not found" });

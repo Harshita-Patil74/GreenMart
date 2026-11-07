@@ -87,7 +87,7 @@ describe("Admin offers management", () => {
     expect(await screen.findByText("Fig harvest offer")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Organic Fig" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Green Valley Farm" })).toBeInTheDocument();
-    expect(screen.getByText(/90/)).toBeInTheDocument();
+    expect(screen.getAllByText(/₹90\.00/).length).toBeGreaterThan(0);
     expect(screen.getByRole("cell", { name: "Pending" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Organic Fig product" })).toHaveAttribute("src", expect.stringContaining("/uploads/products/fig.jpg"));
     const approveButton = screen.getByRole("button", { name: "Approve" });
@@ -312,8 +312,8 @@ describe("Admin offers management", () => {
 
     expect(screen.getByText(/server will re-check farmer, product, stock, dates and discount eligibility/i)).toBeInTheDocument();
     expect(screen.getAllByText("Green Valley Farm").length).toBeGreaterThan(1);
-    expect(screen.getAllByText(/10%/).length).toBeGreaterThan(1);
-    expect(screen.getAllByText("Discount").length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/Public Price/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Subscriber Price/).length).toBeGreaterThan(0);
     expect(adminOffersApi.approve).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Confirm Approval" }));
 

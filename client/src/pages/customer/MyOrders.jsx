@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { formatCurrency } from "../../utils/constants.js";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
+import Pagination from "../../components/common/Pagination.jsx";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
 import toast from "react-hot-toast";
 import { Search, X, Download, ArrowRight } from "lucide-react";
@@ -28,6 +29,9 @@ export default function MyOrders() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [downloading, setDownloading] = useState({});
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   const downloadInvoice = async (order) => {
     const id = order._id || order.orderNumber;
@@ -74,14 +78,15 @@ export default function MyOrders() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await orderApi.mine({ search });
-      setOrders(Array.isArray(data) ? data : []);
+      const { data } = await orderApi.mine({ page, limit: pageSize, search, status, fromDate, toDate });
+      setOrders(Array.isArray(data?.items) ? data.items : data);
+      setTotal(data?.total || 0);
     } catch (requestError) {
       setError(requestError?.message || "Couldn't load your orders.");
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, status, fromDate, toDate, page, pageSize]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
   useEffect(() => subscribeOrderStatus((updated) => {
@@ -226,6 +231,9 @@ export default function MyOrders() {
           </table>
         </div>
       </motion.section>
+      {!loading && total > 0 && (
+        <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(p, ps) => { setPage(p); if (ps) setPageSize(ps); }} />
+      )}
     </div>
   );
 }

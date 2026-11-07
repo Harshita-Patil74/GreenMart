@@ -27,6 +27,7 @@ router.get("/stats", auth, role("admin"), c.stats);
 router.get("/users", auth, role("admin"), c.users);
 router.get("/low-stock", auth, role("admin"), c.lowStock);
 router.get("/sales", auth, role("admin"), c.sales);
+router.get("/analytics", auth, role("admin"), c.analytics);
 router.get("/categories-share", auth, role("admin"), c.categoriesShare);
 router.get("/reports", auth, role("admin"), c.reports);
 router.get("/reports/pdf", auth, role("admin"), c.reportPdf);

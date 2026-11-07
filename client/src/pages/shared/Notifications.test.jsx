@@ -66,7 +66,7 @@ describe("Customer Notification Centre", () => {
     await screen.findByText("Order placed successfully");
     const nav = screen.getByRole("navigation", { name: "Notification categories" });
     const labels = within(nav).getAllByRole("button").map((b) => b.textContent.replace(/\d+/g, "").trim());
-    expect(labels).toEqual(["All", "Orders", "Offers", "Payments", "Wishlist", "Messages", "Support", "Account"]);
+    expect(labels).toEqual(["All", "Orders", "Offers", "Payments", "Wishlist", "Messages", "Support", "Account", "My Newsletter"]);
   });
 
   it("orders filter displays only order notifications", async () => {

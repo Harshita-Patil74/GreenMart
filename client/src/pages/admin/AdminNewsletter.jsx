@@ -1,7 +1,10 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { motion } from "framer-motion";
 import BackButton from "../../components/common/BackButton.jsx";
 import newsletterApi from "../../api/newsletterApi";
 import toast from "react-hot-toast";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { sectionReveal } from "../../animations/variants.js";
 
 const TYPES = [
   { value: "offers", label: "Offers & Discounts" },
@@ -17,64 +20,78 @@ const PAGE_SIZE = 10;
 const card = "rounded-[12px] border border-[#E2E6DF] bg-white shadow-[0_1px_3px_rgba(38,53,43,0.06)]";
 
 export default function AdminNewsletter() {
-  const [stats, setStats] = useState(null);
-  const [subscribers, setSubscribers] = useState([]);
-  const [subscribersLoading, setSubscribersLoading] = useState(true);
-  const [subscribersError, setSubscribersError] = useState(null);
-  const [campaigns, setCampaigns] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [offers, setOffers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+const [stats, setStats] = useState(null);
+const [campaigns, setCampaigns] = useState([]);
+const [products, setProducts] = useState([]);
+const [offers, setOffers] = useState([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState(null);
 
   const [form, setForm] = useState({
-    campaignName: "", subject: "", preheader: "", heading: "", content: "", bannerImage: "", buttonText: "Shop Now", buttonUrl: "",
-    campaignType: "custom", audienceType: "all",
+    campaignName: "", subject: "", preheader: "", heading: "", content: "", bannerImage: "", bannerImageFileId: "", buttonText: "Shop Now", buttonUrl: "",
+    campaignType: "custom",
   });
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [selectedOfferIds, setSelectedOfferIds] = useState([]);
-  const [selectedSubscriberIds, setSelectedSubscriberIds] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [productCategory, setProductCategory] = useState("");
   const [offerSearch, setOfferSearch] = useState("");
-  const [subscriberSearch, setSubscriberSearch] = useState("");
-  const [subscriberFilter, setSubscriberFilter] = useState("all");
-  const [subscriberTypeFilter, setSubscriberTypeFilter] = useState("all");
-  const [subscriberPage, setSubscriberPage] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [bannerUploading, setBannerUploading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingCampaignId, setPendingCampaignId] = useState(null);
   const [viewCampaign, setViewCampaign] = useState(null);
   const [viewRecipients, setViewRecipients] = useState([]);
   const [previewMode, setPreviewMode] = useState("desktop");
 
-  const load = async () => {
+  // Paid subscription management state
+const [subscriptionStats, setSubscriptionStats] = useState(null);
+const [subscriptions, setSubscriptions] = useState([]);
+const [subscriptionsLoading, setSubscriptionsLoading] = useState(true);
+const [subscriptionsError, setSubscriptionsError] = useState(null);
+const [subSearch, setSubSearch] = useState("");
+const [subStatusFilter, setSubStatusFilter] = useState("all");
+const [subPage, setSubPage] = useState(1);
+
+const loadSubscriptionStats = async () => {
+  setSubscriptionsLoading(true);
+  setSubscriptionsError(null);
+  try {
+    const [statsRes, subsRes] = await Promise.all([
+      newsletterApi.adminSubscriptionStats(),
+      newsletterApi.adminSubscriptions({ page: subPage, limit: 10, search: subSearch, status: subStatusFilter }),
+    ]);
+    setSubscriptionStats(statsRes.data);
+    setSubscriptions(Array.isArray(subsRes.data?.items) ? subsRes.data.items : []);
+  } catch (e) {
+    setSubscriptionsError(e?.message || "Couldn't load subscription data.");
+    setSubscriptions([]);
+  } finally {
+    setSubscriptionsLoading(false);
+  }
+};
+
+const load = async () => {
     setLoading(true);
     setError(null);
-    setSubscribersLoading(true);
-    setSubscribersError(null);
     try {
-      const [s, subs, camps, prods, offs] = await Promise.all([
+      const [s, camps, prods, offs] = await Promise.all([
         newsletterApi.stats(),
-        newsletterApi.subscribers(),
         newsletterApi.campaigns(),
         newsletterApi.products(),
         newsletterApi.offers(),
       ]);
       setStats(s.data);
-      setSubscribers(Array.isArray(subs.data?.items) ? subs.data.items : Array.isArray(subs.data) ? subs.data : []);
       setCampaigns(Array.isArray(camps.data) ? camps.data : []);
       setProducts(Array.isArray(prods.data) ? prods.data : []);
       setOffers(Array.isArray(offs.data) ? offs.data : []);
     } catch (e) {
       setError(e?.message || "Couldn't load newsletter data.");
-      setSubscribersError(e?.message || "Couldn't load subscribers.");
     } finally {
       setLoading(false);
-      setSubscribersLoading(false);
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadSubscriptionStats(); }, []);
 
   const categories = useMemo(() => [...new Set(products.map((p) => p.category).filter(Boolean))], [products]);
 
@@ -89,22 +106,6 @@ export default function AdminNewsletter() {
   const filteredOffers = useMemo(() => {
     return offers.filter((o) => !offerSearch || (o.title || "").toLowerCase().includes(offerSearch.toLowerCase()));
   }, [offers, offerSearch]);
-
-  const filteredSubscribers = useMemo(() => {
-    return subscribers.filter((s) => {
-      const matchesSearch = !subscriberSearch || s.email.toLowerCase().includes(subscriberSearch.toLowerCase());
-      const matchesStatus = subscriberFilter === "all" || (subscriberFilter === "active" ? s.isActive : !s.isActive);
-      const matchesType = subscriberTypeFilter === "all" || s.subscriberType === subscriberTypeFilter;
-      return matchesSearch && matchesStatus && matchesType;
-    });
-  }, [subscribers, subscriberSearch, subscriberFilter, subscriberTypeFilter]);
-
-  const pagedSubscribers = useMemo(() => {
-    const start = (subscriberPage - 1) * PAGE_SIZE;
-    return filteredSubscribers.slice(start, start + PAGE_SIZE);
-  }, [filteredSubscribers, subscriberPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredSubscribers.length / PAGE_SIZE));
 
   const selectedProducts = useMemo(() => products.filter((p) => selectedProductIds.includes(p._id)), [products, selectedProductIds]);
   const selectedOffers = useMemo(() => offers.filter((o) => selectedOfferIds.includes(o._id)), [offers, selectedOfferIds]);
@@ -155,17 +156,17 @@ export default function AdminNewsletter() {
   const statusBadge = (status) => {
     switch (status) {
       case "draft": return { label: "Draft", color: "bg-gray-100 text-gray-600 border border-gray-200" };
-      case "sending": return { label: "Processing", color: "bg-[#F0F5EE] text-[#477A4E] border border-[#477A4E]/30" };
-      case "sent": return { label: "Processed (Mock)", color: "bg-[#EAF2E7] text-[#14532D] border border-[#E2E6DF]" };
+      case "sending": return { label: "Processing", color: "bg-[#DBEAFE] text-[#1D4ED8] border border-[#BFDBFE]/40" };
+      case "sent": return { label: "Processed", color: "bg-[#EAF2E7] text-[#14532D] border border-[#E2E6DF]" };
       case "failed": return { label: "Failed", color: "bg-[#FBEDE5] text-[#9A3412] border border-[#FBEDE5]" };
-      case "cancelled": return { label: "Cancelled", color: "bg-gray-100 text-gray-600 border border-gray-200" };
+      case "cancelled": return { label: "Cancelled", color: "bg-[#FBEDE5] text-[#9A3412] border border-[#FBEDE5]" };
+      case "pending": return { label: "Pending", color: "bg-[#FDF3E3] text-[#9A4E00] border border-[#FDE6A7]" };
       default: return { label: status, color: "bg-gray-100 text-gray-600 border border-gray-200" };
     }
   };
 
   const toggleProduct = (id) => setSelectedProductIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleOffer = (id) => setSelectedOfferIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  const toggleSubscriber = (id) => setSelectedSubscriberIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const createCampaign = async (e) => {
     e.preventDefault();
@@ -177,12 +178,10 @@ export default function AdminNewsletter() {
         campaignType: form.campaignType,
         selectedProductIds,
         selectedOfferIds,
-        audienceType: form.audienceType,
-        selectedSubscriberIds: form.audienceType === "selected" ? selectedSubscriberIds : [],
       });
       toast.success("Campaign saved as draft.");
-      setForm({ campaignName: "", subject: "", preheader: "", heading: "", content: "", bannerImage: "", buttonText: "Shop Now", buttonUrl: "", campaignType: "custom", audienceType: "all" });
-      setSelectedProductIds([]); setSelectedOfferIds([]); setSelectedSubscriberIds([]);
+      setForm({ campaignName: "", subject: "", preheader: "", heading: "", content: "", bannerImage: "", bannerImageFileId: "", buttonText: "Shop Now", buttonUrl: "", campaignType: "custom" });
+      setSelectedProductIds([]); setSelectedOfferIds([]);
       await load();
     } catch (e) {
       setError(e?.message || "Couldn't create campaign.");
@@ -263,21 +262,24 @@ export default function AdminNewsletter() {
 
       {error && <p role="alert" className="rounded-[8px] bg-[#FBEDE5] px-3 py-2 text-xs text-[#9A3412]">{error}</p>}
 
-      {stats && (
+        {stats && (
         <div className="grid gap-3 sm:grid-cols-4">
-          {[
-            ["Total Subscribers", stats.totalSubscribers],
-            ["Active Subscribers", stats.activeSubscribers],
-            ["Unsubscribed", stats.unsubscribed],
-            ["Campaigns Processed (Mock)", stats.campaignsSent],
-          ].map(([label, value]) => (
-            <div key={label} className={`${card} p-4`}>
-              <p className="text-[10px] font-semibold text-[#68756B]">{label}</p>
-              <p className="mt-1 text-xl font-bold text-[#245C3A]">{value ?? "—"}</p>
-            </div>
-          ))}
+            {[
+                ["Total Premium Subscribers", stats.totalSubscribers],
+                ["Active Paid Members", stats.activeSubscribers],
+                ["Eligible Recipients", stats.eligibleRecipients],
+                ["Cancelled Subscriptions", stats.unsubscribed],
+                ["Expired Subscriptions", stats.expired],
+                ["Pending Subscriptions", stats.pending],
+                ["Campaigns Processed", stats.campaignsSent],
+            ].map(([label, value]) => (
+                <div key={label} className={`${card} p-4`}>
+                <p className="text-[10px] font-semibold text-[#68756B]">{label}</p>
+                <p className="mt-1 text-xl font-bold text-[#245C3A]">{value ?? 0}</p>
+                </div>
+            ))}
         </div>
-      )}
+        )}
 
       <section id="campaign-builder" className="grid gap-4 lg:grid-cols-2">
         <div className={`${card} p-4`}>
@@ -308,10 +310,35 @@ export default function AdminNewsletter() {
                 <label className="block text-xs font-semibold text-[#26352B] mb-1.5">Newsletter Heading</label>
                 <input placeholder="Heading" value={form.heading} onChange={(e) => setForm({ ...form, heading: e.target.value })} className="w-full h-11 px-3.5 text-sm bg-[#FAF8F1] border border-[#E2E6DF] rounded-[8px] focus:outline-none focus:border-[#245C3A] focus:bg-white" />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-[#26352B] mb-1.5">Banner Image URL</label>
-                <input placeholder="Banner image URL" value={form.bannerImage} onChange={(e) => setForm({ ...form, bannerImage: e.target.value })} className="w-full h-11 px-3.5 text-sm bg-[#FAF8F1] border border-[#E2E6DF] rounded-[8px] focus:outline-none focus:border-[#245C3A] focus:bg-white" />
-              </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#26352B] mb-1.5">Banner Image</label>
+                  <div className="space-y-2">
+                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) { toast.error("Image must be 5 MB or smaller."); return; }
+                      setBannerUploading(true);
+                      try {
+                        const { data } = await newsletterApi.uploadBanner(file);
+                        setForm((current) => ({ ...current, bannerImage: data.url, bannerImageFileId: data.fileId }));
+                        toast.success("Banner uploaded.");
+                      } catch (err) {
+                        toast.error(err?.response?.data?.message || "Banner upload failed.");
+                      } finally {
+                        setBannerUploading(false);
+                        e.target.value = "";
+                      }
+                    }} className="w-full text-xs" disabled={bannerUploading} />
+                    {bannerUploading && <p className="text-[10px] text-gray-500">Uploading...</p>}
+                    <input placeholder="Banner image URL (optional)" value={form.bannerImage} onChange={(e) => setForm({ ...form, bannerImage: e.target.value, bannerImageFileId: "" })} className="w-full h-11 px-3.5 text-sm bg-[#FAF8F1] border border-[#E2E6DF] rounded-[8px] focus:outline-none focus:border-[#245C3A] focus:bg-white" />
+                    {form.bannerImage && (
+                      <div className="relative">
+                        <img src={form.bannerImage} alt="Banner preview" className="h-24 w-full object-cover rounded-[8px] border border-[#E2E6DF]" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                        <button type="button" onClick={() => setForm((current) => ({ ...current, bannerImage: "", bannerImageFileId: "" }))} className="absolute top-1 right-1 rounded bg-white/80 px-1.5 py-0.5 text-[10px] text-red-600">Remove</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               <div className="col-span-full">
                 <label className="block text-xs font-semibold text-[#26352B] mb-1.5">Newsletter Content</label>
                 <textarea placeholder="Newsletter content" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="w-full min-h-[96px] px-3.5 py-2 text-sm bg-[#FAF8F1] border border-[#E2E6DF] rounded-[8px] focus:outline-none focus:border-[#245C3A] focus:bg-white" rows="4" />
@@ -407,29 +434,10 @@ export default function AdminNewsletter() {
 
             <div className={`${card} p-3`}>
               <p className="text-xs font-semibold text-[#26352B] mb-2">Audience</p>
-              <div className="flex gap-4 text-xs mb-2">
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={form.audienceType === "all"} onChange={() => setForm({ ...form, audienceType: "all" })} /> All Active Subscribers</label>
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={form.audienceType === "selected"} onChange={() => setForm({ ...form, audienceType: "selected" })} /> Selected Subscribers</label>
+              <div className="flex items-center gap-1.5">
+                <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={true} disabled /> Active GreenMart Premium Members</label>
               </div>
-              {form.audienceType === "selected" && (
-                <div>
-                  <input placeholder="Search subscribers" value={subscriberSearch} onChange={(e) => setSubscriberSearch(e.target.value)} className="mb-2 w-full h-9 rounded-[8px] border px-2 text-xs bg-[#FAF8F1] border-[#E2E6DF]" />
-                  <div className="flex gap-2 mb-2 text-xs">
-                    <button type="button" onClick={() => setSelectedSubscriberIds(filteredSubscribers.map((s) => s._id))} className="rounded-[6px] border px-2 py-1 text-[10px]">Select all</button>
-                    <button type="button" onClick={() => setSelectedSubscriberIds([])} className="rounded-[6px] border px-2 py-1 text-[10px]">Deselect all</button>
-                  </div>
-                  <div className="max-h-40 overflow-auto space-y-1">
-                    {filteredSubscribers.map((s) => (
-                      <label key={s._id} className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={selectedSubscriberIds.includes(s._id)} onChange={() => toggleSubscriber(s._id)} disabled={!s.isActive} />
-                        <span>{s.email}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-[10px] text-[#68756B]">Selected: {selectedSubscriberIds.length}</p>
-                </div>
-              )}
-              <p className="mt-2 text-[10px] text-[#68756B]">Eligible recipients: {form.audienceType === "selected" ? selectedSubscriberIds.length : (stats?.activeSubscribers || 0)}</p>
+              <p className="mt-2 text-[10px] text-[#68756B]">Eligible recipients: {stats?.eligibleRecipients ?? 0} active paid Premium members</p>
             </div>
 
             <div className="flex gap-2">
@@ -572,63 +580,6 @@ export default function AdminNewsletter() {
         </div>
       </section>
 
-      <section className={`${card} p-4`}>
-        <div className="mb-3">
-          <h2 className="text-[15px] font-bold text-[#26352B]">Subscriber Management</h2>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 mb-3">
-          <input placeholder="Search by email" value={subscriberSearch} onChange={(e) => { setSubscriberSearch(e.target.value); setSubscriberPage(1); }} className="h-9 flex-1 rounded-[8px] border px-2 text-xs bg-[#FAF8F1] border-[#E2E6DF]" />
-          <select value={subscriberFilter} onChange={(e) => { setSubscriberFilter(e.target.value); setSubscriberPage(1); }} className="h-9 rounded-[8px] border px-2 text-xs bg-[#FAF8F1] border-[#E2E6DF]">
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="unsubscribed">Unsubscribed</option>
-          </select>
-          <select value={subscriberTypeFilter} onChange={(e) => { setSubscriberTypeFilter(e.target.value); setSubscriberPage(1); }} className="h-9 rounded-[8px] border px-2 text-xs bg-[#FAF8F1] border-[#E2E6DF]">
-            <option value="all">All Types</option>
-            <option value="customer">Customer</option>
-          </select>
-        </div>
-        {subscribersLoading && <p className="text-xs text-[#68756B]">Loading subscribers...</p>}
-        {subscribersError && <p className="text-xs text-[#9A3412]">{subscribersError} <button onClick={load} className="underline">Retry</button></p>}
-        {!subscribersLoading && !subscribersError && filteredSubscribers.length === 0 && <p className="text-xs text-[#68756B]">No subscribers found.</p>}
-        {!subscribersLoading && !subscribersError && filteredSubscribers.length > 0 && (
-          <div>
-            <div className="overflow-auto">
-              <table className="w-full min-w-[560px] text-left text-xs">
-                <thead>
-                <tr className="bg-[#F7F6F2] text-[10px] uppercase text-[#68756B]">
-                  <th className="px-3 py-3">Email Address</th>
-                  <th className="px-3 py-3">Subscriber Type</th>
-                  <th className="px-3 py-3">Subscription Date</th>
-                  <th className="px-3 py-3">Status</th>
-                </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EFEFEC]">
-                  {pagedSubscribers.map((s) => (
-                    <tr key={s._id}>
-                      <td className="px-3 py-3">{s.email}</td>
-                      <td className="px-3 py-3">{s.subscribedAt ? new Date(s.subscribedAt).toLocaleDateString() : "-"}</td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase ${s.isActive ? "bg-[#EAF2E7] text-[#14532D] border border-[#E2E6DF]" : "bg-[#FBEDE5] text-[#9A3412] border border-[#FBEDE5]"}`}>
-                          {s.isActive ? "Active" : "Unsubscribed"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs">
-              <span>Page {subscriberPage} of {totalPages}</span>
-              <div className="flex gap-2">
-                <button disabled={subscriberPage <= 1} onClick={() => setSubscriberPage((p) => Math.max(1, p - 1))} className="rounded-[6px] border px-2 py-1 text-[10px] disabled:opacity-50">Prev</button>
-                <button disabled={subscriberPage >= totalPages} onClick={() => setSubscriberPage((p) => Math.min(totalPages, p + 1))} className="rounded-[6px] border px-2 py-1 text-[10px] disabled:opacity-50">Next</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className={`${card} p-5 w-80 space-y-3`}>
@@ -637,8 +588,8 @@ export default function AdminNewsletter() {
               <div className="text-xs text-[#68756B] space-y-1">
                 <p>Campaign: {pendingCampaign.campaignName}</p>
                 <p>Type: {pendingCampaign.campaignType}</p>
-                <p>Audience: {pendingCampaign.audienceType}</p>
-                <p>Recipients: {pendingCampaign.audienceType === "selected" ? (pendingCampaign.selectedSubscribers?.length || 0) : (stats?.activeSubscribers || 0)}</p>
+                <p>Audience: Active GreenMart Premium Members</p>
+                <p>Recipients: {pendingCampaign.recipientCount || pendingCampaign.selectedSubscribers?.length || 0}</p>
               </div>
             )}
             <div className="flex gap-2 justify-end">
@@ -741,6 +692,131 @@ export default function AdminNewsletter() {
           </div>
         </div>
       )}
+
+      {/* Premium Subscription Management */}
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="mt-8 rounded-[12px] border border-[#E2E6DF] bg-white shadow-[0_1px_3px_rgba(38,53,43,0.06)]"
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Premium Subscription Management</h2>
+              <p className="mt-0.5 text-[10px] text-[#82908B]">All revenue and payment metrics are simulated (mock). No real financial transactions.</p>
+            </div>
+          </div>
+
+          {subscriptionsLoading ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              {[1, 2, 3, 4, 5, 6].map((key) => (
+                <div key={key} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+              ))}
+            </div>
+          ) : subscriptionsError ? (
+            <div className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700 mb-4">{subscriptionsError}</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6 mb-6">
+                <div className="bg-[#FAF8F1] rounded-lg p-4">
+                  <p className="text-[10px] text-[#68756B]">Total Subscriptions</p>
+                  <p className="text-lg font-bold text-gray-900">{subscriptionStats?.totalSubscriptions ?? 0}</p>
+                </div>
+                <div className="bg-[#EAF2E7] rounded-lg p-4">
+                  <p className="text-[10px] text-[#14532D]">Active Paid</p>
+                  <p className="text-lg font-bold text-[#16803C]">{subscriptionStats?.activeSubscriptions ?? 0}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-[10px] text-[#68756B]">Expired</p>
+                  <p className="text-lg font-bold text-gray-900">{subscriptionStats?.expiredSubscriptions ?? 0}</p>
+                </div>
+                <div className="bg-[#FDF3E3] rounded-lg p-4">
+                  <p className="text-[10px] text-[#9A4E00]">Pending</p>
+                  <p className="text-lg font-bold text-[#B45309]">{subscriptionStats?.pendingPayments ?? 0}</p>
+                </div>
+                <div className="bg-[#FBEDE5] rounded-lg p-4">
+                  <p className="text-[10px] text-[#9A3412]">Cancelled</p>
+                  <p className="text-lg font-bold text-[#9A3412]">{subscriptionStats?.cancelledSubscriptions ?? 0}</p>
+                </div>
+                <div className="bg-[#E0F2FE] rounded-lg p-4">
+                  <p className="text-[10px] text-[#1D4ED8]">Simulated Revenue</p>
+                  <p className="text-lg font-bold text-[#0369A1]">₹{(subscriptionStats?.simulatedRevenue ?? 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-[#F0FDF4] rounded-lg p-4">
+                  <p className="text-[10px] text-[#14532D]">Eligible Recipients</p>
+                  <p className="text-lg font-bold text-[#16803C]">{subscriptionStats?.eligibleRecipients ?? 0}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-[#F7F6F2] text-[10px] uppercase text-[#68756B]">
+                      <th className="px-3 py-3 w-[25%]">Customer Name</th>
+                      <th className="px-3 py-3 w-[22%]">Email Address</th>
+                      <th className="px-3 py-3 w-[12%]">Plan</th>
+                      <th className="px-3 py-3 w-[12%]">Amount</th>
+                      <th className="px-3 py-3 w-[12%]">Start Date</th>
+                      <th className="px-3 py-3 w-[12%]">Expiry Date</th>
+                      <th className="px-3 py-3 w-[13%]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EFEFEC]">
+                    {subscriptions.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="p-4 text-center text-[10px] text-gray-500">
+                          No subscriptions found.
+                        </td>
+                      </tr>
+                    ) : (
+                      subscriptions.map((s) => {
+                        const statusColor = s.status === "active" ? "bg-[#EAF2E7] text-[#14532D]" : s.status === "pending" ? "bg-[#FDF3E3] text-[#9A4E00]" : s.status === "expired" ? "bg-gray-100 text-gray-600" : s.status === "cancelled" ? "bg-[#FBEDE5] text-[#9A3412]" : "bg-[#FBEDE5] text-[#9A3412]";
+                        const endDate = s.endDate ? new Date(s.endDate).toLocaleDateString("en-IN") : "—";
+                        return (
+                          <tr key={s._id} className="border-t border-[#EFEFEC]">
+                            <td className="px-3 py-3 whitespace-nowrap">{s.user?.name || "Unknown"}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-gray-600">{s.email}</td>
+                            <td className="px-3 py-3 text-[10px]">{s.planName}</td>
+                            <td className="px-3 py-3 text-[10px]">₹{s.amount}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-[10px]">{s.startDate ? new Date(s.startDate).toLocaleDateString("en-IN") : "—"}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-[10px]">{endDate}</td>
+                            <td className="px-3 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${statusColor}`}>
+                                {s.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+                {subscriptions.length > 0 && (
+                  <div className="mt-3 flex items-center justify-between text-xs">
+                    <p className="text-gray-500">Page {subPage}</p>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setSubPage(Math.max(1, subPage - 1))}
+                        disabled={subPage === 1}
+                        className="h-7 w-7 rounded border border-gray-200 text-[10px] disabled:opacity-50"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => setSubPage(subPage + 1)}
+                        className="h-7 w-7 rounded border border-gray-200 text-[10px]"
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </motion.section>
     </div>
   );
 }

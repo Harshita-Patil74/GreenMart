@@ -5,11 +5,12 @@ import { Doughnut, Line } from "react-chartjs-2";
 ChartJS.register(ArcElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip);
 
 function SalesTrend({ labels = [], values = [], orderValues }) {
+  const dual = Boolean(orderValues);
   const datasets = [{
     label: "Revenue",
     data: values,
-    borderColor: "#16803C",
-    backgroundColor: "rgba(22,128,60,.10)",
+    borderColor: dual ? "#F59E0B" : "#16803C",
+    backgroundColor: dual ? "rgba(245,158,11,.10)" : "rgba(22,128,60,.10)",
     fill: true,
     tension: 0.35,
     pointRadius: 3,
@@ -18,8 +19,8 @@ function SalesTrend({ labels = [], values = [], orderValues }) {
   if (orderValues) datasets.push({
     label: "Orders",
     data: orderValues,
-    borderColor: "#F59E0B",
-    backgroundColor: "#F59E0B",
+    borderColor: "#16803C",
+    backgroundColor: "#16803C",
     tension: 0.35,
     pointRadius: 3,
     yAxisID: "orders",

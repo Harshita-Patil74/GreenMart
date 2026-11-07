@@ -16,6 +16,9 @@ const offerFields = {
   minimumAmount: z.coerce.number().nonnegative().optional(),
   maximumDiscount: z.union([z.coerce.number().nonnegative(), z.null(), z.literal("")]).optional(),
   bundleConditions: z.string().max(500).optional(),
+  isSubscriberExclusive: z.boolean().optional(),
+  exclusiveDiscountType: z.enum(["Percentage", "Fixed Amount"]).optional(),
+  exclusiveDiscountValue: z.coerce.number().nonnegative().optional(),
 };
 
 const createOfferSchema = z.object({

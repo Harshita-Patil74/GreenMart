@@ -23,9 +23,11 @@ let otherFarmerToken;
 let outsiderFarmerToken;
 let unapprovedFarmerToken;
 let customerToken;
+let adminToken;
 let farmerId;
 let orderId;
 let productId;
+let deletedProductId;
 let uploadedImagePath;
 
 beforeAll(async () => {
@@ -55,6 +57,12 @@ beforeAll(async () => {
     passwordHash,
     role: "farmer",
   });
+  const admin = await User.create({
+    name: "Admin User",
+    email: "admin@example.test",
+    passwordHash,
+    role: "admin",
+  });
   const customer = await User.create({
     name: "Customer",
     email: "customer@gmail.com",
@@ -77,10 +85,12 @@ beforeAll(async () => {
   const customerId = customer._id;
   const products = await Product.create([
     { name: "Farmer One crop", description: "Fresh seasonal crop from Farmer One", category: "Vegetables", price: 2, farmer: farmer._id },
+    { name: "Farmer One deleted crop", description: "Soft deleted crop", category: "Vegetables", price: 5, farmer: farmer._id, isDeleted: true },
     { name: "Farmer Two crop", description: "Fresh seasonal crop from Farmer Two", category: "Vegetables", price: 3, farmer: otherFarmer._id },
     { name: "Unavailable crop", description: "Currently unavailable seasonal crop", category: "Vegetables", price: 4, farmer: otherFarmer._id, status: "Inactive" },
   ]);
   productId = products[0]._id;
+  deletedProductId = products[1]._id;
   const order = await Order.create({
     orderNumber: "GM-FARMER-SCOPE-1",
     user: customerId,
@@ -94,18 +104,20 @@ beforeAll(async () => {
   });
   orderId = order._id;
 
-  const [farmerLogin, otherFarmerLogin, outsiderFarmerLogin, unapprovedFarmerLogin, customerLogin] = await Promise.all([
+  const [farmerLogin, otherFarmerLogin, outsiderFarmerLogin, unapprovedFarmerLogin, customerLogin, adminLogin] = await Promise.all([
     request(app).post("/api/auth/login").send({ email: farmer.email, password: "ValidPass1!" }),
     request(app).post("/api/auth/login").send({ email: otherFarmer.email, password: "ValidPass1!" }),
     request(app).post("/api/auth/login").send({ email: outsiderFarmer.email, password: "ValidPass1!" }),
     request(app).post("/api/auth/login").send({ email: unapprovedFarmer.email, password: "ValidPass1!" }),
     request(app).post("/api/auth/login").send({ email: customer.email, password: "ValidPass1!" }),
+    request(app).post("/api/auth/login").send({ email: admin.email, password: "ValidPass1!" }),
   ]);
   farmerToken = farmerLogin.body.token;
   otherFarmerToken = otherFarmerLogin.body.token;
   outsiderFarmerToken = outsiderFarmerLogin.body.token;
   unapprovedFarmerToken = unapprovedFarmerLogin.body.token;
   customerToken = customerLogin.body.token;
+  adminToken = adminLogin.body.token;
 });
 
 afterAll(async () => {
@@ -137,9 +149,91 @@ describe("Product availability and farmer data", () => {
       .set("Authorization", `Bearer ${farmerToken}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].name).toBe("Farmer One crop");
-    expect(String(response.body[0].farmer)).toBe(String(farmerId));
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].name).toBe("Farmer One crop");
+    expect(String(response.body.items[0].farmer)).toBe(String(farmerId));
+  });
+
+  it("excludes deleted products from My Products by default", async () => {
+    const response = await request(app)
+      .get("/api/products/mine")
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.total).toBe(1);
+    expect(response.body.items.map((item) => item.name)).not.toContain("Farmer One deleted crop");
+    expect(response.body.items.map((item) => item.name)).toContain("Farmer One crop");
+  });
+
+  it("includes the farmer's own deleted products when showDeleted is true", async () => {
+    const response = await request(app)
+      .get("/api/products/mine?showDeleted=true")
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.total).toBe(2);
+    expect(response.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
+    expect(response.body.items.map((item) => item.name)).toContain("Farmer One crop");
+    expect(response.body.items.every((item) => String(item.farmer) === String(farmerId))).toBe(true);
+  });
+
+  it("allows the farmer to restore their own deleted product", async () => {
+    const response = await request(app)
+      .patch(`/api/products/${deletedProductId}/restore`)
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe("Restored");
+    expect(response.body.product.isDeleted).toBe(false);
+  });
+
+  it("prevents a farmer from restoring another farmer's deleted product", async () => {
+    const response = await request(app)
+      .patch(`/api/products/${deletedProductId}/restore`)
+      .set("Authorization", `Bearer ${otherFarmerToken}`);
+    expect(response.status).toBe(403);
+  });
+
+  it("restored product reappears in the active My Products list", async () => {
+    await request(app)
+      .patch(`/api/products/${deletedProductId}/restore`)
+      .set("Authorization", `Bearer ${farmerToken}`);
+    const response = await request(app)
+      .get("/api/products/mine")
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.total).toBe(2);
+    expect(response.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
+  });
+
+  it("lets an admin view and restore deleted products", async () => {
+    const list = await request(app)
+      .get("/api/products?showDeleted=true")
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
+
+    const restore = await request(app)
+      .patch(`/api/products/${deletedProductId}/restore`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(restore.status).toBe(200);
+    expect(restore.body.product.isDeleted).toBe(false);
+  });
+
+  it("prevents a customer from accessing the product restore endpoint", async () => {
+    const response = await request(app)
+      .patch(`/api/products/${deletedProductId}/restore`)
+      .set("Authorization", `Bearer ${customerToken}`);
+    expect(response.status).toBe(403);
+  });
+
+  it("returns correct pagination totals for My Products", async () => {
+    const response = await request(app)
+      .get("/api/products/mine?page=1&limit=10")
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(response.status).toBe(200);
+    expect(response.body.total).toBe(response.body.items.length);
+    expect(response.body.page).toBe(1);
+    expect(response.body.pages).toBe(Math.ceil(response.body.total / response.body.limit));
+    expect(response.body.limit).toBe(10);
+    expect(response.body.items.length).toBeGreaterThan(0);
   });
 
   it("requires an authenticated farmer", async () => {
@@ -259,13 +353,13 @@ describe("Product availability and farmer data", () => {
       .set("Authorization", `Bearer ${farmerToken}`);
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(1);
-    expect(response.body[0].items).toHaveLength(1);
-    expect(response.body[0].items[0].name).toBe("Farmer One crop");
-    expect(response.body[0].total).toBe(20);
-    expect(response.body[0].address).toEqual({ name: "Test Customer" });
-    expect(JSON.stringify(response.body)).not.toContain("Farmer Two crop");
-    expect(JSON.stringify(response.body)).not.toContain("555-0100");
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].items).toHaveLength(1);
+    expect(response.body.items[0].items[0].name).toBe("Farmer One crop");
+    expect(response.body.items[0].total).toBe(20);
+    expect(response.body.items[0].address).toEqual({ name: "Test Customer" });
+    expect(JSON.stringify(response.body.items)).not.toContain("Farmer Two crop");
+    expect(JSON.stringify(response.body.items)).not.toContain("555-0100");
   });
 
   it("limits farmer order details to their own items", async () => {

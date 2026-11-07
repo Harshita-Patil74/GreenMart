@@ -44,20 +44,141 @@ async function issueFarmerActivation(user) {
 
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
 exports.users = asyncHandler(async (req,res) => {
-  const query = ["customer", "farmer", "admin"].includes(req.query.role) ? { role: req.query.role } : {};
-  res.json(await User.find(query).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry"));
+  const { page=1, limit=10, role, search } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const query = {};
+  if (role && ["customer", "farmer", "admin"].includes(role)) query.role = role;
+  if (search && search.trim()) {
+    const s2 = search.trim().toLowerCase();
+    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    query.$or = [
+      { name: regex },
+      { email: regex },
+    ];
+  }
+  const [users, total] = await Promise.all([
+    User.find(query).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry").sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum),
+    User.countDocuments(query),
+  ]);
+  res.json({ items: users, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
 exports.farmers = asyncHandler(async (req, res) => {
-  const farmers = await FarmerProfile.find()
-    .select("user farmName certification verificationStatus changeRequestInstructions verificationHistory submittedAt description address category photo certificateDocument certificateName certificateNumber createdAt")
-    .populate("user", "_id name email phone accountActivated")
-    .sort({ createdAt: -1 });
-  res.json(farmers);
+  const { page=1, limit=10, search } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const query = {};
+  if (search && search.trim()) {
+    const s2 = search.trim().toLowerCase();
+    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    query.$or = [
+      { farmName: regex },
+      { category: regex },
+      { "user.name": regex },
+      { "user.email": regex },
+    ];
+  }
+  const [farmers, total] = await Promise.all([
+    FarmerProfile.find(query).select("user farmName certification verificationStatus changeRequestInstructions verificationHistory submittedAt description address category photo certificateDocument certificateName certificateNumber createdAt").populate("user", "_id name email phone accountActivated").sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum),
+    FarmerProfile.countDocuments(query),
+  ]);
+  res.json({ items: farmers, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
 exports.lowStock = asyncHandler(async (req,res) => res.json(await Product.find({ $expr: { $lte: ["$stock","$lowStockThreshold"] } })));
 exports.sales = asyncHandler(async (req,res) => res.json(await statsService.sales()));
 exports.categoriesShare = asyncHandler(async (req,res) => res.json(await statsService.categoriesShare()));
 exports.reports = asyncHandler(async (req,res) => res.json({ orders: await Order.countDocuments(), products: await Product.countDocuments() }));
+
+function parseDateFilter(from, to) {
+  const filter = {};
+  const validate = (value, name) => {
+    if (!value) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const error = new Error(`Invalid ${name} date.`);
+      error.status = 400;
+      throw error;
+    }
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+      const error = new Error(`Invalid ${name} date.`);
+      error.status = 400;
+      throw error;
+    }
+  };
+  validate(from, "from");
+  validate(to, "to");
+  if (from && to && from > to) {
+    const error = new Error("Start date must be before end date.");
+    error.status = 400;
+    throw error;
+  }
+  if (from) filter.createdAt = { ...filter.createdAt, $gte: new Date(`${from}T00:00:00.000Z`) };
+  if (to) filter.createdAt = { ...filter.createdAt, $lte: new Date(`${to}T23:59:59.999Z`) };
+  return filter;
+}
+exports.analytics = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const match = parseDateFilter(from, to);
+  match.status = { $nin: ["Cancelled", "Delivery Failed"] };
+  match.paymentStatus = { $ne: "Failed" };
+  const orders = await Order.find(match).populate("items.product", "category name images").lean();
+  let totalSales = 0;
+  const orderIds = new Set();
+  const salesByCategory = {};
+  const topSellingProducts = {};
+  const byDate = {};
+  orders.forEach((o) => {
+    orderIds.add(String(o._id));
+    let orderTotal = 0;
+    (o.items || []).forEach((item) => {
+      const amount = Number(item.offerSnapshot?.finalLineTotal ?? (item.price || 0) * (item.quantity || 0));
+      orderTotal += amount;
+      const product = item.product && typeof item.product === "object" ? item.product : null;
+      const category = (product && product.category) || "Other";
+      salesByCategory[category] = (salesByCategory[category] || 0) + amount;
+      const name = item.name || (product && product.name) || "Product";
+      if (!topSellingProducts[name]) {
+        topSellingProducts[name] = { name, quantity: 0, revenue: 0, image: item.image || (product && product.images && product.images[0]) || "" };
+      }
+      topSellingProducts[name].quantity += Number(item.quantity || 0);
+      topSellingProducts[name].revenue += amount;
+    });
+    totalSales += orderTotal;
+    const key = new Date(o.createdAt).toISOString().slice(0, 10);
+    byDate[key] = (byDate[key] || 0) + orderTotal;
+  });
+  const totalOrders = orderIds.size;
+  const averageOrderValue = totalOrders ? totalSales / totalOrders : 0;
+  const salesOverview = { totalSales, totalOrders, averageOrderValue, from, to };
+  const salesByCategoryArr = Object.entries(salesByCategory)
+    .map(([category, revenue]) => ({ category, revenue: Number(revenue.toFixed(2)) }))
+    .sort((a, b) => b.revenue - a.revenue);
+  const topSellingProductsArr = Object.values(topSellingProducts)
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 10);
+  const trendLabels = [];
+  const trendValues = [];
+  if (from && to && from <= to) {
+    const cursor = new Date(`${from}T00:00:00.000Z`);
+    const last = new Date(`${to}T00:00:00.000Z`);
+    while (cursor <= last) {
+      const key = cursor.toISOString().slice(0, 10);
+      trendLabels.push(key);
+      trendValues.push(Number((byDate[key] || 0).toFixed(2)));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+  const salesTrend = { labels: trendLabels, values: trendValues };
+  res.json({
+    totalSales: Number(totalSales.toFixed(2)),
+    totalOrders,
+    averageOrderValue: Number(averageOrderValue.toFixed(2)),
+    salesOverview,
+    salesByCategory: salesByCategoryArr,
+    topSellingProducts: topSellingProductsArr,
+    salesTrend,
+  });
+});
 exports.reportPdf = asyncHandler(async (req, res) => {
   const { type, from = "", to = "", category = "" } = req.query;
   if (!REPORT_TYPES.includes(type)) return res.status(400).json({ message: "Invalid report type." });

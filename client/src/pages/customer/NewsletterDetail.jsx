@@ -94,7 +94,7 @@ export default function NewsletterDetail({ role = "customer" } = {}) {
   const featured = buildFeatured();
 
   return (
-    <div className="space-y-4 pb-12 max-w-3xl mx-auto">
+    <div className="space-y-4 pb-12 mx-auto px-4 sm:px-6 lg:px-8 max-w-6xl">
       <BackButton fallback={`/${role}/newsletters`} />
       <motion.header
         variants={sectionReveal}
@@ -123,8 +123,8 @@ export default function NewsletterDetail({ role = "customer" } = {}) {
         className="rounded-xl border border-[#E2E6DF] bg-white p-6 shadow-sm"
       >
         <div className="relative">
-          {newsletter.bannerImage ? (
-            <img src={newsletter.bannerImage} alt="" className="w-full h-48 object-cover rounded-lg border border-[#E2E6DF]" />
+          {(newsletter.bannerImage || newsletter.bannerImageUrl) ? (
+            <img src={newsletter.bannerImage || newsletter.bannerImageUrl} alt="" className="w-full h-48 object-cover rounded-lg border border-[#E2E6DF]" onError={(e) => { e.currentTarget.style.display = "none"; }} />
           ) : (
             <div className="w-full h-48 rounded-lg border border-[#E2E6DF] bg-[#FAF8F1] flex items-center justify-center">
               <span className="text-gray-400 text-xs">No banner image</span>
@@ -198,13 +198,29 @@ export default function NewsletterDetail({ role = "customer" } = {}) {
           </div>
         )}
 
-        {newsletter.buttonText && newsletter.buttonUrl && (
-          <div className="mt-6">
-            <a href={newsletter.buttonUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center justify-center rounded-lg bg-[#245C3A] px-6 text-xs font-semibold text-white hover:bg-[#1E4A30]">
-              {newsletter.buttonText}
-            </a>
-          </div>
-        )}
+        {(() => {
+          const text = newsletter.buttonText;
+          const rawUrl = newsletter.buttonUrl || "";
+          const defaults = { offers: "/offers", "new-products": "/shop", "fresh-harvest": "/shop", announcements: "/shop", "farmer-spotlight": "/farmers" };
+          const url = rawUrl.trim() || defaults[newsletter.campaignType] || "";
+          if (!text || !url) return null;
+          const isRelative = url.startsWith("/");
+          const isHttps = /^https:\/\//i.test(url);
+          if (!isRelative && !isHttps) return null;
+          return (
+            <div className="mt-6">
+              {isRelative ? (
+                <Link to={url} className="inline-flex h-10 items-center justify-center rounded-lg bg-[#245C3A] px-6 text-xs font-semibold text-white hover:bg-[#1E4A30]">
+                  {text}
+                </Link>
+              ) : (
+                <a href={url} className="inline-flex h-10 items-center justify-center rounded-lg bg-[#245C3A] px-6 text-xs font-semibold text-white hover:bg-[#1E4A30]">
+                  {text}
+                </a>
+              )}
+            </div>
+          );
+        })()}
       </motion.section>
 
       <motion.div

@@ -170,7 +170,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
-      const farmer = res.body.find((f) => String(f.user._id) === String(farmerId));
+      const farmer = res.body.items.find((f) => String(f.user._id) === String(farmerId));
       expect(farmer).toBeDefined();
       expect(farmer.user.phone).toBe("+91 9876543210");
     });
@@ -179,7 +179,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
       const res = await request(app)
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
-      const farmer = res.body.find((f) => String(f.user._id) === String(farmerId));
+      const farmer = res.body.items.find((f) => String(f.user._id) === String(farmerId));
       expect(farmer.certificateName).toBe("Organic Farming Certificate");
       expect(farmer.certificateNumber).toBe("OFC2026KA5724");
     });
@@ -188,7 +188,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
       const res = await request(app)
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
-      const farmer = res.body.find((f) => String(f.user._id) === String(farmerId));
+      const farmer = res.body.items.find((f) => String(f.user._id) === String(farmerId));
       expect(farmer.photo).toMatch(/^https:\/\/res\.cloudinary\.com\/test\/image\/upload\//);
     });
 
@@ -199,7 +199,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
       const adminRes = await request(app)
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
-      const adminFarmer = adminRes.body.find((f) => String(f.user._id) === String(farmerId));
+      const adminFarmer = adminRes.body.items.find((f) => String(f.user._id) === String(farmerId));
       expect(farmerRes.body.photo).toBe(adminFarmer.photo);
     });
   });
@@ -230,7 +230,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
       const res = await request(app)
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
-      const farmer = res.body.find((f) => String(f.user._id) === String(farmerId));
+      const farmer = res.body.items.find((f) => String(f.user._id) === String(farmerId));
       expect(farmer.user.phone).toBe("+91 9876543210");
     });
   });
@@ -252,7 +252,7 @@ describe("Farmer profile - phone, certificate, photo fixes", () => {
       const res = await request(app)
         .get("/api/admin/farmers")
         .set("Authorization", `Bearer ${adminToken}`);
-      const found = res.body.find((f) => String(f.user._id) === String(emptyFarmer._id));
+      const found = res.body.items.find((f) => String(f.user._id) === String(emptyFarmer._id));
       expect(found).toBeDefined();
       expect(found.certificateName).toBeUndefined();
       expect(found.certificateNumber).toBeUndefined();

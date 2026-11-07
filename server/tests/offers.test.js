@@ -516,7 +516,7 @@ describe("Farmer offers and server-priced order snapshots", () => {
     const farmerOrders = await request(app)
       .get("/api/orders/farmer")
       .set("Authorization", `Bearer ${farmerToken}`);
-    expect(farmerOrders.body.find((item) => item._id === orderId).total).toBe(280);
+    expect(farmerOrders.body.items.find((item) => item._id === orderId).total).toBe(280);
     const salesOverview = await request(app)
       .get("/api/farmers/sales/overview")
       .set("Authorization", `Bearer ${farmerToken}`);

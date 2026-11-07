@@ -8,12 +8,14 @@ const { money, getEffectiveStatus, getEffectiveStart, getEffectiveEnd } = requir
 exports.list = asyncHandler(async (req, res) => {
   const now = new Date();
   const nowMs = now.getTime();
+  const { page=1, limit=10 } = req.query;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
 
   // Find approved offers that are active and not yet expired
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
-    isSubscriberExclusive: { $ne: true },
     endDate: { $gte: now },
   })
     .sort({ createdAt: -1 })
@@ -66,6 +68,26 @@ exports.list = asyncHandler(async (req, res) => {
     const startTime = getEffectiveStart(offer);
     const endTime = getEffectiveEnd(offer);
 
+    const publicPrice = money((originalPrice * quantity - discount) / quantity);
+    let exclusivePrice = null;
+    let exclusiveDiscountAmount = null;
+    let additionalSavings = null;
+    if (offer.exclusiveDiscountType && Number.isFinite(offer.exclusiveDiscountValue) && Number(offer.exclusiveDiscountValue) > 0) {
+      const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
+        ? publicPrice * Number(offer.exclusiveDiscountValue) / 100
+        : Number(offer.exclusiveDiscountValue);
+      const exclusiveDiscount = money(Math.min(
+        publicPrice * quantity,
+        exclusivePerUnit * quantity,
+        offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
+      ));
+      if (exclusiveDiscount != null && exclusiveDiscount > 0) {
+        exclusivePrice = money(publicPrice - exclusiveDiscount / quantity);
+        if (!Number.isFinite(exclusivePrice) || exclusivePrice < 0) exclusivePrice = 0;
+        exclusiveDiscountAmount = money(exclusiveDiscount / quantity);
+        additionalSavings = money(publicPrice - exclusivePrice);
+      }
+    }
     const item = {
       _id: offer._id,
       title: offer.title,
@@ -76,10 +98,17 @@ exports.list = asyncHandler(async (req, res) => {
       minimumQuantity: offer.minimumQuantity,
       minimumAmount: offer.minimumAmount,
       maximumDiscount: offer.maximumDiscount,
+      isSubscriberExclusive: offer.isSubscriberExclusive || false,
+      exclusiveDiscountType: offer.exclusiveDiscountType || null,
+      exclusiveDiscountValue: offer.exclusiveDiscountValue || null,
       originalPrice,
-      offerPrice: money((originalPrice * quantity - discount) / quantity),
+      publicPrice,
+      offerPrice: publicPrice,
       discountAmount: money(discount / quantity),
       discountPercent: Math.round((discount / (originalPrice * quantity)) * 100),
+      exclusivePrice,
+      exclusiveDiscountAmount,
+      additionalSavings,
       effectiveStatus,
       startDate: offer.startDate,
       endDate: offer.endDate,
@@ -108,9 +137,24 @@ exports.list = asyncHandler(async (req, res) => {
     }
   }
 
+  const activeTotal = activeItems.length;
+  const upcomingTotal = upcomingItems.length;
+  const activeSkip = (pageNum - 1) * limitNum;
+  const upcomingSkip = (pageNum - 1) * limitNum;
+  const activePaged = activeItems.slice(activeSkip, activeSkip + limitNum);
+  const upcomingPaged = upcomingItems.slice(upcomingSkip, upcomingSkip + limitNum);
+
   res.json({
-    active: activeItems,
-    upcoming: upcomingItems,
+    active: activePaged,
+    upcoming: upcomingPaged,
     serverTime: now.toISOString(),
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      activeTotal,
+      upcomingTotal,
+      activePages: Math.ceil(activeTotal / limitNum),
+      upcomingPages: Math.ceil(upcomingTotal / limitNum),
+    },
   });
 });

@@ -103,8 +103,8 @@ describe("End-to-end order workflow", () => {
       .get("/api/orders/mine")
       .set("Authorization", `Bearer ${customerToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThan(0);
-    expect(res.body[0]._id).toBe(orderId);
+    expect(res.body.items.length).toBeGreaterThan(0);
+    expect(res.body.items[0]._id).toBe(orderId);
   });
 
   it("rejects unauthenticated requests and prevents customers from reading another customer's order", async () => {
@@ -122,7 +122,7 @@ describe("End-to-end order workflow", () => {
       .get("/api/orders/farmer")
       .set("Authorization", `Bearer ${farmerToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.some((o) => o._id === orderId)).toBe(true);
+    expect(res.body.items.some((o) => o._id === orderId)).toBe(true);
   });
 
   it("farmer updates order status to 'Packed'", async () => {

@@ -121,7 +121,7 @@ async function getActiveOffers(productIds, now = new Date()) {
   });
 }
 
-function calculateOffer(product, quantity, offers, orderSubtotal = Number(product.price) * Number(quantity)) {
+function calculateOffer(product, quantity, offers, orderSubtotal = Number(product.price) * Number(quantity), isPremium = false) {
   const productId = String(product._id || product.id);
   const unitPrice = Number(product.price);
   const itemQuantity = Number(quantity);
@@ -140,13 +140,28 @@ function calculateOffer(product, quantity, offers, orderSubtotal = Number(produc
       : Number(offer.discountValue);
     const uncappedDiscount = perUnit * itemQuantity;
     const cap = offer.maximumDiscount == null ? uncappedDiscount : Number(offer.maximumDiscount);
-    const discount = money(Math.min(gross, uncappedDiscount, cap));
-    if (discount <= 0) return null;
+    const publicDiscount = money(Math.min(gross, uncappedDiscount, cap));
+    if (publicDiscount <= 0) return null;
+    let premiumDiscount = 0;
+    const publicFinalTotal = money(gross - publicDiscount);
+    if (isPremium && offer.exclusiveDiscountType && Number.isFinite(Number(offer.exclusiveDiscountValue)) && Number(offer.exclusiveDiscountValue) > 0) {
+      const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
+        ? publicFinalTotal * Number(offer.exclusiveDiscountValue) / 100
+        : Number(offer.exclusiveDiscountValue) * itemQuantity;
+      const exclusiveUncapped = money(exclusivePerUnit);
+      const exclusiveCap = offer.maximumDiscount == null ? exclusiveUncapped : Number(offer.maximumDiscount);
+      premiumDiscount = money(Math.min(publicFinalTotal, exclusiveUncapped, exclusiveCap));
+      if (!Number.isFinite(premiumDiscount) || premiumDiscount < 0) premiumDiscount = 0;
+    }
+    const finalTotal = money(publicFinalTotal - premiumDiscount);
+    if (!Number.isFinite(finalTotal) || finalTotal < 0) return null;
+    const totalDiscount = money(gross - finalTotal);
     return {
       offer,
-      discount,
-      finalUnitPrice: money((gross - discount) / itemQuantity),
-      finalLineTotal: money(gross - discount),
+      discount: totalDiscount,
+      premiumDiscount,
+      finalUnitPrice: money(finalTotal / itemQuantity),
+      finalLineTotal: finalTotal,
     };
   }).filter(Boolean);
 
@@ -217,7 +232,7 @@ async function attachProductOffers(products) {
   });
 }
 
-async function enrichCart(cart) {
+async function enrichCart(cart, isPremium = false) {
   if (!cart) return cart;
   const plain = cart.toObject ? cart.toObject() : { ...cart };
   const offers = await getActiveOffers(plain.items.map((item) => item.product?._id).filter(Boolean));
@@ -226,7 +241,7 @@ async function enrichCart(cart) {
   plain.items = plain.items.map((item) => {
     const product = item.product;
     if (!product) return item;
-    const applied = calculateOffer(product, item.quantity, offers, orderSubtotal);
+    const applied = calculateOffer(product, item.quantity, offers, orderSubtotal, isPremium);
     const offer = applied ? {
       _id: applied.offer._id,
       title: applied.offer.title,
@@ -234,6 +249,7 @@ async function enrichCart(cart) {
       discountType: applied.offer.discountType,
       discountValue: applied.offer.discountValue,
       appliedDiscount: applied.discount,
+      premiumDiscount: applied.premiumDiscount,
       finalUnitPrice: applied.finalUnitPrice,
       lineTotal: applied.finalLineTotal,
     } : null;

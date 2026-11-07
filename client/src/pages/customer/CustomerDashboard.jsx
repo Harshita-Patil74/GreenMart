@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, BadgePercent, CalendarDays, Heart, Package, ShoppingBag, Wallet } from "lucide-react";
+import { ArrowRight, BadgePercent, CalendarDays, CreditCard, Clock, Heart, Lock, Package, ShieldCheck, ShoppingBag, Ticket, Wallet } from "lucide-react";
 import ProductCard from "../../components/product/ProductCard.jsx";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import productApi from "../../api/productApi";
@@ -32,6 +32,7 @@ import {
 } from "../../components/common/motionVariants.jsx";
 import { sectionReveal } from "../../animations/variants.js";
 import { getImageUrl } from "../../utils/imageUrl.js";
+import SubscriptionCheckout from "./SubscriptionCheckout.jsx";
 
 const HERO_IMAGE = "/images/banners/hero-basket.jpg";
 
@@ -55,6 +56,7 @@ export default function CustomerDashboard() {
   const { user, token } = useSelector((state) => state.auth);
   const wishlist = useSelector((state) => state.wishlist);
   const cart = useSelector((state) => state.cart);
+  const navigate = useNavigate();
   const [featured, setFeatured] = useState([]);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [featuredError, setFeaturedError] = useState(null);
@@ -74,6 +76,9 @@ export default function CustomerDashboard() {
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [ordersError, setOrdersError] = useState(null);
+  const [subscription, setSubscription] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
+  const [subscriptionError, setSubscriptionError] = useState(null);
   const loadFeatured = async () => {
     setFeaturedLoading(true);
     setFeaturedError(null);
@@ -120,18 +125,12 @@ export default function CustomerDashboard() {
   };
 
   const loadNewsletterPreferences = async () => {
+    if (user?.role !== "customer") return;
     setPreferencesLoading(true);
     setPreferencesError(null);
     try {
       const { data } = await newsletterApi.preferences();
       setNewsletterPref(data);
-      if (data?.isSubscribed) {
-        loadExclusiveOffers();
-      } else {
-        setExclusiveOffers([]);
-        setExclusiveOffersLoading(false);
-        setExclusiveOffersError(null);
-      }
     } catch (requestError) {
       setPreferencesError(requestError?.message || "Couldn't load subscription preferences.");
       setNewsletterPref(null);
@@ -141,7 +140,7 @@ export default function CustomerDashboard() {
   };
 
   const loadExclusiveOffers = async () => {
-    if (!newsletterPref?.isSubscribed) {
+    if (!subscription?.subscribed) {
       setExclusiveOffers([]);
       setExclusiveOffersLoading(false);
       setExclusiveOffersError(null);
@@ -160,17 +159,27 @@ export default function CustomerDashboard() {
     }
   };
 
-  const handleSubscribe = async () => {
-    setNewsletterBusy(true);
+  const handleSubscribe = () => {
+    navigate("/customer/subscription-checkout");
+  };
+
+  const loadSubscription = async () => {
+    if (user?.role !== "customer") return;
+    setSubscriptionLoading(true);
+    setSubscriptionError(null);
     try {
-      await newsletterApi.customerSubscribe();
-      toast.success("You're subscribed to GreenMart newsletter updates!");
-      await loadNewsletterPreferences();
-    } catch (error) {
-      toast.error(error?.message || "Couldn't subscribe to GreenMart updates.");
+      const { data } = await newsletterApi.subscriptionMe();
+      setSubscription(data);
+    } catch (requestError) {
+      setSubscriptionError(requestError?.message || "Couldn't load subscription status.");
+      setSubscription(null);
     } finally {
-      setNewsletterBusy(false);
+      setSubscriptionLoading(false);
     }
+  };
+
+  const handleCheckout = () => {
+    navigate("/customer/subscription-checkout");
   };
 
   const handleUnsubscribe = async () => {
@@ -191,6 +200,7 @@ export default function CustomerDashboard() {
     loadOffers();
     loadOrders();
     loadNewsletterPreferences();
+    loadSubscription();
     if (user?.role === "customer" && token && token !== "demo-token") dispatch(fetchWishlist());
   }, [dispatch, token, user?.role]);
 
@@ -210,13 +220,13 @@ export default function CustomerDashboard() {
   const latestOrder = orders[0];
 
   useEffect(() => {
-    if (newsletterPref?.isSubscribed) loadExclusiveOffers();
+    if (subscription?.subscribed) loadExclusiveOffers();
     else {
       setExclusiveOffers([]);
       setExclusiveOffersLoading(false);
       setExclusiveOffersError(null);
     }
-  }, [newsletterPref?.isSubscribed]);
+  }, [subscription?.subscribed]);
 
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
@@ -394,17 +404,21 @@ export default function CustomerDashboard() {
               </div>
             </div>
 
-            {preferencesLoading ? (
+            {user?.role !== "customer" ? (
+              <div className="flex flex-col items-center justify-center gap-3 text-center py-8">
+                <Lock className="h-10 w-10 text-gray-400" />
+                <h3 className="text-xs font-semibold text-gray-900">Customer Access Only</h3>
+                <p className="text-[10px] text-gray-600 mb-3 max-w-xs text-center">
+                  GreenMart Premium Newsletter is available exclusively to registered customer accounts. Your current {user?.role === "admin" ? "administrator" : "farmer"} account does not have access to customer subscription features.
+                </p>
+              </div>
+            ) : preferencesLoading ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {[1, 2, 3, 4].map((key) => (
                   <div key={key} className="h-56 animate-pulse rounded-lg bg-gray-50" />
                 ))}
               </div>
-            ) : preferencesError ? (
-              <p role="alert" className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700">
-                {preferencesError} <button onClick={loadNewsletterPreferences} className="ml-2 font-semibold underline">Retry</button>
-              </p>
-            ) : newsletterPref?.isSubscribed ? (
+            ) : subscription?.subscribed ? (
               <>
                 {exclusiveOffersLoading ? (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -431,13 +445,10 @@ export default function CustomerDashboard() {
               </>
             ) : (
               <div className="rounded-lg border border-gray-100 bg-[#FAF8F1] p-6 text-center">
-                <p className="text-xs text-gray-500 mb-3">Subscribe to the GreenMart newsletter to unlock exclusive subscriber offers.</p>
-                <button
-                  onClick={handleSubscribe}
-                  className="h-8 rounded-md bg-[#245C3A] px-3 text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
-                >
-                  Subscribe Now
-                </button>
+                <h3 className="text-xs font-semibold text-[#253933] mb-1">Premium Exclusive Offers</h3>
+                <p className="text-[10px] text-gray-600 mb-3">
+                  These special offers are available to active GreenMart Premium members. Visit the GreenMart Premium Newsletter section to unlock exclusive discounts.
+                </p>
               </div>
             )}
           </section>
@@ -481,34 +492,131 @@ export default function CustomerDashboard() {
         animate="visible"
         className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
       >
-        <h2 className="text-sm font-semibold text-gray-900 mb-2">Newsletter Preferences</h2>
-        {!(newsletterPref?.subscribedAt) && !newsletterPref?.isSubscribed ? (
+        <h2 className="text-sm font-semibold text-gray-900 mb-2">GreenMart Premium Newsletter</h2>
+        <p className="mt-0.5 text-[10px] text-gray-500 mb-3">Paid monthly subscription — ₹199/month.</p>
+
+        {user?.role !== "customer" ? (
+          <div className="flex flex-col items-center justify-center gap-3 text-center py-8">
+            <Lock className="h-10 w-10 text-gray-400" />
+            <h3 className="text-xs font-semibold text-gray-900">Customer Access Only</h3>
+            <p className="text-[10px] text-gray-600 mb-3 max-w-xs text-center">
+              GreenMart Premium Newsletter is available exclusively to registered customer accounts. Your current {user?.role === "admin" ? "administrator" : "farmer"} account does not have access to customer subscription features.
+            </p>
+          </div>
+        ) : subscriptionLoading ? (
+          <div className="h-24 flex items-center justify-center text-xs text-gray-500">Loading subscription...</div>
+        ) : subscriptionError ? (
+          <div className="rounded-lg bg-red-50 p-3 text-center text-xs text-red-700">
+            {subscriptionError}
+          </div>
+        ) : subscription?.subscribed ? (
           <>
-            <p className="text-xs text-gray-500 mb-3">Stay in Touch</p>
-            <p className="text-xs text-gray-500 mb-3">Get the latest GreenMart offers, fresh harvest updates, and exclusive subscriber promotions.</p>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-xs font-bold text-[#16803C] flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Active
+                </h3>
+                <p className="text-[10px] text-gray-500">GreenMart Premium — Active</p>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EAF2E7] text-[#14532D]`}>
+                Active
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div className="border border-gray-100 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500">Start Date</p>
+                <p className="text-xs font-semibold text-gray-900">
+                  {subscription.startDate ? new Date(subscription.startDate).toLocaleDateString("en-IN") : "—"}
+                </p>
+              </div>
+              <div className="border border-gray-100 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500">Expiry Date</p>
+                <p className="text-xs font-semibold text-gray-900">
+                  {subscription.endDate ? new Date(subscription.endDate).toLocaleDateString("en-IN") : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="border border-gray-100 rounded-lg p-3 mb-3">
+              <p className="text-[10px] text-gray-500">Amount Paid</p>
+              <p className="text-xs font-bold text-[#245C3A]">
+                ₹{subscription.amount || 199} {subscription.currency || "INR"}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link to="/customer/newsletters" className="flex-1 h-8 rounded-lg bg-[#245C3A] flex items-center justify-center text-[10px] font-semibold text-white hover:bg-[#1E4A30]">
+                View My Newsletters
+              </Link>
+              <Link to="/customer/offers" className="flex-1 h-8 rounded-lg border border-[#DDE8DF] flex items-center justify-center text-[10px] font-semibold text-[#245C3A] hover:bg-[#F0F5EE]">
+                Explore Exclusive Offers
+              </Link>
+            </div>
+          </>
+        ) : subscription?.status === "expired" ? (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-3.5 w-3.5 text-[#9A3412]" />
+              <h3 className="text-xs font-bold text-[#9A3412]">Subscription Expired</h3>
+            </div>
+            <p className="text-[10px] text-gray-600 mb-3">
+              Your GreenMart Premium subscription has expired. Renew to regain access to exclusive subscriber offers.
+            </p>
             <button
-              disabled={newsletterBusy}
-              onClick={handleSubscribe}
-              className="h-9 rounded-lg bg-[#245C3A] px-4 text-xs font-semibold text-white disabled:opacity-50"
+              onClick={handleCheckout}
+              className="w-full h-9 rounded-lg bg-[#245C3A] text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
             >
-              {newsletterBusy ? "Updating..." : "Subscribe Now"}
+              Renew for ₹199/month
+            </button>
+          </>
+        ) : subscription?.status === "payment_failed" ? (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <Ticket className="h-3.5 w-3.5 text-[#9A3412]" />
+              <h3 className="text-xs font-bold text-[#9A3412]">Payment Failed</h3>
+            </div>
+            <p className="text-[10px] text-gray-600 mb-3">
+              Your mock payment did not complete. Your subscription remains inactive.
+            </p>
+            <button
+              onClick={handleCheckout}
+              className="w-full h-9 rounded-lg bg-[#245C3A] text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
+            >
+              Retry Payment — ₹199/month
+            </button>
+          </>
+        ) : subscription?.status === "pending" ? (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-[#F59E0B] text-[#F59E0B] animate-spin" />
+              <h3 className="text-xs font-bold text-[#9A4E00]">Payment Pending</h3>
+            </div>
+            <p className="text-[10px] text-gray-600 mb-3">
+              Your mock payment is awaiting confirmation. Please complete the payment to activate your subscription.
+            </p>
+            <button
+              onClick={handleCheckout}
+              className="w-full h-9 rounded-lg bg-[#245C3A] text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
+            >
+              Complete Payment — ₹199/month
             </button>
           </>
         ) : (
           <>
-            <p className="text-xs text-gray-500 mb-2">{newsletterPref?.email || user?.email}</p>
             <div className="flex items-center gap-2 mb-3">
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${newsletterPref?.isSubscribed ? "bg-[#16803C] text-white" : "bg-[#F59E0B] text-white"}`}>
-                {newsletterPref?.isSubscribed ? "Active" : "Unsubscribed"}
-              </span>
+              <CreditCard className="h-3.5 w-3.5 text-gray-500" />
+              <h3 className="text-xs font-bold text-gray-900">Not Subscribed</h3>
             </div>
+            <p className="text-[10px] text-gray-600 mb-3">
+              Unlock GreenMart Premium for ₹199/month. Enjoy exclusive subscriber discounts, fresh harvest updates, and farmer stories.
+            </p>
             <button
-              disabled={newsletterBusy}
-              onClick={newsletterPref?.isSubscribed ? handleUnsubscribe : handleSubscribe}
-              className="h-9 rounded-lg bg-[#245C3A] px-4 text-xs font-semibold text-white disabled:opacity-50"
+              onClick={handleCheckout}
+              className="w-full h-9 rounded-lg bg-[#245C3A] text-[10px] font-semibold text-white hover:bg-[#1E4A30]"
             >
-              {newsletterBusy ? "Updating..." : newsletterPref?.isSubscribed ? "Unsubscribe" : "Subscribe Again"}
+              Subscribe Now — ₹199/month
             </button>
+            <p className="mt-2 text-[10px] text-[#82908B]">
+              Mock payment demonstration — no real money will be charged.
+            </p>
           </>
         )}
       </motion.section>
@@ -530,9 +638,13 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
   const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
   const unit = product.unit || "unit";
   const productId = product._id || product.id;
+  const isExclusive = Boolean(offer.isSubscriberExclusive);
   const savingLabel = offer.discountType === "Percentage"
     ? `${offer.discountPercent}% OFF`
     : `Save ${formatCurrency(offer.discountAmount)}`;
+  const exclusiveSavingLabel = offer.exclusiveDiscountType === "Percentage"
+    ? `${Math.round((offer.exclusiveDiscountAmount ?? 0) / (offer.originalPrice ?? 1) * 100)}% OFF`
+    : `Save ${formatCurrency(offer.exclusiveDiscountAmount ?? 0)}`;
   const requiredQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
@@ -544,7 +656,7 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
       variants={cardItemVariants}
       whileHover={reducedMotion ? undefined : cardHover.hover}
       whileTap={reducedMotion ? undefined : cardHover.tap}
-      className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#E5EBE5] bg-white p-2.5"
+      className={`flex min-w-0 flex-col overflow-hidden rounded-xl border p-2.5 ${isExclusive ? "border-[#E4E9E3] bg-[#F7FAF7]" : "border-[#E5EBE5] bg-white"}`}
     >
       <motion.div
         initial="hidden"
@@ -565,12 +677,21 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
         >
           <BadgePercent aria-hidden="true" className="h-2.5 w-2.5" /> {offer.type}
         </motion.span>
+        {isExclusive && (
+          <motion.span
+            whileHover={reducedMotion ? undefined : badgeHover.hover}
+            whileTap={reducedMotion ? undefined : badgeHover.tap}
+            className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-full bg-[#245C3A] px-2 py-0.5 text-[9px] font-semibold text-white"
+          >
+            <BadgePercent aria-hidden="true" className="h-2.5 w-2.5" /> Subscriber Exclusive
+          </motion.span>
+        )}
         {upcoming && (
           <span className="absolute right-1 top-1 rounded-full bg-[#C2410C] px-2 py-0.5 text-[9px] font-semibold text-white">
             Coming Soon
           </span>
         )}
-        {!upcoming && (
+        {!upcoming && !isExclusive && (
           <span className="absolute right-1 top-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white">
             Active
           </span>
@@ -581,9 +702,22 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
       </Link>
       <p className="mt-0 truncate text-[9px] text-[#7A877F] mb-1.5">{farmerName}</p>
       <div className="flex flex-wrap items-baseline gap-x-1.5 mb-1.5">
-        <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.offerPrice)} / {unit}</span>
-        <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)}</span>
-        <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{savingLabel}</span>
+        {isExclusive && offer.publicPrice != null && offer.exclusivePrice != null && offer.publicPrice > offer.exclusivePrice ? (
+          <>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.publicPrice)} / {unit}</span>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.exclusivePrice)} / {unit}</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">{exclusiveSavingLabel}</span>
+            {offer.additionalSavings != null && offer.additionalSavings > 0 && (
+              <span className="text-[9px] font-bold text-[#14532D]">+{formatCurrency(offer.additionalSavings)} subscriber savings</span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.offerPrice)} / {unit}</span>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)}</span>
+            <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{savingLabel}</span>
+          </>
+        )}
       </div>
       {requiredQuantity > 1 && <p className="mt-0 text-[9px] leading-3 text-[#71817D] mb-1.5">At {requiredQuantity}+ {unit}</p>}
       <OfferCountdown

@@ -113,7 +113,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile).toBeDefined();
@@ -271,7 +271,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.farmName).toBe("Updated Farm");
@@ -297,7 +297,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.farmName).toBe("Preserved Farm");
@@ -324,7 +324,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.verificationStatus).toBe("Pending");
@@ -345,7 +345,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.certification.verifiedByAdmin).toBe(true);
@@ -364,7 +364,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.certification.rejectedByAdmin).toBe(true);
@@ -393,7 +393,7 @@ describe("Farmer resubmission regression", () => {
         .get("/api/admin/farmers")
         .set("Authorization", authHeader(adminToken));
 
-      const profile = listed.body.find(
+      const profile = listed.body.items.find(
         (item) => String(item.user._id) === String(farmerId)
       );
       expect(profile.verificationStatus).toBe("Pending");

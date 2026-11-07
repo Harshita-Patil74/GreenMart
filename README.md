@@ -597,6 +597,9 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | No (only for image uploads) |
 | `CLOUDINARY_API_KEY` | Cloudinary API key | No (only for image uploads) |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret | No (only for image uploads) |
+| `IMAGEKIT_PUBLIC_KEY` | ImageKit public key | No (only for newsletter banners) |
+| `IMAGEKIT_PRIVATE_KEY` | ImageKit private key (server-only) | No (only for newsletter banners) |
+| `IMAGEKIT_URL_ENDPOINT` | ImageKit URL endpoint | No (only for newsletter banners) |
 
 > The root `server/.env.example` exists and contains all the above variables. Copy it to `.env` and fill in real values before starting the backend.
 > The client directory does **not** ship with a `.env.example` file. Create `client/.env` manually.
@@ -846,3 +849,30 @@ Existing offers in the database that lack the `isActive` field are treated as ac
 - Admin Add Farmer supports certificate and farm photo uploads to Cloudinary.
 - SweetAlert2 alert utility expanded (showInfo, showDeleteConfirm, showLoading, closeAlert).
 - Refresh-token auth, notification system, time-based offers maintained.
+
+---
+
+## ImageKit Newsletter Banner Uploads
+
+GreenMart uses **ImageKit.io** for newsletter campaign banner images (separate from Cloudinary product images).
+
+### Admin flow
+1. Admin Dashboard ? Newsletter ? Create/Edit Campaign.
+2. Use **Upload Banner Image** (JPG/PNG/WebP, max 5 MB) or paste a public URL.
+3. Uploaded image is sent to backend POST /api/newsletter/admin/newsletter-banner/upload (admin-only, Multer-validated), which uploads to ImageKit folder /greenmart/newsletters/banners/ with a unique filename and returns { url, fileId }.
+4. The returned URL is saved as annerImage/annerImageUrl on the campaign; annerImageFileId supports replacement/cleanup.
+
+### Customer flow
+- Customer Dashboard ? My Newsletters ? campaign detail renders the banner image prominently above the heading/content, with graceful fallback when missing or broken.
+
+### Environment variables (server/.env)
+- IMAGEKIT_PUBLIC_KEY
+- IMAGEKIT_PRIVATE_KEY
+- IMAGEKIT_URL_ENDPOINT
+
+Configure these from the ImageKit dashboard (Developer options ? API keys). If missing, uploads return a clear 503 configuration error.
+
+### Security
+- Private key stays server-side only.
+- Only authenticated admins can upload/replace/remove banners.
+- File type and size validated on both frontend and backend.

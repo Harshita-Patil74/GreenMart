@@ -11,6 +11,7 @@ import getImageUrl from "../../utils/imageUrl";
 import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import BottomNavigation from "../../components/layout/BottomNavigation.jsx";
+import { ChatAssistant } from "../../components/assistant/ChatAssistant.jsx";
 
 function salesSeries(orders, farmerId, days) {
   const now = new Date();
@@ -242,6 +243,15 @@ export default function FarmerDashboard() {
           </div>
         </motion.section>
       </motion.div>
+
+      <motion.section
+        variants={sectionReveal}
+        initial="hidden"
+        animate="visible"
+        className="rounded-xl border border-[#E2E6DF] bg-white p-6 shadow-sm"
+      >
+        <ChatAssistant />
+      </motion.section>
     </section>
   );
 }

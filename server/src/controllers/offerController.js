@@ -55,6 +55,7 @@ async function validateOfferData(body, farmerId, existing) {
   const { product, error } = await getEligibleProduct(productId, farmerId);
   if (error) return { error };
   if (Number(product.price) <= 0) return { error: "Offers require a product with a price greater than zero." };
+  const price = Number(product.price);
   const startValue = body.startDate ?? existing?.startDate;
   const endValue = body.endDate ?? existing?.endDate;
   const startTimeValue = body.startTime ?? existing?.startTime;
@@ -85,6 +86,11 @@ async function validateOfferData(body, farmerId, existing) {
       ? null
       : Number(body.maximumDiscount ?? existing?.maximumDiscount ?? null),
     bundleConditions: String(body.bundleConditions ?? existing?.bundleConditions ?? "").trim(),
+    isSubscriberExclusive: Boolean(body.isSubscriberExclusive ?? existing?.isSubscriberExclusive ?? false),
+    exclusiveDiscountType: body.exclusiveDiscountType ?? existing?.exclusiveDiscountType ?? null,
+    exclusiveDiscountValue: body.exclusiveDiscountValue === "" || body.exclusiveDiscountValue === null || body.exclusiveDiscountValue === undefined
+      ? null
+      : Number(body.exclusiveDiscountValue ?? existing?.exclusiveDiscountValue ?? null),
   };
 
   if (!data.title || data.title.length > 100) return { error: "Offer title is required and must be 100 characters or fewer." };
@@ -117,6 +123,19 @@ async function validateOfferData(body, farmerId, existing) {
   }
   if (data.bundleConditions.length > 500) return { error: "Bundle conditions must be 500 characters or fewer." };
 
+  if (data.isSubscriberExclusive || data.exclusiveDiscountType || data.exclusiveDiscountValue) {
+    if (!DISCOUNT_TYPES.includes(data.exclusiveDiscountType)) return { error: "Choose a valid subscriber-exclusive discount type." };
+    if (!Number.isFinite(data.exclusiveDiscountValue) || data.exclusiveDiscountValue <= 0) return { error: "Subscriber-exclusive discount value must be greater than zero." };
+    if (data.exclusiveDiscountType === "Percentage" && data.exclusiveDiscountValue > 100) return { error: "Subscriber-exclusive percentage discount cannot exceed 100%." };
+    const publicPerUnit = data.discountType === "Percentage" ? price * data.discountValue / 100 : data.discountValue;
+    const publicDiscountTotal = money(Math.min(price * 1, publicPerUnit * 1, data.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(data.maximumDiscount)));
+    const publicFinalPrice = money(price - (Number.isFinite(publicDiscountTotal) ? publicDiscountTotal : 0));
+    const exclusivePerUnit = data.exclusiveDiscountType === "Percentage" ? publicFinalPrice * data.exclusiveDiscountValue / 100 : data.exclusiveDiscountValue;
+    if (data.exclusiveDiscountType === "Fixed Amount" && exclusivePerUnit >= publicFinalPrice) return { error: "Subscriber-exclusive fixed discount must be lower than the public offer price." };
+    const exclusiveFinalPrice = money(publicFinalPrice - exclusivePerUnit);
+    if (!Number.isFinite(exclusiveFinalPrice) || exclusiveFinalPrice < 0) return { error: "Subscriber-exclusive discount would result in an invalid final price." };
+  }
+
   return { data };
 }
 
@@ -138,6 +157,31 @@ function serialize(offer, sales = new Map()) {
       plain.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(plain.maximumDiscount)
     ))
     : null;
+
+  const publicOfferPrice = totalDiscount == null ? null : money((price * quantity - totalDiscount) / quantity);
+
+  let exclusivePrice = null;
+  let exclusiveDiscountAmount = null;
+  let additionalSavings = null;
+  const hasPremiumDiscount = plain.exclusiveDiscountType && Number.isFinite(plain.exclusiveDiscountValue) && Number(plain.exclusiveDiscountValue) > 0;
+  if (hasPremiumDiscount) {
+    const exclusivePerUnit = plain.exclusiveDiscountType === "Percentage"
+      ? publicOfferPrice * Number(plain.exclusiveDiscountValue) / 100
+      : Number(plain.exclusiveDiscountValue);
+    const exclusiveDiscount = validPrice && Number.isFinite(quantity) && quantity > 0
+      ? money(Math.min(
+          publicOfferPrice * quantity,
+          exclusivePerUnit * quantity,
+          plain.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(plain.maximumDiscount)
+        ))
+      : null;
+    if (exclusiveDiscount != null && exclusiveDiscount > 0) {
+      exclusivePrice = money(publicOfferPrice - exclusiveDiscount / quantity);
+      if (!Number.isFinite(exclusivePrice) || exclusivePrice < 0) exclusivePrice = 0;
+      exclusiveDiscountAmount = money(exclusiveDiscount / quantity);
+      additionalSavings = publicOfferPrice != null ? money(publicOfferPrice - exclusivePrice) : null;
+    }
+  }
   return {
     ...plain,
     approvalStatus: plain.status,
@@ -145,7 +189,11 @@ function serialize(offer, sales = new Map()) {
     originalPrice: validPrice ? price : null,
     discountAmount: totalDiscount == null ? null : money(totalDiscount / quantity),
     discountPercent: totalDiscount == null ? null : Math.round((totalDiscount / (price * quantity)) * 100),
-    offerPrice: totalDiscount == null ? null : money((price * quantity - totalDiscount) / quantity),
+    offerPrice: publicOfferPrice,
+    publicPrice: publicOfferPrice,
+    exclusivePrice,
+    exclusiveDiscountAmount,
+    additionalSavings,
     unitsSold: performance.unitsSold,
     totalSales: performance.totalSales,
   };

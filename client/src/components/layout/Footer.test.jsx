@@ -1,12 +1,19 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { Provider } from "react-redux";
 import categoryApi from "../../api/categoryApi.js";
 import Footer from "./Footer.jsx";
+
+const mockStore = {
+  auth: { user: null, token: null },
+};
 
 function renderFooter() {
   return render(
     <MemoryRouter>
-      <Footer />
+      <Provider store={{ getState: () => mockStore, subscribe: () => () => {}, dispatch: () => {} }}>
+        <Footer />
+      </Provider>
     </MemoryRouter>
   );
 }

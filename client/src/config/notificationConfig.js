@@ -3,7 +3,7 @@ import {
   CreditCard, CircleAlert, Wallet, Tag, BadgeCheck, CircleX, RefreshCw, Ban,
   UserPlus, UserCheck, UserX, FileText, ShieldCheck, FileX, PackagePlus,
   Package, AlertTriangle, Heart, MessageCircle, Star, Headset, MessageSquare,
-  ShieldAlert, LockKeyhole, Bell, Users, Boxes, BadgePercent, User,
+  ShieldAlert, LockKeyhole, Bell, Users, Boxes, BadgePercent, User, Newspaper, Mail,
 } from "lucide-react";
 
 // Safe, predefined notification type -> icon component mapping.
@@ -49,7 +49,11 @@ export const NOTIFICATION_TYPE_ICONS = {
   profileUpdated: User,
   supportRequestSubmitted: FileText,
   paymentSuccess: CreditCard,
+  newsletter_subscription_payment_success: CreditCard,
+  newsletter_subscription_payment_failed: CreditCard,
+  newsletter_subscription_expired: CreditCard,
   newsletter_unsubscribed_admin: Bell,
+  newsletter_campaign: Newspaper,
 };
 
 const TYPE_COLORS = {
@@ -86,6 +90,10 @@ const TYPE_COLORS = {
   farmerCertificationSubmitted: { icon: "text-amber-600", background: "bg-amber-50" },
   wishlistOffer: { icon: "text-emerald-600", background: "bg-emerald-50" },
   newsletter_unsubscribed_admin: { icon: "text-slate-600", background: "bg-slate-100" },
+  newsletter_subscription_payment_success: { icon: "text-emerald-600", background: "bg-emerald-50" },
+  newsletter_subscription_payment_failed: { icon: "text-red-600", background: "bg-red-50" },
+  newsletter_subscription_expired: { icon: "text-amber-600", background: "bg-amber-50" },
+  newsletter_campaign: { icon: "text-emerald-600", background: "bg-emerald-50" },
 };
 
 export function getNotificationIcon(type) {
@@ -97,9 +105,9 @@ export function getNotificationStyle(type = "") {
   return TYPE_COLORS[type] || { icon: "text-slate-600", background: "bg-slate-100" };
 }
 
-export const CUSTOMER_CATEGORIES = ["all", "orders", "offers", "payments", "wishlist", "messages", "support", "account"];
+export const CUSTOMER_CATEGORIES = ["all", "orders", "offers", "payments", "wishlist", "messages", "support", "account", "newsletter"];
 export const FARMER_CATEGORIES = ["all", "orders", "offers", "products", "inventory", "certifications", "messages", "support", "account"];
-export const ADMIN_CATEGORIES = ["all", "orders", "farmers", "products", "inventory", "offers", "support", "security"];
+export const ADMIN_CATEGORIES = ["all", "orders", "farmers", "products", "inventory", "offers", "support", "security", "subscription_payments"];
 
 export const CATEGORY_LABELS = {
   all: "All",
@@ -110,12 +118,15 @@ export const CATEGORY_LABELS = {
   offers: "Offers",
   support: "Support",
   security: "Security",
+  subscription_payments: "Subscription Payments",
+  payments: "Payments",
   reviews: "Reviews",
   payments: "Payments",
   wishlist: "Wishlist",
   messages: "Messages",
   account: "Account",
   certifications: "Certifications",
+  newsletter: "My Newsletter",
 };
 
 export const CATEGORY_ICONS = {
@@ -126,11 +137,13 @@ export const CATEGORY_ICONS = {
   offers: BadgePercent,
   support: FileText,
   security: ShieldAlert,
+  subscription_payments: Wallet,
   reviews: Star,
   payments: CreditCard,
   wishlist: Heart,
   messages: MessageCircle,
   account: User,
+  newsletter: Newspaper,
 };
 
 // Map notification `type` -> standard `category` for legacy records saved
@@ -170,6 +183,10 @@ export const TYPE_TO_CATEGORY = {
   supportRequestSubmitted: "support",
   paymentSuccess: "payments",
   newsletter_unsubscribed_admin: "newsletter",
+  newsletter_subscription_payment_success: "subscription_payments",
+  newsletter_subscription_payment_failed: "subscription_payments",
+  newsletter_subscription_expired: "subscription_payments",
+  newsletter_campaign: "newsletter",
 };
 
 export function normalizeCategory(notification) {

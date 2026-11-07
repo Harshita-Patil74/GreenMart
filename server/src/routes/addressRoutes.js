@@ -5,5 +5,7 @@ const { auth } = require("../middleware/auth");
 router.get("/", auth, c.list);
 router.post("/", auth, c.create);
 router.put("/:id", auth, c.update);
+router.patch("/:id", auth, c.update);
+router.patch("/:id/default", auth, c.setDefault);
 router.delete("/:id", auth, c.remove);
 module.exports = router;
