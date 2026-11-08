@@ -9,6 +9,7 @@ import {
   Bell,
   Boxes,
   Heart,
+  Home,
   LayoutDashboard,
   LogOut,
   LogIn,
@@ -46,6 +47,7 @@ const navigationByRole = {
     { label: "Settings", path: "/customer/settings", icon: Settings },
   ],
   farmer: [
+    { label: "Customer Home", path: "/", icon: Home },
     { label: "Farmer Dashboard", path: "/farmer/dashboard", icon: LayoutDashboard },
     { label: "My Products", path: "/farmer/products", icon: Package },
     { label: "Add Product", path: "/farmer/products/new", icon: Package },
@@ -57,6 +59,7 @@ const navigationByRole = {
     { label: "Profile", path: "/farmer/profile", icon: User },
   ],
   admin: [
+    { label: "Customer Home", path: "/", icon: Home },
     { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Products Management", path: "/admin/products", icon: Package },
     { label: "Orders Management", path: "/admin/orders", icon: ShoppingBag },
