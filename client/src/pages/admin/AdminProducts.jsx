@@ -61,7 +61,7 @@ export default function AdminProducts() {
   };
   useEffect(() => {
     load();
-    farmerApi.list().then(({ data }) => setFarmers(Array.isArray(data) ? data : [])).catch((requestError) => setError(requestError?.message || "Couldn't load farmer options."));
+      farmerApi.list({ limit: 100 }).then(({ data }) => setFarmers(Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []))).catch((requestError) => setError(requestError?.message || "Couldn't load farmer options."));
   }, [search, category, status, page, pageSize, showDeleted]);
 
   const totalImageCount = () => existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).length + imageFiles.length;
