@@ -44,7 +44,7 @@ describe("Pagination", () => {
   it("calls onChange with page number when clicking a page button", () => {
     render(<Pagination {...defaultProps} />);
     fireEvent.click(screen.getByRole("button", { name: "2" }));
-    expect(defaultProps.onChange).toHaveBeenCalledWith(2, undefined);
+    expect(defaultProps.onChange).toHaveBeenCalledWith(2);
   });
 
   it("calls onChange with page 1 and new page size when page size changes", () => {

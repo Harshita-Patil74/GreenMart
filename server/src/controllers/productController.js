@@ -55,22 +55,41 @@ function extractPublicId(secureUrl) {
 }
 
 async function listProducts(req, res, activeOnly) {
-  const { search, category, minPrice, maxPrice, inStock, sort, page=1, limit=12, showDeleted } = req.query;
-  const q = activeOnly ? { status: "Active", $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] } : {};
-  if (showDeleted !== "true") q.$or = [{ isDeleted: false }, { isDeleted: { $exists: false } }];
-  if (search) {
+  const { search, category, minPrice, maxPrice, inStock, sort, showDeleted } = req.query;
+  const pageNum = Number.isInteger(Number(req.query.page)) && Number(req.query.page) >= 1 ? Number(req.query.page) : 1;
+  let limitNum = Number.isInteger(Number(req.query.limit)) && Number(req.query.limit) >= 1 ? Number(req.query.limit) : 10;
+  if (limitNum > 100) limitNum = 100;
+  const page = pageNum;
+  const limit = limitNum;
+  const and = [];
+  if (activeOnly) {
+    and.push({ status: "Active" });
+    and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
+  } else if (showDeleted !== "true") {
+    and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
+  }
+  if (search && String(search).trim()) {
     const trimmed = String(search).trim();
-    if (trimmed) {
-      q.$or = [
+    and.push({
+      $or: [
         { $text: { $search: trimmed } },
         { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
-      ];
-    }
+      ],
+    });
   }
-  if (category && category !== "All Products") q.category = category;
-  if (minPrice||maxPrice) { q.price = {}; if(minPrice) q.price.$gte=Number(minPrice); if(maxPrice) q.price.$lte=Number(maxPrice); }
-  if (inStock === "true") q.stock = { $gt: 0 };
-  if (req.query.farmer) q.farmer = req.query.farmer;
+  const normalizedCategory = category ? String(category).trim() : "";
+  if (normalizedCategory && normalizedCategory !== "All Products" && normalizedCategory !== "All Categories") {
+    and.push({ category: normalizedCategory });
+  }
+  if (minPrice || maxPrice) {
+    const priceFilter = {};
+    if (minPrice) priceFilter.$gte = Number(minPrice);
+    if (maxPrice) priceFilter.$lte = Number(maxPrice);
+    and.push({ price: priceFilter });
+  }
+  if (inStock === "true") and.push({ stock: { $gt: 0 } });
+  if (req.query.farmer) and.push({ farmer: req.query.farmer });
+  const q = and.length ? { $and: and } : {};
   let sortObj = { createdAt: -1 };
   if (sort === "price_asc") sortObj = { price: 1 };
   if (sort === "price_desc") sortObj = { price: -1 };
@@ -168,8 +187,9 @@ exports.storefrontGet = asyncHandler(async (req,res) => {
 });
 exports.mine = asyncHandler(async (req,res) => {
   const { search, category, page=1, limit=10, showDeleted, status } = req.query;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
+  const pageNum = Number.isInteger(Number(page)) && Number(page) >= 1 ? Number(page) : 1;
+  let limitNum = Number.isInteger(Number(limit)) && Number(limit) >= 1 ? Number(limit) : 10;
+  if (limitNum > 50) limitNum = 50;
   const and = [];
   if (showDeleted !== "true") {
     and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });

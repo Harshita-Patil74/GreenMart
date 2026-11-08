@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Boxes, Check, PackageX } from "lucide-react";
 import BackButton from "../../components/common/BackButton.jsx";
 import toast from "react-hot-toast";
@@ -6,6 +6,7 @@ import productApi from "../../api/productApi";
 import getImageUrl from "../../utils/imageUrl";
 import StatusBadge from "../../components/common/StatusBadge.jsx";
 import { unwrapList } from "./farmerUtils";
+import Pagination from "../../components/common/Pagination.jsx";
 
 function stockState(product) {
   const stock = Number(product.stock) || 0;
@@ -22,20 +23,30 @@ export default function Inventory() {
   const [stockValues, setStockValues] = useState({});
   const [thresholdValues, setThresholdValues] = useState({});
   const [saving, setSaving] = useState({});
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const requestIdRef = useRef(0);
 
   const loadInventory = async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError("");
     try {
-      const response = await productApi.mine();
-      setItems(unwrapList(response.data));
+      const response = await productApi.mine({ search, page, limit: pageSize });
+      if (requestId !== requestIdRef.current) return;
+      const data = response.data;
+      setItems(unwrapList(data));
+      setTotal(Number(data?.total) || 0);
     } catch (requestError) {
+      if (requestId !== requestIdRef.current) return;
       setError(requestError?.response?.data?.message || "We couldn't load your inventory.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
-  useEffect(() => { loadInventory(); }, []);
+  useEffect(() => { loadInventory(); }, [page, pageSize, search]);
 
   const summary = useMemo(() => ({
     total: items.length,
@@ -89,9 +100,18 @@ export default function Inventory() {
           <h1 className="text-xl font-bold tracking-tight text-[#172A27]">Inventory</h1>
           <p className="mt-1 text-xs text-[#71817D]">Track stock levels and manage your products.</p>
         </div>
-        <button type="button" onClick={toggleAll} disabled={!items.length} className="h-8 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white hover:bg-[#066B42] disabled:opacity-50">
-          {Object.keys(editing).length === items.length && items.length ? "Done Updating" : "Update Stock"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search products"
+            className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs outline-none focus:border-[#179361]"
+          />
+          <button type="button" onClick={toggleAll} disabled={!items.length} className="h-8 rounded-md bg-[#07814E] px-3 text-xs font-semibold text-white hover:bg-[#066B42] disabled:opacity-50">
+            {Object.keys(editing).length === items.length && items.length ? "Done Updating" : "Update Stock"}
+          </button>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -167,6 +187,9 @@ export default function Inventory() {
             </table>
           </div>
         )}
+        <div className="border-t border-[#E9EFED] px-3 py-2">
+          <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
+        </div>
       </div>
     </section>
   );

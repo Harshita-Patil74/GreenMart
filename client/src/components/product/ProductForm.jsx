@@ -103,16 +103,16 @@ export default function ProductForm({ initial, onSubmit, isSubmitting = false })
       <div>
         <label className="block text-sm font-medium mb-1">Category</label>
         {categoriesLoading ? (
-          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={isSubmitting} disabled>
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={categoriesLoading || isSubmitting}>
             <option value="">Loading categories...</option>
           </select>
         ) : categoryList.length ? (
-          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required disabled={isSubmitting}>
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required disabled={categoriesLoading || isSubmitting}>
             <option value="">Select category</option>
             {categoryList.map((cat) => <option key={cat._id || cat.name} value={cat.name}>{cat.name}</option>)}
           </select>
         ) : (
-          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={isSubmitting} disabled>
+          <select className="h-8 border border-border rounded-btn px-2 text-sm w-full" disabled={categoriesLoading || isSubmitting}>
             <option value="">No categories available</option>
           </select>
         )}

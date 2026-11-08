@@ -148,7 +148,9 @@ export default function CustomerOffers() {
       return (!type || offer.type === type)
         && (!category || product.category === category)
         && (!query || searchable.includes(query))
-        && (!onlyActive || offer.effectiveStatus === "Active");
+        && (!onlyActive || offer.effectiveStatus === "Active")
+        && offer.effectiveStatus !== "Pending"
+        && offer.effectiveStatus !== "Rejected";
     });
 
     return filtered.sort((left, right) => {

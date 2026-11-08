@@ -3,6 +3,7 @@ import { MapPin, Phone, Plus, Trash2, Pencil, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import toast from "react-hot-toast";
+import { showDeleteConfirm } from "../../utils/alertUtils";
 import addressApi from "../../api/addressApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
@@ -46,7 +47,16 @@ export default function SavedAddresses({ embedded = false }) {
 
   const saveAddress = async (event) => {
     event.preventDefault();
+    if (!form.name.trim() || !form.line1.trim() || !form.city.trim() || !form.phone.trim()) {
+      setError("All fields are required.");
+      return;
+    }
+    if (!/^\+?[\d\s-]{7,}$/.test(form.phone.trim())) {
+      setError("Please enter a valid phone number.");
+      return;
+    }
     setSaving(true);
+    setError(null);
     try {
       if (editingId) await addressApi.update(editingId, form);
       else await addressApi.create(form);
@@ -61,17 +71,32 @@ export default function SavedAddresses({ embedded = false }) {
     }
   };
 
+  const [deletingId, setDeletingId] = useState(null);
+
   const remove = async (id) => {
+    const result = await showDeleteConfirm("this address");
+    if (!result.isConfirmed) return;
+    setDeletingId(id);
     try {
       await addressApi.remove(id);
       setAddresses((current) => current.filter((address) => address._id !== id));
       toast.success("Address removed.");
     } catch (requestError) {
-      setError(requestError?.message || "Couldn't remove this address.");
+      setError(requestError?.response?.data?.message || "Couldn't remove this address.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  if (loading) return <div className="text-sm text-gray-500">Loading saved addresses...</div>;
+  const setDefault = async (id) => {
+    try {
+      await addressApi.setDefault(id);
+      toast.success("Default address updated.");
+      await load();
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || "Couldn't update default address.");
+    }
+  };
   if (error && addresses.length === 0) return <ErrorState message={error} onRetry={load} />;
 
   return (
@@ -94,9 +119,8 @@ export default function SavedAddresses({ embedded = false }) {
           </button>
         </motion.div>
       </>
-)}
-}
-      {embedded && (
+    )}
+    {embedded && (
         <button onClick={() => openForm()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-semibold text-white hover:bg-primary-hover">
           <Plus className="h-4 w-4" /> Add Address
         </button>
@@ -156,10 +180,11 @@ export default function SavedAddresses({ embedded = false }) {
               className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900"><MapPin className="h-4 w-4 text-primary" />{address.name}</div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900"><MapPin className="h-4 w-4 text-primary" />{address.name}{address.isDefault && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Default</span>}</div>
                 <div className="flex gap-1">
+                  {!address.isDefault && <button onClick={() => setDefault(address._id)} aria-label="Set as default" className="rounded p-1.5 text-gray-500 hover:bg-emerald-50 hover:text-emerald-700 text-[10px] font-semibold">Set default</button>}
                   <button onClick={() => openForm(address)} aria-label="Edit address" className="rounded p-1.5 text-gray-500 hover:bg-gray-50 hover:text-primary"><Pencil className="h-3.5 w-3.5" /></button>
-                  <button onClick={() => remove(address._id)} aria-label="Delete address" className="rounded p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => remove(address._id)} disabled={deletingId === address._id} aria-label="Delete address" className="rounded p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
               </div>
               <p className="mt-2 text-xs text-gray-600">{address.line1}, {address.city}</p>

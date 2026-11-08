@@ -68,9 +68,8 @@ export default function Farmers() {
                   src={getImageUrl(farm.photo || farm.user?.avatar)}
                   alt={farm.farmName || farm.name}
                   className="w-16 h-16 rounded-2xl object-cover bg-emerald-100 border-2 border-emerald-200 shadow-sm shrink-0"
-                  onError={(e) => { e.currentTarget.src = "/images/placeholder.svg"; }}
-                />
-                />
+                   onError={(e) => { e.currentTarget.src = "/images/placeholder.svg"; }}
+                 />
                 <div>
                   <h3 className="font-heading font-bold text-gray-900 text-lg">
                     {farm.farmName || farm.name}

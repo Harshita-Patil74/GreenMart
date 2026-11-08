@@ -248,27 +248,72 @@ exports.updateLocation = asyncHandler(async (req,res) => {
   res.json(req.user.role === "farmer" ? farmerOrderView(order, req.user._id) : order);
 });
 exports.adminAll = asyncHandler(async (req,res) => {
-  const { search, page=1, limit=10 } = req.query;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
+  const { search, status, from, to } = req.query;
+  const rawPage = req.query.page;
+  const rawLimit = req.query.limit;
+  const pageNum = Number.isInteger(Number(rawPage)) && Number(rawPage) >= 1 ? Number(rawPage) : 1;
+  let limitNum = Number.isInteger(Number(rawLimit)) && Number(rawLimit) >= 1 ? Number(rawLimit) : 10;
+  if (limitNum > 100) limitNum = 100;
+  const validateDate = (value, name) => {
+    if (!value) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const error = new Error(`Invalid ${name} date. Expected YYYY-MM-DD.`);
+      error.status = 400;
+      throw error;
+    }
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+      const error = new Error(`Invalid ${name} date.`);
+      error.status = 400;
+      throw error;
+    }
+  };
+  validateDate(from, "from");
+  validateDate(to, "to");
+  if (from && to && from > to) {
+    const error = new Error("Start date must be before or equal to end date.");
+    error.status = 400;
+    throw error;
+  }
   const query = {};
   if (search && search.trim()) {
     const s2 = search.trim().toLowerCase();
     const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    query.$or = [
+    const orConditions = [
       { orderNumber: regex },
       { paymentMethod: regex },
       { status: regex },
-      { "user.name": regex },
-      { "user.email": regex },
-      { "items.product.name": regex },
+      { "items.name": regex },
     ];
+    const matchingUsers = await User.find({ $or: [{ name: regex }, { email: regex }] }).select("_id").lean();
+    if (matchingUsers.length) {
+      orConditions.push({ user: { $in: matchingUsers.map((u) => u._id) } });
+    }
+    query.$or = orConditions;
   }
+  if (status && status !== "All Orders" && status !== "All Status") {
+    query.status = status;
+  }
+  if (from || to) {
+    query.createdAt = {};
+    if (from) query.createdAt.$gte = new Date(`${from}T00:00:00.000Z`);
+    if (to) query.createdAt.$lte = new Date(`${to}T23:59:59.999Z`);
+  }
+  const baseQuery = { ...query };
+  delete baseQuery.status;
+  const statusCountsAgg = await Order.aggregate([
+    { $match: baseQuery },
+    { $group: { _id: "$status", count: { $sum: 1 } } },
+  ]);
+  const statusCounts = {};
+  statusCountsAgg.forEach((s) => { statusCounts[s._id || "Unknown"] = s.count; });
+  const totalAll = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+  statusCounts[""] = totalAll;
   const [orders, total] = await Promise.all([
     Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("user","name email").populate("items.product","name category images unit"),
     Order.countDocuments(query),
   ]);
-  res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
+  res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum, statusCounts });
 });
 exports.analytics = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") return res.status(403).json({ message: "Forbidden" });

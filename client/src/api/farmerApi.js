@@ -1,7 +1,7 @@
 import api from "./axiosInstance";
 
 export default {
-  list: () => api.get("/farmers"),
+  list: (p = {}) => api.get("/farmers", { params: p }),
   get: (id) => api.get(`/farmers/${id}`),
   updateMe: (d) => api.put("/farmers/me", d),
   updateLocation: (d) => api.put("/farmers/me/location", d),

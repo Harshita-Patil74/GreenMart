@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { Link } from "react-router-dom";
-import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
+import orderApi from "../../api/orderApi";
+import Pagination from "../../components/common/Pagination.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { formatCurrency } from "../../utils/constants.js";
@@ -16,13 +17,18 @@ export default function AdminOrders() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalOrder, setModalOrder] = useState(null);
   const [newStatus, setNewStatus] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
-const [toastMsg, setToastMsg] = useState("");
+  const [statusCounts, setStatusCounts] = useState({});
+  const [toastMsg, setToastMsg] = useState("");
+  const toastTimerRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   const getInitialStatus = (currentStatus) => {
     if (["Order Placed", "Cancelled"].includes(currentStatus)) return "Packed";
@@ -33,26 +39,29 @@ const [toastMsg, setToastMsg] = useState("");
   };
 
   const load = async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await orderApi.adminAll({ search, page, limit: PAGE_SIZE });
+      const { data } = await orderApi.adminAll({ search, page, limit: pageSize, status, from, to });
+      if (requestId !== requestIdRef.current) return;
       const items = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
       setOrders(items);
+      setTotal(Number(data?.total) || items.length);
+      setStatusCounts(data?.statusCounts || {});
     } catch (e) {
+      if (requestId !== requestIdRef.current) return;
       setError(e?.message || "Couldn't load orders.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   };
-  useEffect(() => { load(); }, [search, status, from, to, page]);
+  useEffect(() => { load(); }, [search, status, from, to, page, pageSize]);
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
   const statuses = useMemo(() => [...new Set(orders.map((o) => o.status).filter(Boolean))], [orders]);
-  const filtered = useMemo(() => orders.filter((o) => {
-    const date = o.createdAt ? new Date(o.createdAt).toISOString().slice(0, 10) : "";
-    return (!status || o.status === status) && (!from || date >= from) && (!to || date <= to);
-  }), [orders, status, from, to]);
-  const current = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const filtered = orders;
+  const current = orders;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   if (error && !orders.length) return <div className="p-4 text-red-700">{error} <button onClick={load} className="underline">Retry</button></div>;
   return (
     <div className="space-y-4 pb-10">
@@ -88,7 +97,7 @@ const [toastMsg, setToastMsg] = useState("");
             className={`rounded-lg px-3 py-2 text-[11px] ${status === item ? "bg-primary text-white" : "border bg-white text-gray-600"}`}
           >
             {item || "All Orders"}
-            {item ? ` (${orders.filter((o) => o.status === item).length})` : ` (${orders.length})`}
+            {` (${statusCounts[item] ?? (item ? orders.filter((o) => o.status === item).length : total)})`}
           </button>
         ))}
       </motion.div>
@@ -153,15 +162,8 @@ const [toastMsg, setToastMsg] = useState("");
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between border-t px-3 py-2 text-[10px] text-gray-500">
-          <span>
-            {filtered.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} orders
-          </span>
-          <div className="flex gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
-            {page}/{pages}
-            <button disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
-          </div>
+        <div className="border-t px-3 py-2">
+          <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
         </div>
       </motion.section>
       {modalOrder && (
@@ -181,9 +183,10 @@ const [toastMsg, setToastMsg] = useState("");
                 try {
                   await orderApi.updateStatus(modalOrder._id, { status: newStatus, reason });
                   setModalOrder(null);
-                  setToastMsg("Status updated");
-                  load();
-                  setTimeout(() => setToastMsg(""), 3000);
+                   setToastMsg("Status updated");
+                   load();
+                   if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+                   toastTimerRef.current = setTimeout(() => setToastMsg(""), 3000);
                 } catch (e) {
                   setError(e?.response?.data?.message || e.message);
                 } finally {

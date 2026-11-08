@@ -7,6 +7,7 @@ const Notification = require("../src/models/Notification");
 const Product = require("../src/models/Product");
 const Order = require("../src/models/Order");
 const Offer = require("../src/models/Offer");
+const Category = require("../src/models/Category");
 const Wishlist = require("../src/models/Wishlist");
 const FarmerProfile = require("../src/models/FarmerProfile");
 const { randomToken, hashToken } = require("../src/utils/tokens");
@@ -50,6 +51,7 @@ describe("Notification system", () => {
     const customer = await createUser("customer", "customer");
     customerId = customer._id;
     customerToken = await login(customer.email);
+    await Category.updateOne({ name: "Fruits" }, { $setOnInsert: { name: "Fruits", isActive: true } }, { upsert: true });
   });
 
   describe("Notification model fields", () => {

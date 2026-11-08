@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { Plus, RotateCcw } from "lucide-react";
 import productApi from "../../api/productApi";
+import categoryApi from "../../api/categoryApi";
 import farmerApi from "../../api/farmerApi";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
@@ -15,7 +16,7 @@ import Pagination from "../../components/common/Pagination.jsx";
 import toast from "react-hot-toast";
 import { showDeleteConfirm, showSuccess, showError } from "../../utils/alertUtils";
 
-const PAGE_SIZE = 10;
+  const PAGE_SIZE = 10;
 const EMPTY_DRAFT = { name: "", category: "", price: "", stock: "", lowStockThreshold: "5", unit: "kg", description: "", farmer: "" };
 const MAX_IMAGES = 6;
 
@@ -38,19 +39,30 @@ export default function AdminProducts() {
   const [previewUrls, setPreviewUrls] = useState({});
   const [savingForm, setSavingForm] = useState(false);
   const [error, setError] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
+  const requestIdRef = useRef(0);
   const load = async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true); setError(null);
     try {
-      const { data } = await productApi.list({ search, category, status: status === "Active" ? "Active" : status === "Inactive" ? "Inactive" : undefined, page, limit: PAGE_SIZE, showDeleted: showDeleted ? "true" : undefined });
+      const { data } = await productApi.list({ search, category, status: status === "Active" ? "Active" : status === "Inactive" ? "Inactive" : undefined, page, limit: pageSize, showDeleted: showDeleted ? "true" : undefined });
+      if (requestId !== requestIdRef.current) return;
       setProducts(Array.isArray(data?.items) ? data.items : []);
-    } catch (requestError) { setError(requestError?.message || "Couldn't load products."); }
-    finally { setLoading(false); }
+      setTotal(Number(data?.total) || 0);
+    } catch (requestError) {
+      if (requestId !== requestIdRef.current) return;
+      setError(requestError?.message || "Couldn't load products.");
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
   };
   useEffect(() => {
     load();
     farmerApi.list().then(({ data }) => setFarmers(Array.isArray(data) ? data : [])).catch((requestError) => setError(requestError?.message || "Couldn't load farmer options."));
-  }, [search, category, status, page, showDeleted]);
+  }, [search, category, status, page, pageSize, showDeleted]);
 
   const totalImageCount = () => existingImages.filter((_, i) => !existingToRemove.has(existingImages[i])).length + imageFiles.length;
 
@@ -130,12 +142,14 @@ export default function AdminProducts() {
     }
   };
 
-  const categories = useMemo(() => [...new Set(products.map((product) => product.category).filter(Boolean))].sort(), [products]);
-  const filtered = useMemo(() => products.filter((product) =>
-    (!category || product.category === category)
-    && (!status || (product.status || "Active") === status)), [products, category, status]);
-  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => {
+    categoryApi.list()
+      .then(({ data }) => {
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+        setCategories(list.map((c) => c.name).filter(Boolean).sort());
+      })
+      .catch(() => setCategories([]));
+  }, []);
 
   const toggleStatus = async (product) => {
     const nextStatus = product.status === "Inactive" ? "Active" : "Inactive";
@@ -208,14 +222,14 @@ export default function AdminProducts() {
       </div>
       <div className="overflow-x-auto">
           <ProductManagementSection
-            products={visible}
+            products={products}
             onEdit={openDialog}
             onDelete={remove}
             onRestore={restoreProduct}
             isLoading={savingForm}
           />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-[10px] text-gray-500"><Pagination page={page} pageSize={PAGE_SIZE} totalRecords={filtered.length} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2 text-[10px] text-gray-500"><Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} /></div>
     </motion.section>
     <Modal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingProduct ? "Edit Product" : "Add Product"}>
       <form onSubmit={saveProduct} className="space-y-3">
