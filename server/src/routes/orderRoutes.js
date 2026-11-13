@@ -4,6 +4,7 @@ const c = require("../controllers/orderController");
 const { auth } = require("../middleware/auth");
 const { role } = require("../middleware/role");
 const { approvedFarmer } = require("../middleware/approvedFarmer");
+router.post("/quote", auth, c.quote);
 router.post("/", auth, c.create);
 router.get("/mine", auth, c.mine);
 router.get("/farmer", auth, role("farmer","admin"), approvedFarmer, c.farmer);

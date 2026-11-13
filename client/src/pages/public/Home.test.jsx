@@ -98,7 +98,6 @@ const statusCases = [
   { label: "Rejected", effectiveStatus: "Rejected" },
   { label: "Inactive", effectiveStatus: "Inactive" },
   { label: "Expired", effectiveStatus: "Expired" },
-  { label: "Scheduled", effectiveStatus: "Scheduled" },
 ];
 
 describe("Home page offers", () => {
@@ -124,7 +123,7 @@ describe("Home page offers", () => {
     expect(imgElements.length).toBeGreaterThan(0);
     expect(imgElements[0]).toHaveAttribute("src", expect.stringContaining("/uploads/fig.jpg"));
     expect(screen.getAllByText("₹160.00").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("₹200.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/₹200\.00 \/ kg/).length).toBeGreaterThan(0);
   });
 
   it("calculates fixed discounts correctly using actual product price", async () => {
@@ -151,6 +150,26 @@ describe("Home page offers", () => {
     const figElements = await screen.findAllByText("Organic Fig");
     expect(figElements.length).toBeGreaterThan(0);
     expect(screen.queryByText("Hidden Offer")).not.toBeInTheDocument();
+  });
+
+  it("displays Scheduled (coming soon) offers", async () => {
+    const upcoming = {
+      ...percentageOffer,
+      _id: "upcoming-offer",
+      title: "Coming Soon Offer",
+      effectiveStatus: "Scheduled",
+      startDate: new Date(Date.now() + 86400000).toISOString(),
+    };
+    productApi.storefrontOffers.mockResolvedValue({
+      data: { items: [percentageOffer, upcoming] },
+    });
+    renderWithStore(<Home />);
+
+    const figElements = await screen.findAllByText("Organic Fig");
+    expect(figElements.length).toBeGreaterThan(0);
+    expect(await screen.findByText("Coming Soon Offer")).toBeInTheDocument();
+    const comingSoonElements = await screen.findAllByText(/Coming Soon/);
+    expect(comingSoonElements.length).toBeGreaterThanOrEqual(2);
   });
 
   it("shows empty state when no active offers are available", async () => {

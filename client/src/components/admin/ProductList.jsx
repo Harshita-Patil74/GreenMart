@@ -5,7 +5,7 @@ export default function ProductList({ products, onEdit, onDelete, onRestore, isL
   if (!products || products.length === 0) {
     return (
       <tr>
-        <td colSpan="7" className="p-8 text-center text-gray-500">No products match these filters.</td>
+        <td colSpan="8" className="p-8 text-center text-gray-500">No products match these filters.</td>
       </tr>
     );
   }

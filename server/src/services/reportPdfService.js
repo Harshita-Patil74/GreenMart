@@ -47,17 +47,17 @@ function getCellRows(type, { orders, products, users }) {
   }
   if (type === "Product Report") {
     return {
-      headers: ["Product", "Category", "Price", "Stock", "Status"],
-      rows: products.map((product) => [product.name, product.category, formatAmount(product.price), String(product.stock ?? 0), product.status || "Active"]),
+      headers: ["Product", "Product ID", "Category", "Price", "Stock", "Status"],
+      rows: products.map((product) => [product.name, String(product._id), product.category, formatAmount(product.price), String(product.stock ?? 0), product.status || "Active"]),
     };
   }
   if (type === "Inventory Report") {
     return {
-      headers: ["Product", "Category", "Current Stock", "Minimum Stock", "Status"],
+      headers: ["Product", "Product ID", "Category", "Current Stock", "Minimum Stock", "Status"],
       rows: products.map((product) => {
         const minimum = Number(product.lowStockThreshold ?? 10);
         const stock = Number(product.stock || 0);
-        return [product.name, product.category, String(stock), String(minimum), stock <= 0 ? "Out of Stock" : stock <= minimum ? "Low Stock" : "In Stock"];
+        return [product.name, String(product._id), product.category, String(stock), String(minimum), stock <= 0 ? "Out of Stock" : stock <= minimum ? "Low Stock" : "In Stock"];
       }),
     };
   }

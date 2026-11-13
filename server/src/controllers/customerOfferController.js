@@ -2,8 +2,11 @@ const Offer = require("../models/Offer");
 const Product = require("../models/Product");
 const User = require("../models/User");
 const FarmerProfile = require("../models/FarmerProfile");
+const NewsletterSubscription = require("../models/NewsletterSubscription");
+const jwt = require("jsonwebtoken");
+const env = require("../config/env");
 const { asyncHandler } = require("../utils/asyncHandler");
-const { money, getEffectiveStatus, getEffectiveStart, getEffectiveEnd } = require("../services/offerService");
+const { money, roundPercent, calculateOffer, getEffectiveStatus, getEffectiveStart, getEffectiveEnd } = require("../services/offerService");
 
 exports.list = asyncHandler(async (req, res) => {
   const now = new Date();
@@ -12,11 +15,41 @@ exports.list = asyncHandler(async (req, res) => {
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.max(1, Math.min(50, parseInt(limit, 10)));
 
-  // Find approved offers that are active and not yet expired
+  // Optional authentication: resolve user if a valid Bearer token is present
+  let user = null;
+  try {
+    const h = req.headers.authorization || "";
+    const token = h.startsWith("Bearer ") ? h.slice(7) : null;
+    if (token) {
+      const decoded = jwt.verify(token, env.jwtSecret);
+      user = await User.findById(decoded.id).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry");
+    }
+  } catch (e) {
+    // Ignore auth errors – unauthenticated visitors see public offers only
+  }
+
+  // Determine if the customer has an active paid Premium subscription
+  let isPremium = false;
+  if (user && user.role === "customer") {
+    const subscription = await NewsletterSubscription.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (subscription && subscription.status === "active") {
+      const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
+      if (!endDate || now <= endDate) isPremium = true;
+    }
+  }
+
+  // Find approved offers that are active and not yet expired, including upcoming offers
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
-    endDate: { $gte: now },
+    $or: [
+      { startAt: { $lte: now }, endAt: { $gte: now } },
+      { startAt: { $gt: now } },
+      { startAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+      { startAt: { $exists: false }, startDate: { $gt: now } },
+      { endAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+      { endAt: { $exists: false }, startDate: { $gt: now } },
+    ],
   })
     .sort({ createdAt: -1 })
     .populate("farmer", "name")
@@ -55,60 +88,47 @@ exports.list = asyncHandler(async (req, res) => {
 
     const quantity = Math.max(1, Number(offer.minimumQuantity || 1));
     const originalPrice = Number(product.price);
-    const perUnitDiscount = offer.discountType === "Percentage"
-      ? originalPrice * Number(offer.discountValue) / 100
-      : Number(offer.discountValue);
-    const discount = money(Math.min(
-      originalPrice * quantity,
-      perUnitDiscount * quantity,
-      offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-    ));
-    if (!Number.isFinite(originalPrice) || originalPrice <= 0 || !Number.isFinite(discount) || discount <= 0) continue;
+    const eligibleSubtotal = Math.max(originalPrice * quantity, Number(offer.minimumAmount || 0));
+    const appliedOffer = calculateOffer(product, quantity, [offer], eligibleSubtotal, isPremium);
+    const premiumOffer = calculateOffer(product, quantity, [offer], eligibleSubtotal, true);
+    if (!Number.isFinite(originalPrice) || originalPrice <= 0 || !appliedOffer) continue;
 
     const startTime = getEffectiveStart(offer);
     const endTime = getEffectiveEnd(offer);
 
-    const publicPrice = money((originalPrice * quantity - discount) / quantity);
-    let exclusivePrice = null;
-    let exclusiveDiscountAmount = null;
-    let additionalSavings = null;
-    if (offer.exclusiveDiscountType && Number.isFinite(offer.exclusiveDiscountValue) && Number(offer.exclusiveDiscountValue) > 0) {
-      const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
-        ? publicPrice * Number(offer.exclusiveDiscountValue) / 100
-        : Number(offer.exclusiveDiscountValue);
-      const exclusiveDiscount = money(Math.min(
-        publicPrice * quantity,
-        exclusivePerUnit * quantity,
-        offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-      ));
-      if (exclusiveDiscount != null && exclusiveDiscount > 0) {
-        exclusivePrice = money(publicPrice - exclusiveDiscount / quantity);
-        if (!Number.isFinite(exclusivePrice) || exclusivePrice < 0) exclusivePrice = 0;
-        exclusiveDiscountAmount = money(exclusiveDiscount / quantity);
-        additionalSavings = money(publicPrice - exclusivePrice);
-      }
-    }
+    const discount = appliedOffer?.publicDiscount || 0;
+    const publicPrice = appliedOffer?.publicFinalUnitPrice ?? originalPrice;
+    const isPremiumExclusive = offer.audience?.includes("premium") === true && !offer.audience?.includes("public");
+    const isPublicOffer = offer.audience?.includes("public") === true;
     const item = {
       _id: offer._id,
-      title: offer.title,
-      description: offer.description,
+      title: isPremiumExclusive ? "Premium Exclusive" : offer.title,
+      description: isPremiumExclusive ? "" : offer.description,
       type: offer.type,
-      discountType: offer.discountType,
-      discountValue: offer.discountValue,
+      discountType: !isPublicOffer ? null : offer.discountType,
+      discountValue: !isPublicOffer ? null : offer.discountValue,
       minimumQuantity: offer.minimumQuantity,
       minimumAmount: offer.minimumAmount,
-      maximumDiscount: offer.maximumDiscount,
-      isSubscriberExclusive: offer.isSubscriberExclusive || false,
-      exclusiveDiscountType: offer.exclusiveDiscountType || null,
-      exclusiveDiscountValue: offer.exclusiveDiscountValue || null,
+      maximumDiscount: !isPublicOffer ? null : offer.maximumDiscount,
+      isPremiumExclusive,
+      premiumExclusiveTeaser: isPremiumExclusive,
+      regularDiscountType: isPublicOffer ? offer.discountType : null,
+      regularDiscountValue: isPublicOffer ? offer.discountValue : null,
+      regularDiscountAmount: isPublicOffer ? money(appliedOffer.publicDiscount / quantity) : null,
+      regularDiscountPercent: isPublicOffer
+        ? roundPercent((appliedOffer.publicDiscount / (originalPrice * quantity)) * 100)
+        : null,
+      premiumDiscountAmount: premiumOffer?.premiumDiscount > 0
+        ? money(premiumOffer.premiumDiscount / quantity)
+        : null,
+      premiumDiscountPercent: premiumOffer?.premiumDiscount > 0 && premiumOffer.publicFinalUnitPrice > 0
+        ? roundPercent((premiumOffer.premiumDiscount / (premiumOffer.publicFinalUnitPrice * quantity)) * 100)
+        : null,
       originalPrice,
-      publicPrice,
-      offerPrice: publicPrice,
-      discountAmount: money(discount / quantity),
-      discountPercent: Math.round((discount / (originalPrice * quantity)) * 100),
-      exclusivePrice,
-      exclusiveDiscountAmount,
-      additionalSavings,
+      publicPrice: !isPublicOffer ? null : publicPrice,
+      offerPrice: isPremiumExclusive ? originalPrice : publicPrice,
+      discountAmount: !isPublicOffer ? 0 : money(discount / quantity),
+      discountPercent: !isPublicOffer ? 0 : roundPercent((discount / (originalPrice * quantity)) * 100),
       effectiveStatus,
       startDate: offer.startDate,
       endDate: offer.endDate,

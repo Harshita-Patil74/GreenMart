@@ -349,7 +349,7 @@ export default function ContinuousMarquee({
           style={{
             display: "flex",
             gap,
-            alignItems: "center",
+            alignItems: "stretch",
           }}
           className="relative flex shrink-0"
         >

@@ -11,9 +11,10 @@ import OfferCountdown from "../../components/offers/OfferCountdown.jsx";
 import Pagination from "../../components/common/Pagination.jsx";
 import StatusBadge from "../../components/common/StatusBadge.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 const PAGE_SIZE = 10;
-const INITIAL_FILTERS = { farmerId: "", productId: "", type: "", status: "", search: "" };
+const INITIAL_FILTERS = { farmerId: "", productId: "", type: "", status: "", audience: "", search: "" };
 const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "Bundle Offer"];
 const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
 const OFFER_STATUSES = ["Pending", "Active", "Rejected", "Expired", "Inactive", "Scheduled"];
@@ -21,7 +22,7 @@ const EMPTY_DRAFT = {
   title: "", description: "", type: OFFER_TYPES[0], farmer: "", product: "",
   discountType: "Percentage", discountValue: "", startDate: "", endDate: "", startTime: "", endTime: "",
   minimumQuantity: "1", minimumAmount: "0", maximumDiscount: "", bundleConditions: "",
-  isSubscriberExclusive: false, exclusiveDiscountType: "", exclusiveDiscountValue: "",
+  audience: ["public"], exclusiveDiscountType: "", exclusiveDiscountValue: "",
 };
 const actionSuccessMessages = {
   approve: "Offer approved.",
@@ -76,6 +77,7 @@ export default function AdminOffers() {
   const [draftFilters, setDraftFilters] = useState(INITIAL_FILTERS);
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -133,7 +135,7 @@ export default function AdminOffers() {
 
   useEffect(() => {
     let active = true;
-    const params = { page, limit: PAGE_SIZE };
+    const params = { page, limit: pageSize };
     Object.entries(filters).forEach(([key, value]) => {
       if (value) params[key] = value;
     });
@@ -156,7 +158,7 @@ export default function AdminOffers() {
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [filters, page, refresh, retry]);
+  }, [filters, page, pageSize, refresh, retry]);
 
   const loadFormProducts = async (farmerId) => {
     if (!farmerId) {
@@ -240,7 +242,7 @@ export default function AdminOffers() {
       minimumAmount: String(offer.minimumAmount ?? 0),
       maximumDiscount: offer.maximumDiscount == null ? "" : String(offer.maximumDiscount),
       bundleConditions: offer.bundleConditions || "",
-      isSubscriberExclusive: Boolean(offer.isSubscriberExclusive),
+      audience: Array.isArray(offer.audience) ? offer.audience : (offer.isSubscriberExclusive ? ["public", "premium"] : ["public"]),
       exclusiveDiscountType: offer.exclusiveDiscountType || "",
       exclusiveDiscountValue: offer.exclusiveDiscountValue == null ? "" : String(offer.exclusiveDiscountValue),
     });
@@ -272,12 +274,12 @@ export default function AdminOffers() {
     if (!Number.isFinite(Number(draft.minimumAmount)) || Number(draft.minimumAmount) < 0) errors.minimumAmount = "Minimum amount cannot be negative.";
     if (draft.maximumDiscount !== "" && (!Number.isFinite(Number(draft.maximumDiscount)) || Number(draft.maximumDiscount) < 0)) errors.maximumDiscount = "Maximum discount cannot be negative.";
     if (draft.type === "Bundle Offer" && !draft.bundleConditions.trim()) errors.bundleConditions = "Describe the selected-product quantity condition.";
-    if (draft.isSubscriberExclusive) {
-      if (!draft.exclusiveDiscountType) errors.exclusiveDiscountType = "Select a subscriber-exclusive discount type.";
+    if (draft.audience.includes("premium")) {
+      if (!draft.exclusiveDiscountType) errors.exclusiveDiscountType = "Select a premium-exclusive discount type.";
       const exclusiveValue = Number(draft.exclusiveDiscountValue);
-      if (!Number.isFinite(exclusiveValue) || exclusiveValue <= 0) errors.exclusiveDiscountValue = "Enter a subscriber-exclusive discount greater than zero.";
-      if (draft.exclusiveDiscountType === "Percentage" && exclusiveValue > 100) errors.exclusiveDiscountValue = "Subscriber-exclusive percentage cannot exceed 100.";
-      if (draft.exclusiveDiscountType === "Fixed Amount" && selectedProduct && exclusiveValue >= Number(selectedProduct.price)) errors.exclusiveDiscountValue = "Subscriber-exclusive discount must be lower than the product price.";
+      if (!Number.isFinite(exclusiveValue) || exclusiveValue <= 0) errors.exclusiveDiscountValue = "Enter a premium-exclusive discount greater than zero.";
+      if (draft.exclusiveDiscountType === "Percentage" && exclusiveValue > 100) errors.exclusiveDiscountValue = "Premium-exclusive percentage cannot exceed 100.";
+      if (draft.exclusiveDiscountType === "Fixed Amount" && selectedProduct && exclusiveValue >= Number(selectedProduct.price)) errors.exclusiveDiscountValue = "Premium-exclusive discount must be lower than the product price.";
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -305,9 +307,9 @@ export default function AdminOffers() {
         minimumAmount: Number(draft.minimumAmount),
       maximumDiscount: draft.maximumDiscount === "" ? null : Number(draft.maximumDiscount),
       bundleConditions: draft.bundleConditions.trim(),
-      isSubscriberExclusive: draft.isSubscriberExclusive,
-      exclusiveDiscountType: draft.isSubscriberExclusive ? draft.exclusiveDiscountType : null,
-      exclusiveDiscountValue: draft.isSubscriberExclusive && draft.exclusiveDiscountValue !== "" ? Number(draft.exclusiveDiscountValue) : null,
+      audience: draft.audience,
+      exclusiveDiscountType: draft.audience.includes("premium") ? draft.exclusiveDiscountType : null,
+      exclusiveDiscountValue: draft.audience.includes("premium") && draft.exclusiveDiscountValue !== "" ? Number(draft.exclusiveDiscountValue) : null,
     };
       if (formDialog.mode === "edit") await adminOffersApi.update(formDialog.offer._id, payload);
       else await adminOffersApi.create(payload);
@@ -402,9 +404,24 @@ export default function AdminOffers() {
               <option value="">All Products</option>
               {products.map((product) => <option key={product._id} value={product._id}>{product.name}</option>)}
             </select>
-          </label>
-          <label>
-            <span className="sr-only">Filter by offer type</span>
+              </label>
+              <label>
+                <span className="sr-only">Filter by audience</span>
+                <select
+                  aria-label="Filter by audience"
+                  value={draftFilters.audience}
+                  onChange={(event) => setDraftFilters((current) => ({ ...current, audience: event.target.value }))}
+                  disabled={optionsLoading}
+                  className="h-9 min-w-[135px] rounded-lg border border-gray-200 bg-white px-3 text-xs disabled:bg-gray-50"
+                >
+                  <option value="">All Audiences</option>
+                  <option value="public">Regular</option>
+                  <option value="premium">Premium</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+              <label>
+                <span className="sr-only">Filter by offer type</span>
             <select
               aria-label="Filter by offer type"
               value={draftFilters.type}
@@ -432,17 +449,17 @@ export default function AdminOffers() {
               {OFFER_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
           </label>
-          <label className="relative min-w-[180px] flex-1">
-            <span className="sr-only">Search offers</span>
+          <div className="relative min-w-[180px] flex-1">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               aria-label="Search offers"
               value={draftFilters.search}
               onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))}
-              placeholder="Search offer, product, or farmer"
-              className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-3 text-xs outline-none focus:border-emerald-600"
+              placeholder="Search by Product ID, product name, offer title, description, category, or farmer name..."
+              className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-9 text-xs outline-none focus:border-emerald-600"
             />
-          </label>
+            {draftFilters.search && <button type="button" aria-label="Clear offer search" onClick={() => { setDraftFilters((current) => ({ ...current, search: "" })); setFilters((current) => ({ ...current, search: "" })); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-700"><X aria-hidden="true" className="h-3.5 w-3.5" /></button>}
+          </div>
           <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#08764B] px-4 text-xs font-semibold text-white hover:bg-[#065F3C]">
             <Search aria-hidden="true" className="h-3.5 w-3.5" /> Search
           </button>
@@ -457,6 +474,7 @@ export default function AdminOffers() {
               <tr className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
                 <th className="px-3 py-3">Offer</th>
                 <th className="px-3 py-3">Product</th>
+                <th className="px-3 py-3">Audience</th>
                 <th className="px-3 py-3">Farmer</th>
                 <th className="px-3 py-3">Original Price</th>
                 <th className="px-3 py-3">Public Price</th>
@@ -488,12 +506,20 @@ export default function AdminOffers() {
                         <span className="font-semibold text-gray-800">{offer.title}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-gray-700">{offer.product?.name || "Product unavailable"}</td>
+                    <td className="px-3 py-2.5 text-gray-700">
+                      <span className="block">{offer.product?.name || "Product unavailable"}</span>
+                      <ProductIdentifier productId={offer.product?._id || offer.product} compact className="mt-1 flex" />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${offer.audience?.includes("premium") && offer.audience?.includes("public") ? "bg-[#FCE9FD] text-[#7C3AED]" : offer.audience?.includes("premium") ? "bg-[#E6F7E9] text-[#14532D]" : "bg-[#F3F4F6] text-[#6B7280]"}`}>
+                        {offer.audience?.includes("premium") && offer.audience?.includes("public") ? "Both" : offer.audience?.includes("premium") ? "Premium" : "Regular"}
+                      </span>
+                    </td>
                     <td className="px-3 py-2.5 text-gray-600">{offer.farmer?.name || "Farmer unavailable"}</td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-gray-700">{formatCurrency(offer.originalPrice)}</td>
                     <td className="px-3 py-2.5 text-gray-700">{formatCurrency(offer.publicPrice ?? offer.offerPrice)}</td>
                     <td className="px-3 py-2.5 font-semibold text-gray-800">
-                      {offer.isSubscriberExclusive && offer.exclusivePrice != null
+                      {offer.audience?.includes("premium") && offer.exclusivePrice != null
                         ? formatCurrency(offer.exclusivePrice)
                         : formatCurrency(offer.offerPrice)}
                     </td>
@@ -570,7 +596,7 @@ export default function AdminOffers() {
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-3 py-2.5 text-[10px] text-gray-500">
-          <Pagination page={page} pageSize={PAGE_SIZE} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
+          <Pagination page={page} pageSize={pageSize} totalRecords={total} recordLabel="offer" onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />
         </footer>
       </section>
 
@@ -590,13 +616,13 @@ export default function AdminOffers() {
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
                   <Detail label="Farmer" value={selectedOffer.farmer?.name} />
                   <Detail label="Farmer email" value={selectedOffer.farmer?.email} />
-                  <Detail label="Audience" value={selectedOffer.isSubscriberExclusive ? "Subscriber-Exclusive" : "Public"} />
+                  <Detail label="Audience" value={selectedOffer.audience?.includes("premium") && selectedOffer.audience?.includes("public") ? "Both" : selectedOffer.audience?.includes("premium") ? "Premium" : "Regular"} />
                   <Detail label="Original price" value={formatCurrency(selectedOffer.originalPrice)} />
                   <Detail label="Public price" value={formatCurrency(selectedOffer.publicPrice ?? selectedOffer.offerPrice)} />
-                  {selectedOffer.isSubscriberExclusive && (
+                  {selectedOffer.audience?.includes("premium") && (
                     <>
-                      <Detail label="Subscriber price" value={formatCurrency(selectedOffer.exclusivePrice ?? selectedOffer.offerPrice)} />
-                      {selectedOffer.additionalSavings != null && selectedOffer.additionalSavings > 0 && <Detail label="Subscriber savings" value={formatCurrency(selectedOffer.additionalSavings)} />}
+                      <Detail label="Premium price" value={formatCurrency(selectedOffer.exclusivePrice ?? selectedOffer.offerPrice)} />
+                      {selectedOffer.additionalSavings != null && selectedOffer.additionalSavings > 0 && <Detail label="Premium savings" value={formatCurrency(selectedOffer.additionalSavings)} />}
                     </>
                   )}
                   <Detail label="Discount" value={offerDiscount(selectedOffer)} />
@@ -643,6 +669,7 @@ export default function AdminOffers() {
             {dialog.action === "approve" && (
               <dl className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3">
                 <Detail label="Product" value={dialog.offer.product?.name} />
+                <div><p className="text-[9px] uppercase tracking-wide text-gray-500">Product ID</p><ProductIdentifier productId={dialog.offer.product?._id || dialog.offer.product} compact className="mt-1 flex" /></div>
                 <Detail label="Farmer" value={dialog.offer.farmer?.name} />
                 <Detail label="Discount" value={offerDiscount(dialog.offer)} />
                 <Detail label="Validity" value={`${formatDate(dialog.offer.startDate)} – ${formatDate(dialog.offer.endDate)}`} />
@@ -747,6 +774,7 @@ export default function AdminOffers() {
                   <p className="mt-1 text-[10px] text-[#71817D]">
                     {formatCurrency(selectedProduct.price)} / {selectedProduct.unit || "unit"} · {selectedProduct.stock} in stock
                   </p>
+                  <ProductIdentifier productId={selectedProduct._id} className="mt-1 flex" />
                 </div>
                 <button
                   type="button"
@@ -792,21 +820,27 @@ export default function AdminOffers() {
                 {formErrors.maximumDiscount && <span className="mt-1 block text-[10px] text-red-600">{formErrors.maximumDiscount}</span>}
               </label>
               <label className="text-[11px] font-medium text-[#52645D] sm:col-span-2">Offer Audience
-                <select aria-label="Offer audience" value={draft.isSubscriberExclusive ? "exclusive" : "public"} onChange={(event) => setDraft({ ...draft, isSubscriberExclusive: event.target.value === "exclusive" })} className={inputClass()}>
-                  <option value="public">Public — All customers</option>
-                  <option value="exclusive">Subscriber-Exclusive — Newsletter subscribers only</option>
-                </select>
-                <p className="mt-0.5 text-[9px] text-[#82908B]">Public offers appear on the Home page and for all customers. Subscriber-exclusive offers appear only to active newsletter subscribers.</p>
+                <div className="mt-1 flex flex-wrap gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" value="public" checked={draft.audience.includes("public")} onChange={(event) => setDraft({ ...draft, audience: event.target.checked ? [...draft.audience, "public"] : draft.audience.filter((a) => a !== "public") })} className="mt-0.5 h-4 w-4 rounded border-[#14905B] text-[#14905B] focus:ring-[#14905B]" />
+                    <span className="text-xs text-[#263B34]">Regular — All customers</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" value="premium" checked={draft.audience.includes("premium")} onChange={(event) => setDraft({ ...draft, audience: event.target.checked ? [...draft.audience, "premium"] : draft.audience.filter((a) => a !== "premium") })} className="mt-0.5 h-4 w-4 rounded border-[#14905B] text-[#14905B] focus:ring-[#14905B]" />
+                    <span className="text-xs text-[#263B34]">Premium — Subscribed customers only</span>
+                  </label>
+                </div>
+                <p className="mt-0.5 text-[9px] text-[#82908B]">Regular offers are visible to all customers. Premium offers are visible only to customers with an active subscription.</p>
               </label>
-              {draft.isSubscriberExclusive && (
+              {draft.audience.includes("premium") && (
                 <>
-                  <label className="text-[11px] font-medium text-[#52645D]">Subscriber-Exclusive Discount Type
-                    <select aria-label="Exclusive discount type" value={draft.exclusiveDiscountType} onChange={(event) => setDraft({ ...draft, exclusiveDiscountType: event.target.value })} className={inputClass(Boolean(formErrors.exclusiveDiscountType))}>{DISCOUNT_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
+                  <label className="text-[11px] font-medium text-[#52645D]">Premium-Exclusive Discount Type
+                    <select aria-label="Premium-exclusive discount type" value={draft.exclusiveDiscountType} onChange={(event) => setDraft({ ...draft, exclusiveDiscountType: event.target.value })} className={inputClass(Boolean(formErrors.exclusiveDiscountType))}>{DISCOUNT_TYPES.map((type) => <option key={type}>{type}</option>)}</select>
                     {formErrors.exclusiveDiscountType && <span className="mt-1 block text-[10px] text-red-600">{formErrors.exclusiveDiscountType}</span>}
                   </label>
-                  <label className="text-[11px] font-medium text-[#52645D]">Subscriber-Exclusive Discount Value
-                    <input aria-label="Subscriber-exclusive discount value" type="number" min="0.01" step="0.01" value={draft.exclusiveDiscountValue} onChange={(event) => setDraft({ ...draft, exclusiveDiscountValue: event.target.value })} className={inputClass(Boolean(formErrors.exclusiveDiscountValue))} />
-                    <span className="mt-0.5 block text-[9px] font-normal text-[#82908B]">Applies in addition to (instead of) the public discount for subscribed customers.</span>
+                  <label className="text-[11px] font-medium text-[#52645D]">Premium-Exclusive Discount Value
+                    <input aria-label="Premium-exclusive discount value" type="number" min="0.01" step="0.01" value={draft.exclusiveDiscountValue} onChange={(event) => setDraft({ ...draft, exclusiveDiscountValue: event.target.value })} className={inputClass(Boolean(formErrors.exclusiveDiscountValue))} />
+                    <span className="mt-0.5 block text-[9px] font-normal text-[#82908B]">Applies in addition to (instead of) the public discount for Premium subscribers.</span>
                     {formErrors.exclusiveDiscountValue && <span className="mt-1 block text-[10px] text-red-600">{formErrors.exclusiveDiscountValue}</span>}
                   </label>
                 </>

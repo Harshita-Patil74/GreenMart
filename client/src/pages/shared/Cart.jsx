@@ -11,8 +11,7 @@ import CartTable from "../../components/cart/CartTable.jsx";
 import OrderSummary from "../../components/cart/OrderSummary.jsx";
 import { fetchCart, fetchDeliveryCharge, updateQuantity, removeItem, clearItemError } from "../../features/cart/cartSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
-
-const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
+import { calculateCartTotals } from "../../utils/cartTotals.js";
 
 const itemId = (item) => item.product?._id || item.product?.id || item.product || item.id;
 
@@ -40,9 +39,15 @@ export default function Cart() {
     }
   }, [cart.loaded, error, dispatch]);
 
-  const subtotal = items.reduce((acc, item) => acc + Number(item.product?.price ?? item.price ?? 0) * Number(item.quantity || 0), 0);
-  const discount = items.reduce((sum, item) => sum + Number(item.offer?.appliedDiscount || 0), 0);
-  const total = subtotal > 0 && deliveryCharge != null ? subtotal - discount + deliveryCharge : 0;
+  const localTotals = calculateCartTotals(items, deliveryCharge);
+  const authoritativeTotals = cart.totals;
+  const subtotal = authoritativeTotals?.subtotal ?? localTotals.subtotal;
+  const regularDiscount = authoritativeTotals?.regularDiscount ?? localTotals.regularDiscount;
+  const premiumDiscount = authoritativeTotals?.premiumDiscount ?? localTotals.premiumDiscount;
+  const discount = authoritativeTotals?.discount ?? localTotals.discount;
+  const delivery = authoritativeTotals?.deliveryCharge ?? localTotals.deliveryCharge;
+  const total = authoritativeTotals?.total ?? localTotals.total;
+  const deliveryReady = localTotals.deliveryReady;
   const handleCheckout = () => {
     if (user?.role !== "customer" || !token || token === "demo-token") {
       toast.error("Sign in to checkout.");
@@ -61,16 +66,24 @@ export default function Cart() {
   if (error && !cart.loaded) return <div className="gm-container py-6"><ErrorState message={error} onRetry={() => dispatch(fetchCart())} /></div>;
 
   return (
-    <div className={`gm-container min-w-0 py-4 sm:py-6 ${hasCustomerMobileNavigation ? "pb-24 lg:pb-16" : "pb-16"}`}>
+    <div className={`gm-container w-full max-w-none min-w-0 py-4 sm:py-6 ${hasCustomerMobileNavigation ? "pb-24 lg:pb-16" : "pb-16"}`}>
       <BackButton fallback="/shop" />
       <motion.div
         variants={sectionReveal}
         initial="hidden"
         animate="visible"
-        className="mb-4"
+        className="mb-5 flex flex-wrap items-end justify-between gap-3"
       >
-        <h1 className="text-xl font-heading font-bold text-gray-900">Your Cart</h1>
-        <p className="mt-1 text-xs text-gray-500">Review your items before checkout.</p>
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-gray-900 sm:text-3xl">Your Cart</h1>
+          <p className="mt-1 text-sm text-gray-500">Review your items and savings before checkout.</p>
+        </div>
+        {items.length > 0 && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800">
+            <ShoppingBag className="h-4 w-4" />
+            {items.length} {items.length === 1 ? "item" : "items"}
+          </span>
+        )}
       </motion.div>
       {deliveryError && <p role="alert" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{deliveryError} <button onClick={() => dispatch(fetchDeliveryCharge())} className="font-semibold underline">Retry</button></p>}
       {items.length === 0 ? (
@@ -93,11 +106,11 @@ export default function Cart() {
           className="grid items-start gap-4 lg:grid-cols-3"
         >
           <div className="space-y-3 lg:col-span-2">
-            <CartTable items={itemsWithPending} onUpdate={(id, quantity) => dispatch(updateQuantity({ productId: id, quantity }))} onRemove={(id) => dispatch(removeItem(id))} />
+            <CartTable items={itemsWithPending} onUpdate={(id, quantity) => dispatch(updateQuantity({ productId: id, quantity }))} onRemove={(id) => dispatch(removeItem(id))} disabled={Object.values(itemPending).some(Boolean)} />
             <Link to="/shop" className="inline-flex items-center gap-2 text-xs font-medium text-primary"><ArrowLeft className="h-4 w-4" />Continue Shopping</Link>
             <div className="mt-2"><NextButton to="/checkout" label="Continue to Checkout" /></div>
           </div>
-          <OrderSummary subtotal={subtotal} discount={discount} delivery={deliveryCharge ?? 0} total={total} buttonLabel="Proceed to Checkout" onAction={handleCheckout} loading={deliveryLoading || deliveryCharge == null} />
+          <OrderSummary subtotal={subtotal} regularDiscount={regularDiscount} premiumDiscount={premiumDiscount} discount={discount} delivery={delivery} total={total} deliveryReady={deliveryReady} items={items} buttonLabel="Proceed to Checkout" onAction={handleCheckout} loading={deliveryLoading || !deliveryReady} />
         </motion.div>
       )}
     </div>

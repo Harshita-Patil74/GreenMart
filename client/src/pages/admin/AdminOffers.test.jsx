@@ -85,7 +85,7 @@ describe("Admin offers management", () => {
 
     expect(await screen.findByText("Offers Management")).toBeInTheDocument();
     expect(await screen.findByText("Fig harvest offer")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Organic Fig" })).toBeInTheDocument();
+    expect(screen.getAllByRole("cell", { name: /Organic Fig/ })[0]).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Green Valley Farm" })).toBeInTheDocument();
     expect(screen.getAllByText(/₹90\.00/).length).toBeGreaterThan(0);
     expect(screen.getByRole("cell", { name: "Pending" })).toBeInTheDocument();
@@ -228,6 +228,25 @@ describe("Admin offers management", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
     await waitFor(() => expect(adminOffersApi.list).toHaveBeenLastCalledWith({ page: 1, limit: 10 }));
+  });
+
+  it("supports server pagination and clearing only the search term", async () => {
+    renderPage();
+    await screen.findByText("Fig harvest offer");
+    fireEvent.change(screen.getByLabelText("Page size"), { target: { value: "20" } });
+
+    await waitFor(() => expect(adminOffersApi.list).toHaveBeenLastCalledWith({ page: 1, limit: 20 }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by status" }), { target: { value: "Active" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search offers" }), { target: { value: "Fig" } });
+    fireEvent.click(screen.getByRole("button", { name: /Search/ }));
+    await waitFor(() => expect(adminOffersApi.list).toHaveBeenLastCalledWith({
+      page: 1, limit: 20, status: "Active", search: "Fig",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear offer search" }));
+    await waitFor(() => expect(adminOffersApi.list).toHaveBeenLastCalledWith({
+      page: 1, limit: 20, status: "Active",
+    }));
   });
 
   it("immediately applies effective Scheduled status and shows only View and Deactivate", async () => {

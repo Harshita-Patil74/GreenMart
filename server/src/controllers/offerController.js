@@ -8,6 +8,7 @@ const { asyncHandler } = require("../utils/asyncHandler");
 const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
 const {
   money,
+  roundPercent,
   getEffectiveStatus,
   getSalesByOffer,
   combineDateTimeToUTC,
@@ -15,10 +16,49 @@ const {
 
 const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "Bundle Offer"];
 const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
-const PRODUCT_FIELDS = "name images price unit stock status farmer";
+const PRODUCT_FIELDS = "name images price unit stock status farmer category";
 
 function validId(id) {
   return mongoose.Types.ObjectId.isValid(id);
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeAudience(value) {
+  if (!Array.isArray(value)) {
+    const single = String(value || "public").trim().toLowerCase();
+    return ["public", "premium"].includes(single) ? [single] : ["public"];
+  }
+  const cleaned = value
+    .map((v) => String(v || "").trim().toLowerCase())
+    .filter((v) => v === "public" || v === "premium");
+  // Dedupe while preserving order, default to public if empty
+  const deduped = [...new Set(cleaned)];
+  return deduped.length > 0 ? deduped : ["public"];
+}
+
+async function findSearchableProductIds(search, farmerId) {
+  const regex = new RegExp(escapeRegExp(search), "i");
+  const productQuery = { $or: [{ name: regex }, { category: regex }] };
+  if (farmerId) productQuery.farmer = farmerId;
+
+  const matchingProducts = await Product.find(productQuery).distinct("_id");
+  if (!/^[a-f\d]{1,24}$/i.test(search)) return matchingProducts;
+
+  const pipeline = [];
+  if (farmerId) pipeline.push({ $match: { farmer: farmerId } });
+  pipeline.push(
+    { $addFields: { productIdText: { $toString: "$_id" } } },
+    { $match: { productIdText: { $regex: escapeRegExp(search), $options: "i" } } },
+    { $project: { _id: 1 } },
+  );
+  const matchingIds = await Product.aggregate(pipeline);
+  return [...new Map(
+    [...matchingProducts, ...matchingIds.map(({ _id }) => _id)]
+      .map((id) => [String(id), id]),
+  ).values()];
 }
 
 function fail(res, status, message) {
@@ -86,7 +126,7 @@ async function validateOfferData(body, farmerId, existing) {
       ? null
       : Number(body.maximumDiscount ?? existing?.maximumDiscount ?? null),
     bundleConditions: String(body.bundleConditions ?? existing?.bundleConditions ?? "").trim(),
-    isSubscriberExclusive: Boolean(body.isSubscriberExclusive ?? existing?.isSubscriberExclusive ?? false),
+    audience: normalizeAudience(body.audience ?? existing?.audience ?? ["public"]),
     exclusiveDiscountType: body.exclusiveDiscountType ?? existing?.exclusiveDiscountType ?? null,
     exclusiveDiscountValue: body.exclusiveDiscountValue === "" || body.exclusiveDiscountValue === null || body.exclusiveDiscountValue === undefined
       ? null
@@ -123,17 +163,19 @@ async function validateOfferData(body, farmerId, existing) {
   }
   if (data.bundleConditions.length > 500) return { error: "Bundle conditions must be 500 characters or fewer." };
 
-  if (data.isSubscriberExclusive || data.exclusiveDiscountType || data.exclusiveDiscountValue) {
+  const isPremiumAudience = data.audience.includes("premium");
+
+  if (isPremiumAudience || data.exclusiveDiscountType || data.exclusiveDiscountValue) {
     if (!DISCOUNT_TYPES.includes(data.exclusiveDiscountType)) return { error: "Choose a valid subscriber-exclusive discount type." };
-    if (!Number.isFinite(data.exclusiveDiscountValue) || data.exclusiveDiscountValue <= 0) return { error: "Subscriber-exclusive discount value must be greater than zero." };
-    if (data.exclusiveDiscountType === "Percentage" && data.exclusiveDiscountValue > 100) return { error: "Subscriber-exclusive percentage discount cannot exceed 100%." };
+    if (!Number.isFinite(data.exclusiveDiscountValue) || data.exclusiveDiscountValue <= 0) return { error: "Premium-exclusive discount value must be greater than zero." };
+    if (data.exclusiveDiscountType === "Percentage" && data.exclusiveDiscountValue > 100) return { error: "Premium-exclusive percentage discount cannot exceed 100%." };
     const publicPerUnit = data.discountType === "Percentage" ? price * data.discountValue / 100 : data.discountValue;
     const publicDiscountTotal = money(Math.min(price * 1, publicPerUnit * 1, data.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(data.maximumDiscount)));
     const publicFinalPrice = money(price - (Number.isFinite(publicDiscountTotal) ? publicDiscountTotal : 0));
     const exclusivePerUnit = data.exclusiveDiscountType === "Percentage" ? publicFinalPrice * data.exclusiveDiscountValue / 100 : data.exclusiveDiscountValue;
-    if (data.exclusiveDiscountType === "Fixed Amount" && exclusivePerUnit >= publicFinalPrice) return { error: "Subscriber-exclusive fixed discount must be lower than the public offer price." };
+    if (data.exclusiveDiscountType === "Fixed Amount" && exclusivePerUnit >= publicFinalPrice) return { error: "Premium-exclusive fixed discount must be lower than the public offer price." };
     const exclusiveFinalPrice = money(publicFinalPrice - exclusivePerUnit);
-    if (!Number.isFinite(exclusiveFinalPrice) || exclusiveFinalPrice < 0) return { error: "Subscriber-exclusive discount would result in an invalid final price." };
+    if (!Number.isFinite(exclusiveFinalPrice) || exclusiveFinalPrice < 0) return { error: "Premium-exclusive discount would result in an invalid final price." };
   }
 
   return { data };
@@ -188,7 +230,7 @@ function serialize(offer, sales = new Map()) {
     effectiveStatus: getEffectiveStatus(plain, product),
     originalPrice: validPrice ? price : null,
     discountAmount: totalDiscount == null ? null : money(totalDiscount / quantity),
-    discountPercent: totalDiscount == null ? null : Math.round((totalDiscount / (price * quantity)) * 100),
+    discountPercent: totalDiscount == null ? null : roundPercent((totalDiscount / (price * quantity)) * 100),
     offerPrice: publicOfferPrice,
     publicPrice: publicOfferPrice,
     exclusivePrice,
@@ -234,12 +276,11 @@ exports.farmerList = asyncHandler(async (req, res) => {
   if (OFFER_TYPES.includes(req.query.type)) query.type = req.query.type;
   const search = String(req.query.search || "").trim();
   if (search) {
-    const productIds = await Product.find({
-      farmer: req.user._id,
-      name: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" },
-    }).distinct("_id");
+    const productIds = await findSearchableProductIds(search, req.user._id);
+    const regex = new RegExp(escapeRegExp(search), "i");
     query.$or = [
-      { title: { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } },
+      { title: regex },
+      { description: regex },
       { product: { $in: productIds } },
     ];
   }
@@ -373,14 +414,32 @@ exports.adminList = asyncHandler(async (req, res) => {
   if (validId(req.query.farmerId)) query.farmer = req.query.farmerId;
   if (validId(req.query.productId)) query.product = req.query.productId;
   if (OFFER_TYPES.includes(req.query.type)) query.type = req.query.type;
+  if (req.query.audience === "public") query.audience = { $all: ["public"], $size: 1 };
+  else if (req.query.audience === "premium") query.audience = { $all: ["premium"], $size: 1 };
+  else if (req.query.audience === "both") query.audience = { $all: ["public", "premium"], $size: 2 };
   const offers = await Offer.find(query)
     .populate("product", PRODUCT_FIELDS)
     .populate("farmer", "name email")
     .sort({ createdAt: -1 });
   let rows = offers.map((offer) => serialize(offer));
   if (req.query.status) rows = rows.filter((offer) => offer.effectiveStatus === req.query.status);
-  const search = String(req.query.search || "").trim().toLowerCase();
-  if (search) rows = rows.filter((offer) => `${offer.title} ${offer.product?.name || ""} ${offer.farmer?.name || ""}`.toLowerCase().includes(search));
+  const search = String(req.query.search || "").trim();
+  if (search) {
+    const regex = new RegExp(escapeRegExp(search), "i");
+    const matchingProductIds = new Set((await findSearchableProductIds(search)).map(String));
+    rows = rows.filter((offer) => {
+      const product = offer.product && typeof offer.product === "object" ? offer.product : null;
+      const textMatches = [
+        offer.title,
+        offer.description,
+        product?.name,
+        product?.category,
+        offer.farmer?.name,
+      ].some((value) => regex.test(String(value || "")));
+      const productId = String(product?._id || offer.product || "");
+      return textMatches || matchingProductIds.has(productId);
+    });
+  }
   const total = rows.length;
   rows = rows.slice((page - 1) * limit, page * limit);
   res.json({ items: rows, total, page, pages: Math.ceil(total / limit) });

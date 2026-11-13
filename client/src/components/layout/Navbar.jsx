@@ -65,11 +65,13 @@ export default function Navbar() {
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              aria-label="Open navigation menu"
-              onClick={() => setDrawerOpen(true)}
+              aria-label={drawerOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={drawerOpen}
+              aria-controls="public-mobile-navigation"
+              onClick={() => setDrawerOpen((prev) => !prev)}
               className="inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-[#4B5563] hover:bg-gray-50 lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
-              <Menu className="h-5 w-5" />
+              {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
             <Link to="/customer/wishlist" className="hidden sm:inline-flex p-2 text-[#4B5563] hover:text-primary rounded-full" title="Wishlist">
               <Heart className="w-[20px] h-[20px]" />

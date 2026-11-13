@@ -638,13 +638,23 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
   const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
   const unit = product.unit || "unit";
   const productId = product._id || product.id;
-  const isExclusive = Boolean(offer.isSubscriberExclusive);
+  const isExclusive = Boolean(offer.audience?.includes("premium"));
+  const isExclusiveTeaser = Boolean(offer.premiumExclusiveTeaser);
+  const hasPremiumExtra = Number(offer.premiumDiscountAmount) > 0;
   const savingLabel = offer.discountType === "Percentage"
     ? `${offer.discountPercent}% OFF`
     : `Save ${formatCurrency(offer.discountAmount)}`;
-  const exclusiveSavingLabel = offer.exclusiveDiscountType === "Percentage"
-    ? `${Math.round((offer.exclusiveDiscountAmount ?? 0) / (offer.originalPrice ?? 1) * 100)}% OFF`
-    : `Save ${formatCurrency(offer.exclusiveDiscountAmount ?? 0)}`;
+  const regularSavingLabel = hasPremiumExtra
+    ? offer.discountType === "Percentage"
+      ? `Regular ${offer.discountPercent}% OFF`
+      : `Regular save ${formatCurrency(offer.discountAmount)}`
+    : savingLabel;
+  const exclusiveSavingLabel = Number(offer.originalPrice) > 0 && Number(offer.offerPrice) < Number(offer.originalPrice)
+    ? `${offer.discountPercent}% OFF`
+    : `Save ${formatCurrency(offer.discountAmount ?? 0)}`;
+  const teaserOfferLabel = offer.regularDiscountType === "Percentage"
+    ? `Offer discount: ${offer.regularDiscountPercent}%`
+    : `Offer discount: ${formatCurrency(offer.regularDiscountAmount)} off`;
   const requiredQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
@@ -670,27 +680,25 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
           alt={product.name || "Offer product"}
           className="h-full w-full object-cover"
         />
-        <motion.span
-          whileHover={reducedMotion ? undefined : badgeHover.hover}
-          whileTap={reducedMotion ? undefined : badgeHover.tap}
-          className="absolute left-1 top-1 inline-flex items-center gap-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white"
-        >
-          <BadgePercent aria-hidden="true" className="h-2.5 w-2.5" /> {offer.type}
-        </motion.span>
-        {isExclusive && (
+        <div className="absolute left-1 right-1 top-1 z-10 flex flex-col items-start gap-1">
           <motion.span
             whileHover={reducedMotion ? undefined : badgeHover.hover}
             whileTap={reducedMotion ? undefined : badgeHover.tap}
-            className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-full bg-[#245C3A] px-2 py-0.5 text-[9px] font-semibold text-white"
+            className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold leading-3 text-white"
           >
-            <BadgePercent aria-hidden="true" className="h-2.5 w-2.5" /> Subscriber Exclusive
+            <BadgePercent aria-hidden="true" className="h-2.5 w-2.5 shrink-0" /> {offer.type}
           </motion.span>
-        )}
-        {upcoming && (
-          <span className="absolute right-1 top-1 rounded-full bg-[#C2410C] px-2 py-0.5 text-[9px] font-semibold text-white">
-            Coming Soon
-          </span>
-        )}
+          {isExclusive && (
+            <span className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#245C3A] px-2 py-0.5 text-[9px] font-semibold leading-3 text-white">
+              Subscriber Exclusive
+            </span>
+          )}
+          {upcoming && (
+            <span className="rounded-full bg-[#C2410C] px-2 py-0.5 text-[9px] font-semibold text-white">
+              Coming Soon
+            </span>
+          )}
+        </div>
         {!upcoming && !isExclusive && (
           <span className="absolute right-1 top-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white">
             Active
@@ -702,31 +710,53 @@ function DashboardOfferCard({ offer, upcoming, serverTime }) {
       </Link>
       <p className="mt-0 truncate text-[9px] text-[#7A877F] mb-1.5">{farmerName}</p>
       <div className="flex flex-wrap items-baseline gap-x-1.5 mb-1.5">
-        {isExclusive && offer.publicPrice != null && offer.exclusivePrice != null && offer.publicPrice > offer.exclusivePrice ? (
+        {isExclusiveTeaser ? (
           <>
-            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.publicPrice)} / {unit}</span>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(product.price ?? offer.originalPrice)} / {unit}</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">Premium members only</span>
+            <p className="w-full text-[9px] leading-3 text-[#52645D]">
+              {teaserOfferLabel}
+              {Number(offer.premiumDiscountAmount) > 0 && ` · Premium extra: ${formatCurrency(offer.premiumDiscountAmount)} / ${unit}`}
+            </p>
+          </>
+        ) : isExclusive && offer.publicPrice != null && offer.exclusivePrice != null && offer.publicPrice > offer.exclusivePrice ? (
+          <>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)} / {unit}</span>
             <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.exclusivePrice)} / {unit}</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">Premium price</span>
             <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">{exclusiveSavingLabel}</span>
-            {offer.additionalSavings != null && offer.additionalSavings > 0 && (
-              <span className="text-[9px] font-bold text-[#14532D]">+{formatCurrency(offer.additionalSavings)} subscriber savings</span>
-            )}
           </>
         ) : (
           <>
             <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(offer.offerPrice)} / {unit}</span>
-            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)}</span>
-            <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{savingLabel}</span>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)} / {unit}</span>
+            <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{regularSavingLabel}</span>
           </>
         )}
       </div>
-      {requiredQuantity > 1 && <p className="mt-0 text-[9px] leading-3 text-[#71817D] mb-1.5">At {requiredQuantity}+ {unit}</p>}
+      {isExclusive && !isExclusiveTeaser && offer.publicDiscountAmount != null && offer.exclusiveDiscountAmount != null && (
+        <p className="mb-1.5 text-[9px] leading-3 text-[#52645D]">
+          Offer discount: {offer.publicDiscountPercent}% off ({formatCurrency(offer.publicDiscountAmount)}) · Regular price: {formatCurrency(offer.publicPrice)} / {unit} · Premium extra: {formatCurrency(offer.exclusiveDiscountAmount)} / {unit}
+        </p>
+      )}
+      {!isExclusive && !isExclusiveTeaser && Number(offer.premiumDiscountAmount) > 0 && (
+        <p className="mb-1.5 break-words text-[9px] leading-3 text-[#52645D]">
+          Premium members save extra: {formatCurrency(offer.premiumDiscountAmount)} / {unit}
+        </p>
+      )}
+      {!isExclusiveTeaser && (requiredQuantity > 1 || Number(offer.minimumAmount) > 0) && (
+        <p className="mt-0 text-[9px] leading-3 text-[#71817D] mb-1.5">
+          {requiredQuantity > 1 ? `At ${requiredQuantity}+ ${unit}` : "Minimum purchase"}
+          {Number(offer.minimumAmount) > 0 ? ` · ₹${Number(offer.minimumAmount).toFixed(2)} minimum cart subtotal` : ""}
+        </p>
+      )}
       <OfferCountdown
         startAt={offer.startAt || offer.startDate}
         endAt={offer.endAt || offer.endDate}
         status={offer.effectiveStatus || (upcoming ? "Upcoming" : "Active")}
         serverTime={serverTime}
       />
-      <Link to={`/product/${productId}`} className="inline-flex h-7 items-center justify-center rounded-md border border-[#DDE8DF] text-[10px] font-semibold text-[#176B3B] w-full">
+      <Link to={`/product/${productId}`} className="inline-flex h-7 items-center justify-center rounded-md border border-[#DDE8DF] text-[10px] font-semibold text-[#176B3B] w-full mt-3">
         View Product
       </Link>
     </motion.div>

@@ -30,8 +30,8 @@ const OFFER_TYPES = [
 const offerBadgeClasses = {
   "Seasonal Offer": "bg-[#16803C] text-white",
   "Farmer Special": "bg-[#16803C] text-white",
-  "Limited-Time Deal": "bg-[#F08A18] text-white",
-  "Bundle Offer": "bg-[#6754CF] text-white",
+  "Limited-Time Deal": "bg-[#16803C] text-white",
+  "Bundle Offer": "bg-[#16803C] text-white",
 };
 
 function getId(value) {
@@ -414,22 +414,26 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
   const minimumQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
   const stock = Number(product.stock) || 0;
   const outOfStock = stock < minimumQuantity;
-  const price = Number(offer.offerPrice);
+  const isPremiumTeaser = Boolean(offer.premiumExclusiveTeaser);
   const originalPrice = Number(offer.originalPrice ?? product.price);
-  const discountLabel = offer.discountType === "Percentage"
-    ? `${offer.discountPercent}% OFF`
-    : `${formatCurrency(offer.discountAmount)} OFF`;
+  const price = Number(isPremiumTeaser ? originalPrice : offer.offerPrice);
+  const hasPremiumExtra = Number(offer.premiumDiscountAmount) > 0;
+  const discountLabel = isPremiumTeaser
+    ? "Premium Exclusive"
+    : offer.discountType === "Percentage"
+    ? `${hasPremiumExtra ? "Regular " : ""}${offer.discountPercent}% OFF`
+    : `${hasPremiumExtra ? "Regular " : ""}${formatCurrency(offer.discountAmount)} OFF`;
   const cartDisabled = outOfStock || !active || adding;
 
   return (
-    <article className="group flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[#E5EBE5] bg-white p-1.5 shadow-[0_1px_5px_rgba(27,52,36,0.07)] transition hover:shadow-[0_7px_18px_rgba(27,52,36,0.12)]">
+    <article className="group flex min-w-0 min-h-full flex-col overflow-hidden rounded-[12px] border border-[#E5EBE5] bg-white p-1.5 shadow-[0_1px_5px_rgba(27,52,36,0.07)] transition hover:shadow-[0_7px_18px_rgba(27,52,36,0.12)]">
       <div className="relative h-[120px] overflow-hidden rounded-[9px] bg-[#F0F3EF] sm:h-[112px] lg:h-[116px]">
         <ImageWithFallback
           src={getImageUrl(product.images?.[0])}
           alt={product.name || "Fresh product"}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
-        <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py=1 text-[9px] font-bold leading-none shadow-sm ${offerBadgeClasses[offerType] || "bg-[#16803C] text-white"}`}>
+        <span className={`absolute left-1.5 top-1.5 rounded-full px-2 py-1 text-[9px] font-bold leading-none shadow-sm ${offerBadgeClasses[offerType] || "bg-[#16803C] text-white"}`}>
           {offerType}
         </span>
         <button
@@ -440,7 +444,7 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
         >
           <Heart aria-hidden="true" className={`h-3.5 w-3.5 ${wished ? "fill-[#E4475F] text-[#E4475F]" : ""}`} />
         </button>
-        {!active && <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#34483A]/90 px-2 py-1 text-[9px] font-semibold text-white">Coming Soon</span>}
+        {!active && <span className="absolute bottom-1.5 left-1.5 rounded-full bg-[#C2410C]/90 px-2 py-1 text-[9px] font-semibold text-white">Coming Soon</span>}
       </div>
 
       <div className="flex flex-1 flex-col px-1 pt-1.5">
@@ -451,22 +455,26 @@ function OfferCard({ offer, wished, adding, onAdd, onWishlist, serverTime }) {
 
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
           <span className="text-[13px] font-bold leading-4 text-[#16803C] sm:text-sm">{formatCurrency(price)}</span>
-          <span className="text-[9px] text-[#939B94] line-through">{formatCurrency(originalPrice)}</span>
-          <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{discountLabel}</span>
-        </div>
+          {!isPremiumTeaser && <span className="text-[9px] text-[#939B94] line-through">{formatCurrency(originalPrice)} / {product.unit || "unit"}</span>}
+          <span className={`rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-none ${isPremiumTeaser ? "bg-[#14532D] text-white" : "bg-[#E6F7E9] text-[#13803D]"}`}>{discountLabel}</span>
+          {isPremiumTeaser && <p className="mt-1 text-[8px] leading-3 text-[#52645D]">
+            {offer.regularDiscountType === "Percentage"
+              ? `Offer discount: ${offer.regularDiscountPercent}%`
+              : `Offer discount: ${formatCurrency(offer.regularDiscountAmount)} off`}
+            {Number(offer.premiumDiscountAmount) > 0 && ` · Premium extra: ${formatCurrency(offer.premiumDiscountAmount)} / ${product.unit || "unit"}`}
+          </p>}
+        {!isPremiumTeaser && Number(offer.premiumDiscountAmount) > 0 && <p className="mt-1 break-words text-[8px] leading-3 text-[#52645D]">
+            Premium members save extra: {formatCurrency(offer.premiumDiscountAmount)} / {product.unit || "unit"}
+          </p>}
         <p className="mt-0.5 text-[8px] text-[#879187]">per {product.unit || "unit"}{minimumQuantity > 1 ? ` · min ${minimumQuantity}` : ""}</p>
 
-        {Number(offer.minimumAmount) > 0 && (
-          <p className="mt-1 truncate text-[8px] font-medium text-[#738078]">Cart minimum {formatCurrency(offer.minimumAmount)}</p>
-        )}
+        {Number(offer.minimumAmount) > 0 && <p className="mt-1 truncate text-[8px] font-medium text-[#738078]">Cart minimum {formatCurrency(offer.minimumAmount)}</p>}
+        </div>
+
         <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 border-t border-[#EEF1ED] pt-1.5 text-[8px] text-[#67756A] sm:text-[9px]">
           <span className="inline-flex items-center gap-1 whitespace-nowrap"><CalendarDays aria-hidden="true" className="h-3 w-3" />Till {formatDate(offer.endDate, { day: "2-digit", month: "short", year: "numeric" })}</span>
-          {offer.startAt && offer.effectiveStatus === "Upcoming" && (
-            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
-          )}
-          {offer.endAt && offer.effectiveStatus === "Active" && (
-            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
-          )}
+          {offer.startAt && offer.effectiveStatus === "Upcoming" && <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />}
+          {offer.endAt && offer.effectiveStatus === "Active" && <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />}
           <span className={outOfStock ? "font-semibold text-red-600" : "whitespace-nowrap"}>{outOfStock ? "Out of Stock" : `In Stock: ${stock}`}</span>
         </div>
 

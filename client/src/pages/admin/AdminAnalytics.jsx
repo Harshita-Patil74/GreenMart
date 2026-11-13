@@ -4,6 +4,7 @@ import BackButton from "../../components/common/BackButton.jsx";
 import AdminCharts from "../../components/admin/AdminCharts.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { formatCurrency } from "../../utils/constants.js";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
 
@@ -124,7 +125,9 @@ export default function AdminAnalytics() {
                 <tr key={product.name}>
                   <td className="flex items-center gap-2 px-3 py-2">
                     <ImageWithFallback src={getImageUrl(product.image)} alt={`${product.name} product`} className="h-8 w-8 rounded object-cover" />
-                    <span className="text-gray-800">{product.name}</span>
+                    <span className="text-gray-800">{product.name}
+                      {(product.productIds || []).map((productId) => <ProductIdentifier key={productId} productId={productId} compact className="mt-1 flex" />)}
+                    </span>
                   </td>
                   <td className="px-3 py-2">{product.quantity}</td>
                   <td className="px-3 py-2 font-semibold">{formatCurrency(product.revenue)}</td>

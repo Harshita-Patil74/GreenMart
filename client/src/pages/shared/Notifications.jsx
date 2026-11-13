@@ -11,6 +11,7 @@ import {
   getNotificationIcon, getNotificationStyle, CUSTOMER_CATEGORIES, CATEGORY_LABELS, CATEGORY_ICONS,
 } from "../../config/notificationConfig.js";
 import { Bell } from "lucide-react";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 export default function Notifications() {
   const dispatch = useDispatch();
@@ -165,6 +166,9 @@ export default function Notifications() {
                         </time>
                       </div>
                       <p className="mt-1 text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                      {notification.resourceType === "Product" && notification.resourceId && (
+                        <ProductIdentifier productId={notification.resourceId} compact className="mt-1 flex" />
+                      )}
                       <span className={`text-[9px] font-semibold uppercase tracking-wider ${notification.isRead ? "text-gray-400" : "text-[#087449]"}`}>
                         {CATEGORY_LABELS[notification.category] || "Update"}
                       </span>

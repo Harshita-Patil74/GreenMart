@@ -1,8 +1,10 @@
 import React from "react";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Provider } from "react-redux";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import FarmerNotifications from "./FarmerNotifications.jsx";
 import notificationApi from "../../api/notificationApi.js";
-import { renderWithStore } from "../../tests/testUtils.jsx";
+import { createStore, renderWithStore } from "../../tests/testUtils.jsx";
 
 vi.mock("../../api/notificationApi", () => ({
   default: {
@@ -37,6 +39,11 @@ function renderPage(over = {}) {
   return renderWithStore(<FarmerNotifications />);
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}{location.search}</output>;
+}
+
 describe("Farmer Notification Centre", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -63,6 +70,7 @@ describe("Farmer Notification Centre", () => {
     expect(screen.getByText("Certification verified")).toBeInTheDocument();
     expect(screen.getByText("New message received")).toBeInTheDocument();
     expect(screen.getByText("Password changed")).toBeInTheDocument();
+    expect(screen.getByText("Order #GM1001")).toBeInTheDocument();
   });
 
   it("Orders displays order notifications", async () => {
@@ -115,16 +123,16 @@ describe("Farmer Notification Centre", () => {
 
   it("Supports products category (empty when no product records)", async () => {
     renderPage({ items: [] });
-    await screen.findByText("You're all caught up");
+    await screen.findByText("You're all caught up!");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Notification categories" })).getByRole("button", { name: /Products/ }));
-    await waitFor(() => expect(screen.getByText("You're all caught up")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No product notifications available.")).toBeInTheDocument());
   });
 
   it("Supports support category (empty when no support records)", async () => {
     renderPage();
     await screen.findByText("New order received");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Notification categories" })).getByRole("button", { name: /Support/ }));
-    await waitFor(() => expect(screen.getByText("You're all caught up")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No support notifications available.")).toBeInTheDocument());
   });
 
   it("normalizes legacy records saved without a category by type", async () => {
@@ -179,11 +187,29 @@ describe("Farmer Notification Centre", () => {
     await waitFor(() => expect(notificationApi.remove).toHaveBeenCalledWith("n1"));
   });
 
+  it("opens the related farmer order after marking its notification read", async () => {
+    notificationApi.list.mockResolvedValue(makeData());
+    render(
+      <Provider store={createStore()}>
+        <MemoryRouter initialEntries={["/farmer/notifications"]}>
+          <FarmerNotifications />
+          <LocationProbe />
+        </MemoryRouter>
+      </Provider>
+    );
+    await screen.findByText("New order received");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open New order received" }));
+
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/farmer/orders?search=GM1001"));
+    expect(notificationApi.markRead).toHaveBeenCalledWith("n1");
+  });
+
   it("shows an error state instead of an empty state when the API fails", async () => {
     notificationApi.list.mockRejectedValue({ response: { data: { message: "Down" } } });
     renderWithStore(<FarmerNotifications />);
     await waitFor(() => expect(screen.getByText("Down")).toBeInTheDocument());
-    expect(screen.queryByText("You're all caught up")).not.toBeInTheDocument();
+    expect(screen.queryByText("You're all caught up!")).not.toBeInTheDocument();
   });
 
   it("shows loading state while fetching", async () => {
@@ -199,6 +225,6 @@ describe("Farmer Notification Centre", () => {
     await screen.findByText("Order 0");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Notification categories" })).getByRole("button", { name: /Offers/ }));
     notificationApi.list.mockResolvedValue({ data: { items: [], total: 0, page: 1, pages: 1 } });
-    await waitFor(() => expect(screen.getByText("You're all caught up")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No offer notifications available.")).toBeInTheDocument());
   });
 });

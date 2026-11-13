@@ -118,6 +118,33 @@ describe("Notification system", () => {
       expect(res.body.total).toBe(25);
       expect(res.body.pages).toBe(3);
     });
+
+    it("includes the order number in farmer notifications without changing saved notification records", async () => {
+      const order = await Order.create({
+        orderNumber: "GM731204",
+        user: customerId,
+        items: [{ farmer: farmerId, name: "Organic Fig", price: 100, quantity: 1 }],
+      });
+      const notification = await Notification.create({
+        user: farmerId,
+        type: "newOrderFarmer",
+        category: "orders",
+        title: "New order received",
+        message: "You have received a new order.",
+        orderId: order._id,
+      });
+
+      const response = await request(app)
+        .get("/api/notifications")
+        .set("Authorization", `Bearer ${farmerToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.find((item) => item._id === String(notification._id))).toMatchObject({
+        orderId: String(order._id),
+        orderNumber: "GM731204",
+      });
+      expect((await Notification.findById(notification._id)).orderNumber).toBeUndefined();
+    });
   });
 
   describe("Mark read / mark all read / delete", () => {

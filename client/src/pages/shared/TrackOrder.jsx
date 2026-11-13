@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 import { Clock3, MapPin, PackageCheck, Search, Truck } from "lucide-react";
 import orderApi from "../../api/orderApi";
 import OrderStepper from "../../components/orders/OrderStepper.jsx";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
-import { formatCurrency } from "../../utils/constants.js";
+import { formatINR } from "../../utils/cartTotals.js";
 import { subscribeOrderStatus } from "../../socket/socketClient.js";
+import {
+  hasOrderItemDiscountBreakdown,
+  orderItemDiscount,
+  orderItemGross,
+  orderItemPremiumDiscount,
+  orderItemRegularDiscount,
+  orderItemTotal,
+  orderTotals,
+} from "../../utils/orderPricing.js";
 
 export default function TrackOrder() {
   const { id } = useParams();
@@ -46,6 +56,7 @@ export default function TrackOrder() {
     event.preventDefault();
     if (orderId.trim()) navigate(`/track-order/${encodeURIComponent(orderId.trim())}`);
   };
+  const totals = orderTotals(order || {});
 
   return (
     <div className="gm-container space-y-5 py-6 pb-16">
@@ -83,6 +94,7 @@ export default function TrackOrder() {
                     {(order.items || []).map((item, index) => (
                       <li key={item._id || item.product || index} className="text-xs text-gray-600">
                         <span className="font-medium text-gray-800">{item.name || "Product"}</span>
+                        <ProductIdentifier productId={item.productId || item.product} className="mt-0.5 flex" />
                         <span className="ml-2"><OrderStatusBadge status={item.fulfillmentStatus || order.status} /></span>
                         {item.deliveryFailureReason && <p className="mt-1 text-red-700">Delivery attempt failed: {item.deliveryFailureReason}</p>}
                         {item.fulfillmentHistory?.length > 1 && (
@@ -110,14 +122,34 @@ export default function TrackOrder() {
             <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900"><PackageCheck className="h-4 w-4 text-primary" />Items in this order</h2>
               <div className="mt-3 divide-y divide-gray-100">
-                {(order.items || []).map((item, index) => (
-                  <div key={item._id || item.product || index} className="flex justify-between gap-3 py-2 text-xs">
-                    <span className="text-gray-700">{item.name} <span className="text-gray-400">× {item.quantity}</span></span>
-                    <span className="shrink-0 font-semibold text-gray-900">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}</span>
-                  </div>
-                ))}
+                {(order.items || []).map((item, index) => {
+                  const gross = orderItemGross(item);
+                  const discount = orderItemDiscount(item);
+                  const regularSavings = orderItemRegularDiscount(item);
+                  const premiumSavings = orderItemPremiumDiscount(item);
+                  return <div key={item._id || item.product || index} className="flex justify-between gap-3 py-2 text-xs">
+                    <span className="text-gray-700">{item.name} <span className="text-gray-400">× {item.quantity}</span><ProductIdentifier productId={item.productId || item.product} className="mt-0.5 flex" />{item.offerSnapshot?.offerTitle && <span className="block text-emerald-700">{item.offerSnapshot.offerTitle}</span>}</span>
+                    <span className="shrink-0 text-right font-semibold text-gray-900">{discount > 0 && <span className="block font-normal text-gray-400 line-through">{formatINR(gross)}</span>}{formatINR(orderItemTotal(item))}
+                      {hasOrderItemDiscountBreakdown(item) && regularSavings > 0 && <span className="block text-[10px] font-normal text-emerald-700">Regular saved {formatINR(regularSavings)}</span>}
+                      {hasOrderItemDiscountBreakdown(item) && premiumSavings > 0 && <span className="block text-[10px] font-normal text-emerald-800">Premium saved {formatINR(premiumSavings)}</span>}
+                    </span>
+                  </div>;
+                })}
               </div>
-              <div className="mt-2 flex justify-between border-t border-gray-100 pt-3 text-sm font-bold text-gray-900"><span>Total</span><span>{formatCurrency(order.total || 0)}</span></div>
+              <div className="mt-2 space-y-1 border-t border-gray-100 pt-3 text-xs">
+                <div className="flex justify-between"><span>Original Product Subtotal</span><span>{formatINR(totals.subtotal)}</span></div>
+                {totals.breakdownKnown ? (
+                  <>
+                    <div className="flex justify-between text-emerald-700"><span>Regular Offer Savings</span><span>− {formatINR(totals.regularDiscount)}</span></div>
+                    <div className="flex justify-between text-emerald-700"><span>Exclusive Subscriber Savings</span><span>− {formatINR(totals.premiumDiscount)}</span></div>
+                    <div className="flex justify-between font-semibold text-emerald-700"><span>Total Discount</span><span>− {formatINR(totals.discount)}</span></div>
+                  </>
+                ) : totals.discount > 0 ? (
+                  <div className="flex justify-between text-emerald-700"><span>Discount</span><span>− {formatINR(totals.discount)}</span></div>
+                ) : null}
+                <div className="flex justify-between"><span>Delivery Charge</span><span>{formatINR(totals.deliveryCharge)}</span></div>
+                <div className="flex justify-between pt-1 text-sm font-bold text-gray-900"><span>Final Payable Amount</span><span>{formatINR(totals.total)}</span></div>
+              </div>
               <Link to={`/orders/${order._id}`} className="mt-3 inline-block text-xs font-semibold text-primary hover:underline">View order details</Link>
             </section>
           </div>

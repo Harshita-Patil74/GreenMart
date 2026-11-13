@@ -1,72 +1,74 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import PublicLayout from "../layouts/PublicLayout.jsx";
 import AuthLayout from "../layouts/AuthLayout.jsx";
 import DashboardLayout from "../layouts/DashboardLayout.jsx";
 import ProtectedRoute, { RoleRoute } from "../components/routing/ProtectedRoute.jsx";
 
-import Home from "../pages/public/Home.jsx";
-import Unsubscribe from "../pages/public/Unsubscribe.jsx";
-import Shop from "../pages/public/Shop.jsx";
-import ProductDetail from "../pages/public/ProductDetail.jsx";
-import Farmers from "../pages/public/Farmers.jsx";
-import FarmerProfile from "../pages/public/FarmerProfile.jsx";
-import FarmLocations from "../pages/public/FarmLocations.jsx";
-import About from "../pages/public/About.jsx";
-import Contact from "../pages/public/Contact.jsx";
-import NotFound from "../pages/public/NotFound.jsx";
+const Home = lazy(() => import("../pages/public/Home.jsx"));
+const Unsubscribe = lazy(() => import("../pages/public/Unsubscribe.jsx"));
+const Shop = lazy(() => import("../pages/public/Shop.jsx"));
+const ProductDetail = lazy(() => import("../pages/public/ProductDetail.jsx"));
+const Farmers = lazy(() => import("../pages/public/Farmers.jsx"));
+const FarmerProfile = lazy(() => import("../pages/public/FarmerProfile.jsx"));
+const FarmLocations = lazy(() => import("../pages/public/FarmLocations.jsx"));
+const About = lazy(() => import("../pages/public/About.jsx"));
+const Contact = lazy(() => import("../pages/public/Contact.jsx"));
+const NotFound = lazy(() => import("../pages/public/NotFound.jsx"));
 
-import Login from "../pages/auth/Login.jsx";
-import Register from "../pages/auth/Register.jsx";
-import ForgotPassword from "../pages/auth/ForgotPassword.jsx";
-import ResetPassword from "../pages/auth/ResetPassword.jsx";
-import ActivateAccount from "../pages/auth/ActivateAccount.jsx";
+const Login = lazy(() => import("../pages/auth/Login.jsx"));
+const Register = lazy(() => import("../pages/auth/Register.jsx"));
+const ForgotPassword = lazy(() => import("../pages/auth/ForgotPassword.jsx"));
+const ResetPassword = lazy(() => import("../pages/auth/ResetPassword.jsx"));
+const ActivateAccount = lazy(() => import("../pages/auth/ActivateAccount.jsx"));
 
-import Cart from "../pages/shared/Cart.jsx";
-import Checkout from "../pages/shared/Checkout.jsx";
-import OrderConfirmation from "../pages/shared/OrderConfirmation.jsx";
-import TrackOrder from "../pages/shared/TrackOrder.jsx";
-import OrderDetails from "../pages/shared/OrderDetails.jsx";
-import Notifications from "../pages/shared/Notifications.jsx";
+const Cart = lazy(() => import("../pages/shared/Cart.jsx"));
+const Checkout = lazy(() => import("../pages/shared/Checkout.jsx"));
+const OrderConfirmation = lazy(() => import("../pages/shared/OrderConfirmation.jsx"));
+const TrackOrder = lazy(() => import("../pages/shared/TrackOrder.jsx"));
+const OrderDetails = lazy(() => import("../pages/shared/OrderDetails.jsx"));
+const Notifications = lazy(() => import("../pages/shared/Notifications.jsx"));
 
-import CustomerDashboard from "../pages/customer/CustomerDashboard.jsx";
-import CustomerOffers from "../pages/customer/CustomerOffers.jsx";
-import MyOrders from "../pages/customer/MyOrders.jsx";
-import MyNewsletters from "../pages/customer/MyNewsletters.jsx";
-import NewsletterDetail from "../pages/customer/NewsletterDetail.jsx";
-import NewsletterPreferences from "../pages/shared/NewsletterPreferences.jsx";
-import SubscriptionCheckout from "../pages/customer/SubscriptionCheckout.jsx";
-import Wishlist from "../pages/customer/Wishlist.jsx";
-import Profile from "../pages/customer/Profile.jsx";
-import SavedAddresses from "../pages/customer/SavedAddresses.jsx";
-import Settings from "../pages/customer/Settings.jsx";
+const CustomerDashboard = lazy(() => import("../pages/customer/CustomerDashboard.jsx"));
+const CustomerOffers = lazy(() => import("../pages/customer/CustomerOffers.jsx"));
+const MyOrders = lazy(() => import("../pages/customer/MyOrders.jsx"));
+const MyNewsletters = lazy(() => import("../pages/customer/MyNewsletters.jsx"));
+const NewsletterDetail = lazy(() => import("../pages/customer/NewsletterDetail.jsx"));
+const NewsletterPreferences = lazy(() => import("../pages/shared/NewsletterPreferences.jsx"));
+const SubscriptionCheckout = lazy(() => import("../pages/customer/SubscriptionCheckout.jsx"));
+const Wishlist = lazy(() => import("../pages/customer/Wishlist.jsx"));
+const Profile = lazy(() => import("../pages/customer/Profile.jsx"));
+const SavedAddresses = lazy(() => import("../pages/customer/SavedAddresses.jsx"));
+const Settings = lazy(() => import("../pages/customer/Settings.jsx"));
 
-import FarmerDashboard from "../pages/farmer/FarmerDashboard.jsx";
-import MyProducts from "../pages/farmer/MyProducts.jsx";
-import ProductAddEdit from "../pages/farmer/ProductAddEdit.jsx";
-import FarmerOrders from "../pages/farmer/FarmerOrders.jsx";
-import InventoryManagement from "../pages/farmer/Inventory.jsx";
-import FarmerNotifications from "../pages/farmer/FarmerNotifications.jsx";
-import FarmerProfilePage from "../pages/farmer/FarmerProfilePage.jsx";
-import SalesManagement from "../pages/farmer/SalesManagement.jsx";
-import MyCrops from "../pages/farmer/MyCrops.jsx";
-import HarvestManagement from "../pages/farmer/HarvestManagement.jsx";
-import FarmerOffers from "../pages/farmer/FarmerOffers.jsx";
+const FarmerDashboard = lazy(() => import("../pages/farmer/FarmerDashboard.jsx"));
+const MyProducts = lazy(() => import("../pages/farmer/MyProducts.jsx"));
+const ProductAddEdit = lazy(() => import("../pages/farmer/ProductAddEdit.jsx"));
+const FarmerOrders = lazy(() => import("../pages/farmer/FarmerOrders.jsx"));
+const InventoryManagement = lazy(() => import("../pages/farmer/Inventory.jsx"));
+const FarmerNotifications = lazy(() => import("../pages/farmer/FarmerNotifications.jsx"));
+const FarmerProfilePage = lazy(() => import("../pages/farmer/FarmerProfilePage.jsx"));
+const SalesManagement = lazy(() => import("../pages/farmer/SalesManagement.jsx"));
+const MyCrops = lazy(() => import("../pages/farmer/MyCrops.jsx"));
+const HarvestManagement = lazy(() => import("../pages/farmer/HarvestManagement.jsx"));
+const FarmerOffers = lazy(() => import("../pages/farmer/FarmerOffers.jsx"));
 
-import AdminDashboard from "../pages/admin/AdminDashboard.jsx";
-import AdminNotifications from "../pages/admin/AdminNotifications.jsx";
-import AdminProducts from "../pages/admin/AdminProducts.jsx";
-import AdminOrders from "../pages/admin/AdminOrders.jsx";
-import AdminUsers from "../pages/admin/AdminUsers.jsx";
-import AdminFarmers from "../pages/admin/AdminFarmers.jsx";
-import AdminInventory from "../pages/admin/AdminInventory.jsx";
-import AdminReports from "../pages/admin/AdminReports.jsx";
-import AdminNewsletter from "../pages/admin/AdminNewsletter.jsx";
-import AdminAnalytics from "../pages/admin/AdminAnalytics.jsx";
-import AdminOffers from "../pages/admin/AdminOffers.jsx";
-import AdminSettings from "../pages/admin/AdminSettings.jsx";
+const AdminDashboard = lazy(() => import("../pages/admin/AdminDashboard.jsx"));
+const AdminNotifications = lazy(() => import("../pages/admin/AdminNotifications.jsx"));
+const AdminProducts = lazy(() => import("../pages/admin/AdminProducts.jsx"));
+const AdminOrders = lazy(() => import("../pages/admin/AdminOrders.jsx"));
+const AdminUsers = lazy(() => import("../pages/admin/AdminUsers.jsx"));
+const AdminFarmers = lazy(() => import("../pages/admin/AdminFarmers.jsx"));
+const AdminInventory = lazy(() => import("../pages/admin/AdminInventory.jsx"));
+const AdminReports = lazy(() => import("../pages/admin/AdminReports.jsx"));
+const AdminNewsletter = lazy(() => import("../pages/admin/AdminNewsletter.jsx"));
+const AdminAnalytics = lazy(() => import("../pages/admin/AdminAnalytics.jsx"));
+const AdminOffers = lazy(() => import("../pages/admin/AdminOffers.jsx"));
+const AdminSettings = lazy(() => import("../pages/admin/AdminSettings.jsx"));
 
 export default function AppRoutes() {
   return (
+    <Suspense fallback={<div className="gm-container py-8 text-sm text-gray-500" role="status">Loading GreenMart...</div>}>
     <Routes>
       {/* Public Pages with Top Navbar matching Image 1 */}
       <Route element={<PublicLayout />}>
@@ -158,5 +160,6 @@ export default function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 }

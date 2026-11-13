@@ -37,10 +37,12 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
   const outOfStock = product.stock === 0;
   const offer = product.offer;
   const offerPrice = offer?.appliesToSingleUnit ? offer.offerPrice : offer?.minimumEligiblePrice;
+  const hasPremiumExtra = Number(offer?.premiumDiscountAmount) > 0;
+  const isExclusive = Boolean(offer?.audience?.includes("premium"));
   const offerLabel = offer
     ? offer.discountType === "Percentage"
-      ? `${offer.discountPercent}% OFF`
-      : `Save ₹${Number(offer.discountAmount || 0).toFixed(2)}`
+      ? `${hasPremiumExtra ? "Regular " : ""}${offer.discountPercent}% OFF`
+      : `${hasPremiumExtra ? "Regular " : ""}Save ₹${Number(offer.discountAmount || 0).toFixed(2)}`
     : "";
 
   const handleWishlist = async (event) => {
@@ -90,7 +92,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
       whileHover={reducedMotion ? undefined : cardHover.hover}
       whileTap={reducedMotion ? undefined : cardHover.tap}
       onClick={() => navigate(`/product/${productId}`)}
-      className={`flex cursor-pointer flex-col overflow-hidden rounded-[14px] border border-[#EEF1EF] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${compact ? "p-1.5" : "p-2.5"}`}
+      className={`flex cursor-pointer flex-col min-h-full overflow-hidden rounded-[14px] border border-[#EEF1EF] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.04)] ${compact ? "p-1.5" : "p-2.5"}`}
     >
       <motion.div
         initial="hidden"
@@ -100,14 +102,17 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
         className={`relative overflow-hidden rounded-[10px] bg-[#F6F7F6] ${compact ? "h-20 sm:h-24" : "h-[148px]"}`}
       >
         <ImageWithFallback src={displayImage} alt={product.name} className="w-full h-full object-cover" />
-        {offer && <span className="absolute left-2 top-2 rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white">{offerLabel}</span>}
+        <div className="absolute left-2 top-2 flex flex-col gap-1">
+          {offer && <span className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#16803C] px-2 py-1 text-[9px] font-bold text-white">{offerLabel}</span>}
+          {isExclusive && <span className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#245C3A] px-2 py-1 text-[9px] font-bold text-white">Premium Exclusive</span>}
+        </div>
         {showWishlist && (
           <motion.button
             whileHover={reducedMotion ? undefined : wishlistButtonVariants.hover}
             whileTap={reducedMotion ? undefined : wishlistButtonVariants.tap}
             onClick={handleWishlist}
             aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
-            className={`absolute right-2 top-2 flex items-center justify-center rounded-full bg-white shadow ${compact ? "h-6 w-6" : "h-7 w-7"}`}
+            className="absolute right-2 top-2 flex items-center justify-center rounded-full bg-white shadow h-7 w-7"
           >
             <Heart className={`${compact ? "h-3 w-3" : "h-3.5 w-3.5"} ${wished ? "fill-red-500 text-red-500" : "text-gray-400"}`} />
           </motion.button>
@@ -123,6 +128,11 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
         {offer && <p className="mt-1 line-clamp-1 text-[9px] font-medium text-[#16803C]" title={`${offer.title} · ${offer.type}`}>
           {offer.title} · {offer.type}{Number(offer.minimumQuantity) > 1 ? ` · min ${offer.minimumQuantity}` : Number(offer.minimumAmount) > 0 ? ` · min cart ₹${Number(offer.minimumAmount)}` : ""}
         </p>}
+        {Number(offer?.premiumDiscountAmount) > 0 && (
+          <p className="mt-1 break-words text-[9px] font-medium leading-3 text-[#52645D]">
+            Premium members save extra ₹{Number(offer.premiumDiscountAmount).toFixed(2)} / {unit}
+          </p>
+        )}
         {offer && offer.startAt && offer.effectiveStatus !== "Pending" && offer.effectiveStatus !== "Rejected" && offer.effectiveStatus !== "Inactive" && (
           <div className="mt-1 flex items-center gap-1">
             <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
@@ -138,7 +148,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
           whileTap={reducedMotion ? undefined : addToCartButtonVariants.tap}
           onClick={handleAdd}
           disabled={outOfStock || adding}
-          className={`w-full rounded-[8px] font-medium ${compact ? "mt-1.5 h-7 text-[10px]" : "mt-auto mt-3 h-9 text-[13px]"} ${
+          className={`w-full rounded-[8px] font-medium ${compact ? "mt-1.5 h-7 text-[10px]" : "mt-3 h-9 text-[13px]"} ${
             outOfStock ? "bg-gray-200 text-gray-500" : "bg-primary hover:bg-primary-hover text-white"
           }`}
         >

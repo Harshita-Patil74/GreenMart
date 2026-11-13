@@ -44,6 +44,34 @@ describe("customer invoice actions", () => {
     expect(screen.queryByText("View Invoice")).not.toBeInTheDocument();
   });
 
+  it("shows the saved discounted line and order totals", async () => {
+    orderApi.get.mockResolvedValueOnce({
+      data: {
+        ...order,
+        subtotal: 1998,
+        discount: 199.8,
+        deliveryCharge: 30,
+        total: 1828.2,
+        items: [{
+          name: "Organic Figs",
+          quantity: 2,
+          price: 999,
+          offerSnapshot: {
+            offerTitle: "10% off",
+            appliedDiscount: 199.8,
+            finalUnitPrice: 899.1,
+            finalLineTotal: 1798.2,
+          },
+        }],
+      },
+    });
+    renderWithStore(<OrderDetails />, preloadedState);
+
+    expect(await screen.findByText("₹ 1,798.20")).toBeInTheDocument();
+    expect(screen.getByText("− ₹ 199.80")).toBeInTheDocument();
+    expect(screen.getByText("₹ 1,828.20")).toBeInTheDocument();
+  });
+
   it("shows one Download Invoice action and no View Invoice action in customer order history", async () => {
     renderWithStore(<MyOrders />, preloadedState);
 

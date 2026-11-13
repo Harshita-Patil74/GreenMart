@@ -45,18 +45,26 @@ async function issueFarmerActivation(user) {
 exports.stats = asyncHandler(async (req,res) => res.json(await statsService.adminStats(req.query.from, req.query.to)));
 exports.users = asyncHandler(async (req,res) => {
   const { page=1, limit=10, role, search } = req.query;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
-  const query = {};
-  if (role && ["customer", "farmer", "admin"].includes(role)) query.role = role;
-  if (search && search.trim()) {
-    const s2 = search.trim().toLowerCase();
-    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    query.$or = [
+  const parsedPage = Number.parseInt(page, 10);
+  const parsedLimit = Number.parseInt(limit, 10);
+  const pageNum = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+  const limitNum = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(100, parsedLimit)) : 10;
+  const filters = [];
+  if (role && ["customer", "farmer", "admin"].includes(role)) filters.push({ role });
+  if (req.query.status === "active") {
+    filters.push({ $or: [{ status: "active" }, { status: { $exists: false } }, { status: null }] });
+  } else if (req.query.status === "blocked") {
+    filters.push({ status: "blocked" });
+  }
+  if (search && String(search).trim()) {
+    const regex = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    filters.push({ $or: [
       { name: regex },
       { email: regex },
-    ];
+      { phone: regex },
+    ] });
   }
+  const query = filters.length ? { $and: filters } : {};
   const [users, total] = await Promise.all([
     User.find(query).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry").sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum),
     User.countDocuments(query),
@@ -121,7 +129,9 @@ exports.analytics = asyncHandler(async (req, res) => {
   const match = parseDateFilter(from, to);
   match.status = { $nin: ["Cancelled", "Delivery Failed"] };
   match.paymentStatus = { $ne: "Failed" };
-  const orders = await Order.find(match).populate("items.product", "category name images").lean();
+  const orders = await Order.find(match)
+    .populate({ path: "items.product", select: "category name images", transform: (product, id) => product || id })
+    .lean();
   let totalSales = 0;
   const orderIds = new Set();
   const salesByCategory = {};
@@ -138,7 +148,14 @@ exports.analytics = asyncHandler(async (req, res) => {
       salesByCategory[category] = (salesByCategory[category] || 0) + amount;
       const name = item.name || (product && product.name) || "Product";
       if (!topSellingProducts[name]) {
-        topSellingProducts[name] = { name, quantity: 0, revenue: 0, image: item.image || (product && product.images && product.images[0]) || "" };
+        topSellingProducts[name] = { name, quantity: 0, revenue: 0, image: item.image || (product && product.images && product.images[0]) || "", productIds: [] };
+      }
+      const productId = product?._id || item.product;
+      if (productId) {
+        const normalizedProductId = String(productId);
+        if (!topSellingProducts[name].productIds.includes(normalizedProductId)) {
+          topSellingProducts[name].productIds.push(normalizedProductId);
+        }
       }
       topSellingProducts[name].quantity += Number(item.quantity || 0);
       topSellingProducts[name].revenue += amount;

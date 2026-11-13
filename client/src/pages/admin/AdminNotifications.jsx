@@ -8,6 +8,7 @@ import { fetchNotifications, fetchUnreadCount, markAllRead as markAllReadAction,
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { Bell, Package, Users, Boxes, AlertCircle, FileText, ShieldAlert, BadgePercent, Link as LinkIcon, Trash2, Check, Wallet } from "lucide-react";
 import Pagination from "../../components/common/Pagination.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 const CATEGORY_ICONS = {
   orders: Package,
@@ -259,6 +260,9 @@ export default function AdminNotifications() {
                         )}
                       </div>
                       <p className="mt-1 break-words text-[11px] leading-relaxed text-[#71817D]">{notification.message || "You have a new update."}</p>
+                      {notification.resourceType === "Product" && notification.resourceId && (
+                        <ProductIdentifier productId={notification.resourceId} compact className="mt-1 flex" />
+                      )}
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         {!notification.isRead && (
                           <button

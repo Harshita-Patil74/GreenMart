@@ -5,7 +5,17 @@ const Product = require("../models/Product");
 const User = require("../models/User");
 const FarmerProfile = require("../models/FarmerProfile");
 
-const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const money = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round((amount + Number.EPSILON) * 100) / 100 : 0;
+};
+
+const roundPercent = (value) => {
+  const percent = Number(value);
+  return Number.isFinite(percent)
+    ? Math.round(percent + Number.EPSILON * Math.max(1, Math.abs(percent)))
+    : 0;
+};
 
 // Combine a date string (YYYY-MM-DD) and time string (HH:MM) interpreted in Asia/Kolkata into a UTC Date.
 // Returns null if either value is missing or invalid.
@@ -123,44 +133,51 @@ async function getActiveOffers(productIds, now = new Date()) {
 
 function calculateOffer(product, quantity, offers, orderSubtotal = Number(product.price) * Number(quantity), isPremium = false) {
   const productId = String(product._id || product.id);
-  const unitPrice = Number(product.price);
+  const unitPrice = money(product.price);
   const itemQuantity = Number(quantity);
-  const productOffers = offers.filter((offer) =>
-    String(offer.product) === productId &&
-    String(offer.farmer) === String(product.farmer?._id || product.farmer) &&
-    !(offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= unitPrice)
-  );
+  const productOffers = offers.filter((offer) => {
+    const audience = offer.audience || (offer.isSubscriberExclusive === true ? ["premium"] : ["public"]);
+    return String(offer.product?._id || offer.product) === productId &&
+      String(offer.farmer?._id || offer.farmer) === String(product.farmer?._id || product.farmer) &&
+      (isPremium || audience.includes("public")) &&
+      !(offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= unitPrice)
+  });
 
   const candidates = productOffers.map((offer) => {
     if (itemQuantity < Number(offer.minimumQuantity || 1)) return null;
-    const gross = unitPrice * itemQuantity;
+    const gross = money(unitPrice * itemQuantity);
     if (Number(orderSubtotal) < Number(offer.minimumAmount || 0)) return null;
-    const perUnit = offer.discountType === "Percentage"
-      ? unitPrice * Number(offer.discountValue) / 100
-      : Number(offer.discountValue);
-    const uncappedDiscount = perUnit * itemQuantity;
-    const cap = offer.maximumDiscount == null ? uncappedDiscount : Number(offer.maximumDiscount);
-    const publicDiscount = money(Math.min(gross, uncappedDiscount, cap));
-    if (publicDiscount <= 0) return null;
-    let premiumDiscount = 0;
+    let publicDiscount = 0;
+    if (offer.discountType && Number.isFinite(Number(offer.discountValue)) && Number(offer.discountValue) > 0) {
+      const requestedPerUnitDiscount = offer.discountType === "Percentage"
+        ? unitPrice * Number(offer.discountValue) / 100
+        : Number(offer.discountValue);
+      const uncappedDiscount = money(money(requestedPerUnitDiscount) * itemQuantity);
+      const publicDiscountCap = offer.maximumDiscount == null ? uncappedDiscount : Number(offer.maximumDiscount);
+      publicDiscount = money(Math.min(gross, uncappedDiscount, publicDiscountCap));
+    }
     const publicFinalTotal = money(gross - publicDiscount);
+    const publicFinalUnitPrice = money(publicFinalTotal / itemQuantity);
+    let premiumDiscount = 0;
     if (isPremium && offer.exclusiveDiscountType && Number.isFinite(Number(offer.exclusiveDiscountValue)) && Number(offer.exclusiveDiscountValue) > 0) {
       const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
-        ? publicFinalTotal * Number(offer.exclusiveDiscountValue) / 100
-        : Number(offer.exclusiveDiscountValue) * itemQuantity;
-      const exclusiveUncapped = money(exclusivePerUnit);
+        ? money(publicFinalUnitPrice * Number(offer.exclusiveDiscountValue) / 100)
+        : money(Number(offer.exclusiveDiscountValue));
+      const exclusiveUncapped = money(exclusivePerUnit * itemQuantity);
       const exclusiveCap = offer.maximumDiscount == null ? exclusiveUncapped : Number(offer.maximumDiscount);
       premiumDiscount = money(Math.min(publicFinalTotal, exclusiveUncapped, exclusiveCap));
-      if (!Number.isFinite(premiumDiscount) || premiumDiscount < 0) premiumDiscount = 0;
     }
     const finalTotal = money(publicFinalTotal - premiumDiscount);
+    const finalUnitPrice = money(finalTotal / itemQuantity);
     if (!Number.isFinite(finalTotal) || finalTotal < 0) return null;
     const totalDiscount = money(gross - finalTotal);
     return {
       offer,
       discount: totalDiscount,
+      publicDiscount,
       premiumDiscount,
-      finalUnitPrice: money(finalTotal / itemQuantity),
+      publicFinalUnitPrice,
+      finalUnitPrice,
       finalLineTotal: finalTotal,
     };
   }).filter(Boolean);
@@ -171,25 +188,26 @@ function calculateOffer(product, quantity, offers, orderSubtotal = Number(produc
 function getDisplayedOffer(product, offers) {
   if (product.status !== "Active" || Number(product.stock) <= 0) return null;
   const productId = String(product._id || product.id);
-  const candidates = offers.filter((offer) =>
-    String(offer.product) === productId &&
-    String(offer.farmer?._id || offer.farmer) === String(product.farmer?._id || product.farmer) &&
-    Number(product.stock) >= Number(offer.minimumQuantity || 1) &&
-    !(offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= Number(product.price))
-  ).map((offer) => {
-    const perUnit = offer.discountType === "Percentage"
-      ? Number(product.price) * Number(offer.discountValue) / 100
-      : Number(offer.discountValue);
+  const candidates = offers.filter((offer) => {
+    const audience = offer.audience || (offer.isSubscriberExclusive === true ? ["premium"] : ["public"]);
+    return String(offer.product) === productId &&
+      String(offer.farmer?._id || offer.farmer) === String(product.farmer?._id || product.farmer) &&
+      audience.includes("public") &&
+      Number(product.stock) >= Number(offer.minimumQuantity || 1) &&
+      !(offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= Number(product.price))
+  }).map((offer) => {
     const minimumEligibleQuantity = Number(offer.minimumQuantity || 1);
-    const eligibleSubtotal = Number(product.price) * minimumEligibleQuantity;
-    const eligibleDiscount = money(Math.min(
-      eligibleSubtotal,
-      perUnit * minimumEligibleQuantity,
-      offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-    ));
-    if (eligibleDiscount <= 0) return null;
-    const discountAmount = money(eligibleDiscount / minimumEligibleQuantity);
-    const minimumEligiblePrice = money((eligibleSubtotal - eligibleDiscount) / minimumEligibleQuantity);
+    const eligibleSubtotal = money(Number(product.price) * minimumEligibleQuantity);
+    const minimumOrderSubtotal = Math.max(eligibleSubtotal, Number(offer.minimumAmount || 0));
+    const appliedOffer = calculateOffer(product, minimumEligibleQuantity, [offer], minimumOrderSubtotal);
+    const premiumOffer = calculateOffer(product, minimumEligibleQuantity, [offer], minimumOrderSubtotal, true);
+    if (!appliedOffer) return null;
+    const eligibleDiscount = appliedOffer.discount;
+    const discountAmount = money(Number(product.price) - appliedOffer.finalUnitPrice);
+    const minimumEligiblePrice = appliedOffer.finalUnitPrice;
+    const premiumDiscountAmount = premiumOffer?.premiumDiscount > 0
+      ? money(premiumOffer.premiumDiscount / minimumEligibleQuantity)
+      : null;
     return {
       _id: offer._id,
       title: offer.title,
@@ -202,7 +220,11 @@ function getDisplayedOffer(product, offers) {
       minimumEligiblePrice,
       totalSavings: eligibleDiscount,
       discountAmount,
-      discountPercent: Math.round((eligibleDiscount / eligibleSubtotal) * 100),
+      discountPercent: roundPercent((eligibleDiscount / eligibleSubtotal) * 100),
+      premiumDiscountAmount,
+      premiumDiscountPercent: premiumDiscountAmount != null && premiumOffer.publicFinalUnitPrice > 0
+        ? roundPercent((premiumOffer.premiumDiscount / (premiumOffer.publicFinalUnitPrice * minimumEligibleQuantity)) * 100)
+        : null,
       appliesToSingleUnit: minimumEligibleQuantity <= 1 && Number(offer.minimumAmount || 0) <= 0,
       startDate: offer.startDate,
       endDate: offer.endDate,
@@ -216,7 +238,49 @@ function getDisplayedOffer(product, offers) {
   return candidates.sort((left, right) => left.offerPrice - right.offerPrice)[0] || null;
 }
 
-async function attachProductOffers(products) {
+function getDisplayedSubscriberOffer(product, offers) {
+  if (product.status !== "Active" || Number(product.stock) <= 0) return null;
+  const productId = String(product._id || product.id);
+  const candidates = offers.filter((offer) => {
+    const audience = offer.audience || (offer.isSubscriberExclusive === true ? ["premium"] : ["public"]);
+    return String(offer.product?._id || offer.product) === productId &&
+      String(offer.farmer?._id || offer.farmer) === String(product.farmer?._id || product.farmer) &&
+      audience.includes("premium") &&
+      Number(product.stock) >= Number(offer.minimumQuantity || 1) &&
+      !(offer.discountType === "Fixed Amount" && Number(offer.discountValue) >= Number(product.price))
+  }).map((offer) => {
+    const minimumEligibleQuantity = Number(offer.minimumQuantity || 1);
+    const eligibleSubtotal = money(Number(product.price) * minimumEligibleQuantity);
+    const minimumOrderSubtotal = Math.max(eligibleSubtotal, Number(offer.minimumAmount || 0));
+    const appliedOffer = calculateOffer(product, minimumEligibleQuantity, [offer], minimumOrderSubtotal, true);
+    if (!appliedOffer) return null;
+    const premiumDiscountPercent = appliedOffer.premiumDiscount > 0 && appliedOffer.publicDiscount < eligibleSubtotal
+      ? roundPercent((appliedOffer.premiumDiscount / (eligibleSubtotal - appliedOffer.publicDiscount)) * 100)
+      : 0;
+    return {
+      _id: offer._id,
+      title: offer.title,
+      type: offer.type,
+      minimumQuantity: offer.minimumQuantity,
+      minimumAmount: offer.minimumAmount,
+      minimumEligibleQuantity,
+      totalSavings: appliedOffer.discount,
+      regularDiscountAmount: money(appliedOffer.publicDiscount / minimumEligibleQuantity),
+      regularDiscountPercent: roundPercent((appliedOffer.publicDiscount / eligibleSubtotal) * 100),
+      premiumDiscountAmount: money(appliedOffer.premiumDiscount / minimumEligibleQuantity),
+      premiumDiscountPercent,
+      startDate: offer.startDate,
+      endDate: offer.endDate,
+      startAt: offer.startAt,
+      endAt: offer.endAt,
+      originalPrice: Number(product.price),
+      maximumDiscount: offer.maximumDiscount,
+    };
+  }).filter(Boolean);
+  return candidates.sort((left, right) => right.totalSavings - left.totalSavings)[0] || null;
+}
+
+async function attachProductOffers(products, { includeSubscriberOffers = false } = {}) {
   if (!products.length) return products;
   const ids = products.map((product) => product._id);
   const offers = await getActiveOffers(ids);
@@ -227,7 +291,11 @@ async function attachProductOffers(products) {
   }
   return products.map((product) => {
     const plain = product.toObject ? product.toObject() : { ...product };
-    plain.offer = getDisplayedOffer(plain, byProduct.get(String(plain._id)) || []);
+    const productOffers = byProduct.get(String(plain._id)) || [];
+    plain.offer = getDisplayedOffer(plain, productOffers);
+    if (includeSubscriberOffers) {
+      plain.subscriberOffer = getDisplayedSubscriberOffer(plain, productOffers);
+    }
     return plain;
   });
 }
@@ -248,6 +316,7 @@ async function enrichCart(cart, isPremium = false) {
       type: applied.offer.type,
       discountType: applied.offer.discountType,
       discountValue: applied.offer.discountValue,
+      isSubscriberExclusive: applied.offer.audience?.includes("premium") === true,
       appliedDiscount: applied.discount,
       premiumDiscount: applied.premiumDiscount,
       finalUnitPrice: applied.finalUnitPrice,
@@ -255,11 +324,50 @@ async function enrichCart(cart, isPremium = false) {
     } : null;
     return {
       ...item,
-      product: { ...product, offer: getDisplayedOffer(product, offers.filter((entry) => String(entry.product) === String(product._id))) },
+      product: {
+        ...product,
+        offer: getDisplayedOffer(product, offers.filter((entry) => String(entry.product) === String(product._id))),
+        subscriberOffer: getDisplayedSubscriberOffer(product, offers.filter((entry) => String(entry.product) === String(product._id))),
+      },
       offer,
     };
   });
   return plain;
+}
+
+function lineGross(item) {
+  const price = Number(item?.product?.price ?? item?.price ?? 0);
+  const quantity = Number(item?.quantity);
+  if (!Number.isFinite(price) || price < 0 || !Number.isInteger(quantity) || quantity < 1) return 0;
+  return money(price * quantity);
+}
+
+function lineDiscount(item) {
+  const applied = Number(item?.offer?.appliedDiscount ?? item?.offerSnapshot?.appliedDiscount ?? 0);
+  if (!Number.isFinite(applied) || applied <= 0) return 0;
+  return money(Math.min(applied, lineGross(item)));
+}
+
+function linePremiumDiscount(item) {
+  const isPremiumExclusive = item?.offer?.audience?.includes("premium") === true ||
+    item?.offerSnapshot?.audience?.includes("premium") === true;
+  if (isPremiumExclusive) return lineDiscount(item);
+  const premium = Number(item?.offer?.premiumDiscount ?? item?.offerSnapshot?.premiumDiscount ?? 0);
+  if (!Number.isFinite(premium) || premium <= 0) return 0;
+  return money(Math.min(premium, lineDiscount(item)));
+}
+
+function computeCartTotals(items = [], deliveryCharge = 0) {
+  const list = Array.isArray(items) ? items : [];
+  const subtotal = money(list.reduce((sum, item) => sum + lineGross(item), 0));
+  const discount = money(Math.min(subtotal, list.reduce((sum, item) => sum + lineDiscount(item), 0)));
+  const premiumDiscount = money(Math.min(discount, list.reduce((sum, item) => sum + linePremiumDiscount(item), 0)));
+  const regularDiscount = money(discount - premiumDiscount);
+  const hasItems = subtotal > 0;
+  const charge = Number(deliveryCharge);
+  const delivery = hasItems && Number.isFinite(charge) && charge >= 0 ? money(charge) : 0;
+  const total = money(Math.max(0, subtotal - discount + delivery));
+  return { subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge: delivery, total };
 }
 
 async function getSalesByOffer(farmerId) {
@@ -298,12 +406,15 @@ async function getSalesByOffer(farmerId) {
 
 module.exports = {
   money,
+  roundPercent,
   getEffectiveStatus,
   getActiveOffers,
   calculateOffer,
   getDisplayedOffer,
+  getDisplayedSubscriberOffer,
   attachProductOffers,
   enrichCart,
+  computeCartTotals,
   getSalesByOffer,
   combineDateTimeToUTC,
   getEffectiveStart,

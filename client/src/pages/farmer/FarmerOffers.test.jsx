@@ -70,6 +70,25 @@ describe("Farmer My Offers", () => {
     expect(await screen.findByText("No offers match these filters.")).toBeInTheDocument();
   });
 
+  it("uses the default ten-offer page size and clears search without losing filters", async () => {
+    render(<FarmerOffers />);
+    await screen.findByText("Mango Harvest Special");
+    await waitFor(() => expect(farmerOffersApi.list).toHaveBeenCalledWith({
+      page: 1, limit: 10, search: "", type: "", status: "",
+    }));
+
+    const search = screen.getByRole("textbox", { name: "Search offers" });
+    expect(search).toHaveAttribute("placeholder", "Search by Product ID, product name, offer title, description, or category...");
+    fireEvent.change(search, { target: { value: "  Organic Fig  " } });
+    await waitFor(() => expect(farmerOffersApi.list).toHaveBeenLastCalledWith({
+      page: 1, limit: 10, search: "Organic Fig", type: "", status: "",
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear offer search" }));
+    await waitFor(() => expect(farmerOffersApi.list).toHaveBeenLastCalledWith({
+      page: 1, limit: 10, search: "", type: "", status: "",
+    }));
+  });
+
   it("opens the create form and submits a valid offer for approval", async () => {
     render(<FarmerOffers />);
     await screen.findByText("Mango Harvest Special");

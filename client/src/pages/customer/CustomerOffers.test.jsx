@@ -157,6 +157,85 @@ describe("Customer Offers", () => {
     expect(screen.getByText("17% OFF")).toBeInTheDocument();
   });
 
+  it("shows subscriber-exclusive products at their regular price in the general offers feed", async () => {
+    const teaser = {
+      _id: "exclusive-flower-offer",
+      title: "Subscriber Exclusive",
+      type: "Seasonal Offer",
+      audience: ["premium"],
+      premiumExclusiveTeaser: true,
+      originalPrice: 80,
+      offerPrice: 80,
+      discountAmount: 0,
+      discountPercent: 0,
+      discountType: null,
+      discountValue: null,
+      regularDiscountType: "Percentage",
+      regularDiscountValue: 20,
+      regularDiscountAmount: 16,
+      regularDiscountPercent: 20,
+      premiumDiscountAmount: 5,
+      minimumQuantity: 1,
+      minimumAmount: 0,
+      endDate: "2026-11-30T00:00:00.000Z",
+      effectiveStatus: "Active",
+      product: {
+        _id: "subscriber-flower",
+        name: "Subscriber Marigold Flowers",
+        category: "Flowers",
+        price: 80,
+        unit: "kg",
+        stock: 12,
+        images: [],
+      },
+    };
+    offerApi.list.mockResolvedValueOnce({
+      data: { active: [teaser], upcoming: [], serverTime: new Date().toISOString() },
+    });
+
+    renderPage();
+
+    const productCard = (await screen.findByRole("img", { name: "Subscriber Marigold Flowers" })).closest("article");
+    expect(within(productCard).getByText("Premium Exclusive")).toBeInTheDocument();
+    expect(within(productCard).getByText(/80\.00/)).toBeInTheDocument();
+    expect(within(productCard).getByText(/Offer discount: 20%/)).toBeInTheDocument();
+    expect(within(productCard).getByText(/Premium extra/)).toBeInTheDocument();
+    expect(within(productCard).queryByText("0% OFF")).not.toBeInTheDocument();
+    fireEvent.click(within(productCard).getByRole("button", { name: "Add to Cart" }));
+    await waitFor(() => expect(addItem).toHaveBeenCalledWith(teaser.product));
+  });
+
+  it("shows the regular payable price before additional Premium savings", async () => {
+    const publicOffer = {
+      ...activeOffers[0],
+      _id: "public-premium-extra",
+      title: "Marigold Special",
+      discountPercent: 20,
+      discountAmount: 16,
+      originalPrice: 80,
+      offerPrice: 64,
+      premiumDiscountAmount: 5,
+      product: {
+        ...activeOffers[0].product,
+        _id: "marigold-public",
+        name: "Fresh Marigold Flowers",
+        price: 80,
+        unit: "kg",
+      },
+    };
+    offerApi.list.mockResolvedValueOnce({
+      data: { active: [publicOffer], upcoming: [], serverTime: new Date().toISOString() },
+    });
+
+    renderPage();
+
+    const card = (await screen.findByRole("img", { name: "Fresh Marigold Flowers" })).closest("article");
+    expect(within(card).getByText("₹64.00")).toBeInTheDocument();
+    expect(within(card).getByText("₹80.00 / kg")).toHaveClass("line-through");
+    expect(within(card).getByText("Regular 20% OFF")).toBeInTheDocument();
+    expect(within(card).getByText(/Premium members save extra: ₹5\.00 \/ kg/)).toBeInTheDocument();
+  });
+
   it("shows Active Offers tab by default and Coming Soon tab", async () => {
     renderPage();
     await screen.findByText("Alphonso Mango");

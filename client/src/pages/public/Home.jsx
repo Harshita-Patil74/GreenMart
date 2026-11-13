@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Leaf, Users, Truck, Recycle, ArrowRight } from "lucide-react";
+import { Leaf, Users, Truck, Recycle, ArrowRight, BadgePercent } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
@@ -37,98 +37,151 @@ const MIN_ITEMS_FOR_INFINITE = 5;
 function HomeOfferCard({ offer, serverTime }) {
   const navigate = useNavigate();
   const product = offer.product || {};
-  const productId = product._id || product.id;
   const farmerName = offer.farmer?.name || product.farmer?.name || "GreenMart Farmer";
-  const originalPrice = Number((offer.originalPrice ?? product.price) || 0);
-  const price = Number(offer.offerPrice ?? 0);
-  const discountLabel = offer.discountType === "Percentage"
+  const unit = product.unit || "unit";
+  const productId = product._id || product.id;
+  const isExclusive = Boolean(offer.audience?.includes("premium"));
+  const isExclusiveTeaser = Boolean(offer.premiumExclusiveTeaser);
+  const upcoming = offer.effectiveStatus === "Scheduled";
+  const hasPremiumExtra = Number(offer.premiumDiscountAmount) > 0;
+  const isPremiumEligible = Boolean(offer.isPremiumEligible);
+  const savingLabel = offer.discountType === "Percentage"
     ? `${offer.discountPercent}% OFF`
-    : `${formatCurrency(offer.discountAmount)} OFF`;
-  const minimumQuantity = Math.max(1, Number(offer.minimumQuantity || 1));
-  const minimumAmount = Number(offer.minimumAmount || 0);
-  const stock = Number(product.stock || 0);
-  const outOfStock = stock < minimumQuantity;
-  const active = offer.effectiveStatus === "Active";
-  const disabled = outOfStock || !active;
+    : `Save ${formatCurrency(offer.discountAmount)}`;
+  const regularSavingLabel = hasPremiumExtra
+    ? offer.discountType === "Percentage"
+      ? `Regular ${offer.discountPercent}% OFF`
+      : `Regular save ${formatCurrency(offer.discountAmount)}`
+    : savingLabel;
+  const exclusiveSavingLabel = Number(offer.originalPrice) > 0 && Number(offer.offerPrice) < Number(offer.originalPrice)
+    ? `${offer.discountPercent}% OFF`
+    : `Save ${formatCurrency(offer.discountAmount ?? 0)}`;
+  const teaserOfferLabel = offer.regularDiscountType === "Percentage"
+    ? `Offer discount: ${offer.regularDiscountPercent}%`
+    : `Offer discount: ${formatCurrency(offer.regularDiscountAmount)} off`;
+  const requiredQuantity = Math.max(1, Number(offer.minimumQuantity) || 1);
   const reducedMotion = useReducedMotion();
   const animate = reducedMotion ? false : "visible";
 
+  // Determine applicable price: Premium subscribers see premium price, others see public/original price
+  const applicablePrice = isPremiumEligible && Number(offer.premiumOfferPrice) > 0
+    ? Number(offer.premiumOfferPrice)
+    : Number(offer.publicOfferPrice || offer.offerPrice || offer.originalPrice);
+  const isLocked = isExclusive && !isPremiumEligible;
+  const showPremiumLock = isExclusive && !isPremiumEligible && Number(offer.originalPrice) > 0;
+
   return (
     <motion.div
+      initial="hidden"
       animate={animate}
       variants={cardItemVariants}
       whileHover={reducedMotion ? undefined : cardHover.hover}
       whileTap={reducedMotion ? undefined : cardHover.tap}
-      className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[#E2E6DF] bg-white p-1.5 shadow-[0_1px_5px_rgba(38,53,43,0.06)]"
+      className={`flex min-w-0 flex-col overflow-hidden rounded-xl border p-2.5 min-h-[300px] ${isExclusive ? "border-[#E4E9E3] bg-[#F7FAF7]" : "border-[#E5EBE5] bg-white"}`}
     >
       <motion.div
+        initial="hidden"
         animate={animate}
         variants={cardItemVariants}
         whileHover={reducedMotion ? undefined : imageHover.hover}
-        className="relative h-[120px] overflow-hidden rounded-[9px] bg-[#F5F3EE] sm:h-[112px] lg:h-[116px]"
+        className="relative h-20 overflow-hidden rounded-[8px] bg-[#F0F3EF] mb-2"
       >
         <ImageWithFallback
           src={getImageUrl(product.images?.[0])}
-          alt={product.name || "Fresh product"}
+          alt={product.name || "Offer product"}
           className="h-full w-full object-cover"
         />
-        <motion.span
-          whileHover={reducedMotion ? undefined : badgeHover.hover}
-          whileTap={reducedMotion ? undefined : badgeHover.tap}
-          className="absolute left-1.5 top-1.5 rounded-full bg-[#245C3A] px-2 py-1 text-[9px] font-bold text-white shadow-sm"
-        >
-          {discountLabel}
-        </motion.span>
-      </motion.div>
-
-      <div className="flex flex-1 flex-col px-1 pt-1.5">
-        <Link to={`/product/${productId}`} className="line-clamp-1 text-[12px] font-bold leading-4 text-[#26352B] hover:text-[#245C3A] sm:text-[13px]" title={product.name}>
-          {product.name || "Product"}
-        </Link>
-        <p className="mt-0.5 truncate text-[9px] leading-3 text-[#68756B] sm:text-[10px]">{offer.title}</p>
-        <p className="mt-0.5 text-[8px] text-[#8B9A8E]">{farmerName}</p>
-
-        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          <span className="text-[13px] font-bold leading-4 text-[#245C3A] sm:text-sm">{formatCurrency(price)}</span>
-          <span className="text-[9px] text-[#9AA498] line-through">{formatCurrency(originalPrice)}</span>
-          <span className="rounded-full bg-[#EAF2E7] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#14532D] sm:text-[9px]">{discountLabel}</span>
+        <div className="absolute left-1 right-1 top-1 z-10 flex flex-col items-start gap-1">
+          <motion.span
+            whileHover={reducedMotion ? undefined : badgeHover.hover}
+            whileTap={reducedMotion ? undefined : badgeHover.tap}
+            className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold leading-3 text-white"
+          >
+            <BadgePercent aria-hidden="true" className="h-2.5 w-2.5 shrink-0" /> {offer.type}
+          </motion.span>
+          {isExclusive && (
+            <span className="inline-flex max-w-full whitespace-normal break-words rounded-full bg-[#245C3A] px-2 py-0.5 text-[9px] font-semibold leading-3 text-white">
+              Premium Exclusive
+            </span>
+          )}
+          {upcoming && (
+            <span className="rounded-full bg-[#C2410C] px-2 py-0.5 text-[9px] font-semibold text-white">
+              Coming Soon
+            </span>
+          )}
         </div>
-        <p className="mt-0.5 text-[8px] text-[#8B9A8E]">per {product.unit || "unit"}{minimumQuantity > 1 ? ` · min ${minimumQuantity}` : ""}</p>
-        {minimumAmount > 0 && (
-          <p className="mt-1 truncate text-[8px] font-medium text-[#8B9A8E]">Cart minimum {formatCurrency(minimumAmount)}</p>
-        )}
-        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 border-t border-[#EFEFEC] pt-1.5 text-[8px] text-[#68756B] sm:text-[9px]">
-          <span className="inline-flex items-center gap-1 whitespace-nowrap">
-            <ArrowRight aria-hidden="true" className="h-3 w-3" />
-            {formatDate(offer.startDate)} – {formatDate(offer.endDate, { day: "2-digit", month: "short", year: "numeric" })}
+        {!upcoming && !isExclusive && (
+          <span className="absolute right-1 top-1 rounded-full bg-[#16803C] px-2 py-0.5 text-[9px] font-semibold text-white">
+            Active
           </span>
-          {offer.startAt && offer.effectiveStatus === "Upcoming" && (
-            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
-          )}
-          {offer.endAt && offer.effectiveStatus === "Active" && (
-            <OfferCountdown startAt={offer.startAt} endAt={offer.endAt} status={offer.effectiveStatus} serverTime={serverTime} />
-          )}
-          <span className={disabled ? "font-semibold text-[#C2410C]" : "whitespace-nowrap"}>{disabled ? "Out of Stock" : `In Stock: ${stock}`}</span>
-        </div>
-
-        <div className="mt-auto grid grid-cols-[1fr_auto] gap-1.5 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate(`/product/${productId}`)}
-            disabled={disabled}
-            className="inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-md bg-[#245C3A] px-2 text-[10px] font-semibold text-white transition hover:bg-[#1E4A30] disabled:cursor-not-allowed disabled:bg-[#D9E0D4] disabled:text-[#8B9A8E] sm:text-[11px]"
-          >
-            <span className="truncate">{disabled ? "Out of Stock" : "Shop Now"}</span>
-          </button>
-          <Link
-            to={`/product/${productId}`}
-            aria-label={`View ${product.name}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#E2E6DF] text-[#68756B] hover:bg-[#F0F5EE]"
-          >
-            <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+        )}
+      </motion.div>
+      <Link to={`/product/${productId}`} className="line-clamp-1 text-xs font-semibold text-[#22352B] hover:text-[#16803C] mb-1">
+        {product.name}
+      </Link>
+      <p className="mt-0 truncate text-[9px] text-[#7A877F] mb-1.5">{offer.title}</p>
+      <p className="mt-0 truncate text-[9px] text-[#7A877F] mb-1.5">{farmerName}</p>
+      <div className="flex flex-wrap items-baseline gap-x-1.5 mb-1.5">
+        {showPremiumLock ? (
+          <>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)} / {unit}</span>
+            <span className="rounded-full bg-[#7C3AED] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">Premium Exclusive</span>
+            <span className="text-[9px] text-[#7C3AED] font-semibold">Locked</span>
+          </>
+        ) : isExclusiveTeaser ? (
+          <>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(product.price ?? offer.originalPrice)} / {unit}</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">Premium members only</span>
+            <p className="w-full text-[9px] leading-3 text-[#52645D]">
+              {teaserOfferLabel}
+              {Number(offer.premiumDiscountAmount) > 0 && ` · Premium extra: ${formatCurrency(offer.premiumDiscountAmount)} / ${unit}`}
+            </p>
+          </>
+        ) : isExclusive && offer.publicPrice != null && offer.exclusivePrice != null && offer.publicPrice > offer.exclusivePrice ? (
+          <>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)} / {unit}</span>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(applicablePrice)} / {unit}</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">Premium price</span>
+            <span className="rounded-full bg-[#14532D] px-1.5 py-0.5 text-[7px] font-bold leading-none text-white">{exclusiveSavingLabel}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-xs font-bold text-[#0F6A3A]">{formatCurrency(applicablePrice)}</span>
+            <span className="text-[9px] text-gray-400 line-through">{formatCurrency(offer.originalPrice)} / {unit}</span>
+            <span className="rounded-full bg-[#E6F7E9] px-1.5 py-0.5 text-[8px] font-bold leading-none text-[#13803D]">{regularSavingLabel}</span>
+          </>
+        )}
       </div>
+      {isExclusive && !isExclusiveTeaser && offer.publicDiscountAmount != null && offer.exclusiveDiscountAmount != null && (
+        <p className="mb-1.5 text-[9px] leading-3 text-[#52645D]">
+          Offer discount: {offer.publicDiscountPercent}% off ({formatCurrency(offer.publicDiscountAmount)}) · Regular price: {formatCurrency(offer.publicPrice)} / {unit} · Premium extra: {formatCurrency(offer.exclusiveDiscountAmount)} / {unit}
+        </p>
+      )}
+      {showPremiumLock && (
+        <p className="mb-1.5 break-words text-[9px] leading-3 text-[#7C3AED]">
+          Premium Exclusive offer · Subscribe to GreenMart Premium to unlock this price.
+        </p>
+      )}
+      {!isExclusive && !isExclusiveTeaser && Number(offer.premiumDiscountAmount) > 0 && (
+        <p className="mb-1.5 break-words text-[9px] leading-3 text-[#52645D]">
+          Premium members save extra: {formatCurrency(offer.premiumDiscountAmount)} / {unit}
+        </p>
+      )}
+      {!isExclusiveTeaser && (requiredQuantity > 1 || Number(offer.minimumAmount) > 0) && (
+        <p className="mt-0 text-[9px] leading-3 text-[#71817D] mb-1.5">
+          {requiredQuantity > 1 ? `At ${requiredQuantity}+ ${unit}` : "Minimum purchase"}
+          {Number(offer.minimumAmount) > 0 ? ` · ₹${Number(offer.minimumAmount).toFixed(2)} minimum cart subtotal` : ""}
+        </p>
+      )}
+      <OfferCountdown
+        startAt={offer.startAt || offer.startDate}
+        endAt={offer.endAt || offer.endDate}
+        status={offer.effectiveStatus || (upcoming ? "Upcoming" : "Active")}
+        serverTime={serverTime}
+      />
+      <Link to={`/product/${productId}`} className="inline-flex h-7 items-center justify-center rounded-md border border-[#DDE8DF] text-[10px] font-semibold text-[#176B3B] w-full mt-auto">
+        View Product
+      </Link>
     </motion.div>
   );
 }
@@ -262,7 +315,9 @@ export default function Home() {
   }, []);
 
   const uniqueOffers = dedupeById(offers);
-  const eligibleOffers = uniqueOffers.filter((offer) => offer.effectiveStatus === "Active");
+  const eligibleOffers = uniqueOffers.filter((offer) =>
+    offer.effectiveStatus === "Active" || offer.effectiveStatus === "Scheduled"
+  );
   const offersInfinite = eligibleOffers.length >= MIN_ITEMS_FOR_INFINITE;
 
   const uniqueProducts = dedupeById(products);

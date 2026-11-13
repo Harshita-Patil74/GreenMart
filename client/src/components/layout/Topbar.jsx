@@ -57,11 +57,13 @@ export default function Topbar({ placeholder }) {
           </div>
           <button
             type="button"
-            aria-label="Open navigation menu"
-            onClick={() => setDrawerOpen(true)}
+            aria-label={drawerOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={drawerOpen}
+            aria-controls="dashboard-mobile-navigation"
+            onClick={() => setDrawerOpen((prev) => !prev)}
             className="inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-[#4B5563] hover:bg-gray-50 lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
-            <Menu className="h-5 w-5" />
+            {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <form onSubmit={handleSearch} className={`relative min-w-0 max-w-[240px] flex-1 ${role === "customer" ? "mx-1 block sm:mx-0" : "hidden sm:block"} ${role === "farmer" ? "sm:hidden" : ""}`}>
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />

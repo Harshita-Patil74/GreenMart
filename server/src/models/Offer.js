@@ -26,7 +26,19 @@ const OfferSchema = new mongoose.Schema({
     default: "Pending",
     index: true,
   },
-  isSubscriberExclusive: { type: Boolean, default: false, index: true },
+  audience: {
+    type: [{
+      type: String,
+      enum: ["public", "premium"],
+    }],
+    required: true,
+    validate: {
+      validator: function (value) {
+        return Array.isArray(value) && value.length >= 1 && new Set(value).size === value.length;
+      },
+      message: "Select at least one offer audience.",
+    },
+  },
   exclusiveDiscountType: { type: String, enum: ["Percentage", "Fixed Amount"], default: null },
   exclusiveDiscountValue: { type: Number, default: null, min: 0 },
   isActive: { type: Boolean, default: true, index: true },

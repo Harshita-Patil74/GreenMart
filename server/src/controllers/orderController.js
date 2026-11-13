@@ -1,7 +1,9 @@
 const Order = require("../models/Order");
 const User = require("../models/User");
+const Product = require("../models/Product");
 const orderService = require("../services/orderService");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { getSearchTerms, createSearchRegex } = require("../utils/search");
 const { createNotification } = require("../services/notificationService");
 const { emitToUser, emitToFarmer, emitToAdmins } = require("../sockets/emitters");
 const mongoose = require("mongoose");
@@ -38,9 +40,108 @@ function farmerOrderView(order, farmerId) {
   };
 }
 
+async function buildOrderSearchFilter(search, includeCustomer = false, farmerId = null) {
+  const terms = getSearchTerms(search);
+  if (!terms.length) return null;
+
+  const productConditions = terms.map((term) => ({ name: createSearchRegex(term) }));
+  const exactId = terms.length === 1 && /^[a-f\d]{24}$/i.test(terms[0])
+    ? new mongoose.Types.ObjectId(terms[0])
+    : null;
+  if (exactId) productConditions.push({ _id: exactId });
+  const [matchingProducts, matchingUsers] = await Promise.all([
+    Product.find({ $or: productConditions }).select("_id name").lean(),
+    includeCustomer
+      ? User.find({
+        $or: terms.flatMap((term) => [
+          { name: createSearchRegex(term) },
+          { email: createSearchRegex(term) },
+        ]),
+      }).select("_id name email").lean()
+      : [],
+  ]);
+
+  return {
+    $and: terms.map((term) => {
+      const regex = createSearchRegex(term);
+      const alternatives = [
+        { orderNumber: regex },
+        { paymentMethod: regex },
+        { status: regex },
+        { "address.name": regex },
+      ];
+      const productIds = matchingProducts
+        .filter((product) => regex.test(product.name || "") || (exactId && String(product._id) === String(exactId)))
+        .map((product) => product._id);
+      if (farmerId) {
+        const ownedItemMatches = [{ name: regex }];
+        if (productIds.length) ownedItemMatches.push({ product: { $in: productIds } });
+        alternatives.push({
+          items: {
+            $elemMatch: {
+              farmer: farmerId,
+              $or: ownedItemMatches,
+            },
+          },
+        });
+      } else {
+        alternatives.push({ "items.name": regex });
+        if (productIds.length) alternatives.push({ "items.product": { $in: productIds } });
+      }
+      if (includeCustomer) {
+        const userIds = matchingUsers
+          .filter((user) => regex.test(user.name || "") || regex.test(user.email || ""))
+          .map((user) => user._id);
+        if (userIds.length) alternatives.push({ user: { $in: userIds } });
+      }
+      if (terms.length === 1 && exactId) alternatives.push({ _id: exactId });
+      return { $or: alternatives };
+    }),
+  };
+}
+
+function addDateRange(query, from, to) {
+  if (!from && !to) return;
+  const parseDate = (value, name, endOfDay) => {
+    if (!value) return null;
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const error = new Error(`Invalid ${name} date. Expected YYYY-MM-DD.`);
+      error.status = 400;
+      throw error;
+    }
+    const parsed = new Date(`${value}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+      const error = new Error(`Invalid ${name} date.`);
+      error.status = 400;
+      throw error;
+    }
+    return parsed;
+  };
+  if (from && to && from > to) {
+    const error = new Error("Start date must be before or equal to end date.");
+    error.status = 400;
+    throw error;
+  }
+  query.createdAt = {};
+  const start = parseDate(from, "Start", false);
+  const end = parseDate(to, "End", true);
+  if (start) query.createdAt.$gte = start;
+  if (end) query.createdAt.$lte = end;
+}
+
+function addAndCondition(query, condition) {
+  if (!query.$and) query.$and = [];
+  query.$and.push(condition);
+}
+
 exports.create = asyncHandler(async (req,res) => {
   const address = req.body.address || {};
-  if (!address.name || !address.line1 || !address.city || !address.phone) {
+  if (req.user.role !== "customer") {
+    return res.status(403).json({ message: "Only customers can place an order." });
+  }
+  if (![address.name, address.line1, address.city, address.phone].every(
+    (value) => typeof value === "string" && value.trim()
+  )) {
     return res.status(400).json({ message: "A valid delivery address is required." });
   }
   const order = await orderService.createOrder(req.user._id, req.body);
@@ -99,44 +200,60 @@ exports.create = asyncHandler(async (req,res) => {
   }
   res.status(201).json(order);
 });
+exports.quote = asyncHandler(async (req, res) => {
+  if (req.user.role !== "customer") {
+    return res.status(403).json({ message: "Only customers can check out." });
+  }
+  res.json(await orderService.getCheckoutQuote(req.user._id));
+});
 exports.mine = asyncHandler(async (req,res) => {
-  const { search, page=1, limit=10 } = req.query;
+  const { search, page=1, limit=10, status, from, to, fromDate, toDate } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
   const query = { user: req.user._id };
-  if (search && search.trim()) {
-    const s2 = search.trim().toLowerCase();
-    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    query.$or = [
-      { orderNumber: regex },
-      { paymentMethod: regex },
-      { status: regex },
-      { "items.product.name": regex },
-    ];
+  const searchFilter = await buildOrderSearchFilter(search);
+  if (searchFilter) addAndCondition(query, searchFilter);
+  if (status && status !== "All Orders") {
+    const aliases = status === "Pending" ? ["Order Placed", "Pending"]
+      : status === "Shipped" ? ["Shipped", "Out for Delivery"]
+        : [status];
+    query.status = { $in: aliases };
   }
+  addDateRange(query, from || fromDate, to || toDate);
   const [orders, total] = await Promise.all([
-    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("items.product","name category images unit"),
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum)
+      .populate({ path: "items.product", select: "name category images unit", transform: (product, id) => product || id }),
     Order.countDocuments(query),
   ]);
   res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
 });
 exports.farmer = asyncHandler(async (req,res) => {
-  const { search, page=1, limit=10 } = req.query;
+  const { search, status, page=1, limit=10, from, to, fromDate, toDate } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10)));
   const query = { "items.farmer": req.user._id };
-  if (search && search.trim()) {
-    const s2 = search.trim().toLowerCase();
-    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    query.$or = [
-      { orderNumber: regex },
-      { paymentMethod: regex },
-      { status: regex },
-      { "items.product.name": regex },
-    ];
+  const searchFilter = await buildOrderSearchFilter(search, false, req.user._id);
+  if (searchFilter) addAndCondition(query, searchFilter);
+  if (status && status !== "All Orders") {
+    const aliases = status === "Pending" ? ["Order Placed", "Pending"]
+      : status === "Shipped" ? ["Shipped", "Out for Delivery"]
+        : [status];
+    addAndCondition(query, {
+      $or: [
+        { items: { $elemMatch: { farmer: req.user._id, fulfillmentStatus: { $in: aliases } } } },
+        {
+          $and: [
+            { status: { $in: aliases } },
+            { items: { $elemMatch: { farmer: req.user._id, fulfillmentStatus: { $in: [null, ""] } } } },
+          ],
+        },
+      ],
+    });
   }
+  addDateRange(query, from || fromDate, to || toDate);
   const [orders, total] = await Promise.all([
-    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("items.product","name category images unit"),
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum)
+      .populate({ path: "items.product", select: "name category images unit", transform: (product, id) => product || id }),
     Order.countDocuments(query),
   ]);
   res.json({ items: orders.map((order) => farmerOrderView(order, req.user._id)), total, page: pageNum, pages: Math.ceil(total/limitNum), limit: limitNum });
@@ -276,21 +393,8 @@ exports.adminAll = asyncHandler(async (req,res) => {
     throw error;
   }
   const query = {};
-  if (search && search.trim()) {
-    const s2 = search.trim().toLowerCase();
-    const regex = new RegExp(s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    const orConditions = [
-      { orderNumber: regex },
-      { paymentMethod: regex },
-      { status: regex },
-      { "items.name": regex },
-    ];
-    const matchingUsers = await User.find({ $or: [{ name: regex }, { email: regex }] }).select("_id").lean();
-    if (matchingUsers.length) {
-      orConditions.push({ user: { $in: matchingUsers.map((u) => u._id) } });
-    }
-    query.$or = orConditions;
-  }
+  const searchFilter = await buildOrderSearchFilter(search, true);
+  if (searchFilter) addAndCondition(query, searchFilter);
   if (status && status !== "All Orders" && status !== "All Status") {
     query.status = status;
   }
@@ -310,7 +414,9 @@ exports.adminAll = asyncHandler(async (req,res) => {
   const totalAll = Object.values(statusCounts).reduce((a, b) => a + b, 0);
   statusCounts[""] = totalAll;
   const [orders, total] = await Promise.all([
-    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum).populate("user","name email").populate("items.product","name category images unit"),
+    Order.find(query).sort({ createdAt: -1 }).skip((pageNum-1)*limitNum).limit(limitNum)
+      .populate("user","name email")
+      .populate({ path: "items.product", select: "name category images unit", transform: (product, id) => product || id }),
     Order.countDocuments(query),
   ]);
   res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum, statusCounts });
@@ -328,7 +434,7 @@ exports.analytics = asyncHandler(async (req, res) => {
     status: { $nin: ["Cancelled", "Delivery Failed"] },
     paymentStatus: { $ne: "Failed" },
     createdAt: { $gte: since, $lte: now },
-  }).populate({ path: "items.product", select: "category" });
+  }).populate({ path: "items.product", select: "category", transform: (product, id) => product || id });
   let revenue = 0;
   let units = 0;
   let orderCount = 0;
@@ -346,7 +452,14 @@ exports.analytics = asyncHandler(async (req, res) => {
       const key = new Date(order.createdAt).toISOString().slice(0, 10);
       byDate[key] = (byDate[key] || 0) + amount;
       const name = item.name || "Product";
-      if (!byProduct[name]) byProduct[name] = { name, units: 0, revenue: 0 };
+      if (!byProduct[name]) byProduct[name] = { name, units: 0, revenue: 0, productIds: [] };
+      const productId = item.product?._id || item.product;
+      if (productId) {
+        const normalizedProductId = String(productId);
+        if (!byProduct[name].productIds.includes(normalizedProductId)) {
+          byProduct[name].productIds.push(normalizedProductId);
+        }
+      }
       byProduct[name].units += Number(item.quantity) || 0;
       byProduct[name].revenue += amount;
       const category = (item.product && item.product.category) || "Uncategorized";

@@ -7,6 +7,7 @@ import getImageUrl from "../../utils/imageUrl";
 import StatusBadge from "../../components/common/StatusBadge.jsx";
 import { unwrapList } from "./farmerUtils";
 import Pagination from "../../components/common/Pagination.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 function stockState(product) {
   const stock = Number(product.stock) || 0;
@@ -136,9 +137,9 @@ export default function Inventory() {
           <div className="p-10 text-center text-xs text-[#778681]">Loading inventory…</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[660px] text-left text-xs">
+            <table className="w-full min-w-[820px] text-left text-xs">
               <thead className="border-b border-[#E9EFED] bg-[#F7F9F8] text-[10px] font-semibold uppercase tracking-wide text-[#71817D]">
-                <tr><th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Current Stock</th><th className="px-3 py-2.5">Minimum Stock</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5 text-right">Actions</th></tr>
+                <tr><th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Product ID</th><th className="px-3 py-2.5">Current Stock</th><th className="px-3 py-2.5">Minimum Stock</th><th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-[#EEF2F0]">
                 {items.map((item) => {
@@ -152,6 +153,7 @@ export default function Inventory() {
                           <span className="font-medium text-[#33443F]">{item.name}</span>
                         </div>
                       </td>
+                      <td className="px-3 py-2"><ProductIdentifier productId={item._id} compact /></td>
                       <td className="px-3 py-2 font-medium text-[#475852]">
                         {isEditing ? (
                           <div className="flex items-center gap-1">
@@ -182,7 +184,7 @@ export default function Inventory() {
                     </tr>
                   );
                 })}
-                {!items.length && <tr><td colSpan="5" className="px-3 py-10 text-center text-xs text-[#82908B]">No products found. Products you add will appear here.</td></tr>}
+                {!items.length && <tr><td colSpan="6" className="px-3 py-10 text-center text-xs text-[#82908B]">No products found. Products you add will appear here.</td></tr>}
               </tbody>
             </table>
           </div>

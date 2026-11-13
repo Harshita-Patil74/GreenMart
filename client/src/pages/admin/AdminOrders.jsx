@@ -8,6 +8,7 @@ import Pagination from "../../components/common/Pagination.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { formatCurrency } from "../../utils/constants.js";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 const PAGE_SIZE = 10;
 export default function AdminOrders() {
@@ -58,10 +59,8 @@ export default function AdminOrders() {
   };
   useEffect(() => { load(); }, [search, status, from, to, page, pageSize]);
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
-  const statuses = useMemo(() => [...new Set(orders.map((o) => o.status).filter(Boolean))], [orders]);
-  const filtered = orders;
+  const statuses = useMemo(() => Object.keys(statusCounts).filter(Boolean), [statusCounts]);
   const current = orders;
-  const pages = Math.max(1, Math.ceil(total / pageSize));
   if (error && !orders.length) return <div className="p-4 text-red-700">{error} <button onClick={load} className="underline">Retry</button></div>;
   return (
     <div className="space-y-4 pb-10">
@@ -108,7 +107,7 @@ export default function AdminOrders() {
         className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
       >
         <div className="flex flex-wrap gap-2 border-b p-3">
-          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by ID, customer, product, status, or payment method" ariaLabel="Search orders" />
+          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by order/product ID, customer, product, status, or payment method" ariaLabel="Search orders" />
           <label className="flex items-center gap-1 text-[10px] text-gray-500">
             From
             <input aria-label="From date" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} className="h-9 rounded-lg border px-2 text-xs" />
@@ -141,8 +140,14 @@ export default function AdminOrders() {
                   <td className="px-3 py-3 font-semibold">#{o.orderNumber}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-gray-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("en-IN") : "-"}</td>
                   <td className="px-3 py-3">{o.user?.name || "Customer"}</td>
-                  <td className="max-w-48 truncate px-3 py-3 text-gray-600">
-                    {(o.items || []).map((item) => item.name).filter(Boolean).join(", ") || "N/A"}
+                  <td className="max-w-56 px-3 py-3 text-gray-600">
+                    <div className="space-y-1">
+                      {(o.items || []).map((item, index) => <div key={item._id || item.product?._id || item.product || index}>
+                        <span className="block truncate">{item.name || item.product?.name || "Product"}</span>
+                        <ProductIdentifier productId={item.productId || item.product} className="mt-0.5 flex" />
+                      </div>)}
+                      {!o.items?.length && "N/A"}
+                    </div>
                   </td>
                   <td className="px-3 py-3 font-semibold">{formatCurrency(o.total || 0)}</td>
 <td className="px-3 py-3">

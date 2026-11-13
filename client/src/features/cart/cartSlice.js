@@ -5,9 +5,24 @@ import settingsApi from "../../api/settingsApi";
 const unwrapCart = (data) => ({
   items: Array.isArray(data) ? data : data?.items || [],
   deliveryCharge: data?.deliveryCharge == null ? null : Number(data.deliveryCharge),
+  totals: data && ["subtotal", "discount", "total"].every((key) => Number.isFinite(Number(data[key])))
+    ? {
+      subtotal: Number(data.subtotal),
+      regularDiscount: data.regularDiscount == null || !Number.isFinite(Number(data.regularDiscount)) ? null : Number(data.regularDiscount),
+      premiumDiscount: data.premiumDiscount == null || !Number.isFinite(Number(data.premiumDiscount)) ? null : Number(data.premiumDiscount),
+      discount: Number(data.discount),
+      total: Number(data.total),
+      deliveryCharge: Number.isFinite(Number(data.deliveryCharge)) ? Number(data.deliveryCharge) : null,
+    }
+    : null,
 });
 
 const itemId = (item) => item.product?._id || item.product?.id || item.product || item.id;
+
+const snapshotItems = (items) => (items || []).map((item) => ({
+  ...item,
+  offer: item.offer ? { ...item.offer } : item.offer,
+}));
 
 const ensurePending = (state) => { if (!state.itemPending) state.itemPending = {}; };
 const ensureSeq = (state) => { if (!state.updateSequence) state.updateSequence = {}; };
@@ -48,26 +63,31 @@ export const addItem = createAsyncThunk("cart/addItem", async (product, { getSta
 });
 
 export const updateQuantity = createAsyncThunk("cart/updateQuantity", async ({ productId, quantity }, { getState, dispatch, rejectWithValue }) => {
+  const normalizedQuantity = Number(quantity);
+  if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 1) {
+    return rejectWithValue({ message: "Quantity must be a whole number of at least 1." });
+  }
   const state = getState();
   const token = state.auth?.token;
-  const current = state.cart.items.find((i) => itemId(i) === productId);
-  const previousQty = current ? current.quantity : quantity;
+  const previousItems = snapshotItems(state.cart.items);
 
   if (!token || token === "demo-token") {
-    dispatch(optimisticUpdateQuantity({ productId, quantity }));
-    return { productId, quantity, guest: true };
+    dispatch(optimisticUpdateQuantity({ productId, quantity: normalizedQuantity }));
+    return { productId, quantity: normalizedQuantity, guest: true };
   }
 
   const seq = (state.cart.updateSequence?.[productId] || 0) + 1;
-  dispatch(optimisticUpdateQuantity({ productId, quantity, seq }));
+  dispatch(optimisticUpdateQuantity({ productId, quantity: normalizedQuantity, seq }));
 
   try {
-    const { data } = await cartApi.update(productId, { quantity });
+    const { data } = await cartApi.update(productId, { quantity: normalizedQuantity });
     const latestSeq = getState().cart.updateSequence?.[productId];
-    if (latestSeq !== seq) return { productId, quantity, guest: false, stale: true };
+    if (latestSeq !== seq) return { productId, quantity: normalizedQuantity, guest: false, stale: true };
     return { ...unwrapCart(data), guest: false, productId };
   } catch (error) {
-    dispatch(revertQuantity({ productId, quantity: previousQty }));
+    if (getState().cart.updateSequence?.[productId] === seq) {
+      dispatch(revertCartItems({ items: previousItems, productId, seq }));
+    }
     return rejectWithValue(error);
   }
 });
@@ -85,28 +105,38 @@ export const removeItem = createAsyncThunk("cart/removeItem", async (productId, 
 
 const slice = createSlice({
   name: "cart",
-  initialState: { items: [], deliveryCharge: null, deliveryLoading: false, deliveryError: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
+  initialState: { items: [], deliveryCharge: null, totals: null, deliveryLoading: false, deliveryError: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
   reducers: {
     setCart: (state, action) => {
       const cart = unwrapCart(action.payload);
       state.items = cart.items;
       if (cart.deliveryCharge !== null) state.deliveryCharge = cart.deliveryCharge;
+      state.totals = cart.totals;
       state.loaded = true;
       state.error = null;
     },
     clearCart: (state) => {
       state.items = [];
+      state.totals = { subtotal: 0, regularDiscount: 0, premiumDiscount: 0, discount: 0, total: 0 };
       state.error = null;
       state.loaded = true;
     },
     optimisticUpdateQuantity: (state, action) => {
       const { productId, quantity, seq } = action.payload;
       const item = state.items.find((i) => itemId(i) === productId);
-      if (item) item.quantity = quantity;
+      if (item) item.quantity = Number(quantity);
+      // Offers depend on quantity and cart subtotal; drop stale discounts until the server re-enriches.
+      state.items.forEach((entry) => { entry.offer = null; });
+      state.totals = null;
       ensurePending(state);
       if (seq != null) { ensureSeq(state); state.updateSequence[productId] = seq; }
       state.itemPending[productId] = true;
       state.error = null;
+    },
+    revertCartItems: (state, action) => {
+      if (action.payload.seq != null && state.updateSequence?.[action.payload.productId] !== action.payload.seq) return;
+      state.items = action.payload.items || [];
+      if (state.itemPending && action.payload.productId) delete state.itemPending[action.payload.productId];
     },
     revertQuantity: (state, action) => {
       const { productId, quantity } = action.payload;
@@ -127,6 +157,7 @@ const slice = createSlice({
         state.loaded = true;
         state.items = action.payload.items;
         if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
+        state.totals = action.payload.totals;
       })
       .addCase(fetchCart.rejected, (state, action) => {
         state.loading = false;
@@ -140,6 +171,7 @@ const slice = createSlice({
         if (!action.payload.guest) {
           state.items = action.payload.items;
           if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
+          state.totals = action.payload.totals;
           return;
         }
         const product = action.payload.product;
@@ -147,6 +179,7 @@ const slice = createSlice({
         const existing = state.items.find((item) => itemId(item) === id);
         if (existing) existing.quantity = (existing.quantity || 0) + 1;
         else state.items.push({ product, quantity: 1, price: product.price });
+        state.totals = null;
       })
       .addCase(addItem.rejected, (state, action) => { if (state.itemPending) delete state.itemPending.addItem; state.error = action.payload?.message || "Couldn't add this product to your cart."; })
       .addCase(updateQuantity.pending, (state) => { state.error = null; })
@@ -154,20 +187,17 @@ const slice = createSlice({
         if (action.payload.stale) return;
         state.loaded = true;
         if (!action.payload.guest) {
-          const pid = action.payload.productId;
-          const serverItem = action.payload.items && Array.isArray(action.payload.items)
-            ? action.payload.items.find((i) => itemId(i) === pid)
-            : null;
-          if (serverItem) {
-            const item = state.items.find((i) => itemId(i) === pid);
-            if (item) item.quantity = serverItem.quantity;
-          }
+          if (Array.isArray(action.payload.items)) state.items = action.payload.items;
           if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
+          state.totals = action.payload.totals;
         }
         if (state.itemPending) delete state.itemPending[action.payload.productId];
       })
       .addCase(updateQuantity.rejected, (state, action) => {
-        if (state.itemPending) delete state.itemPending[action.meta.arg.productId];
+        const quantity = Number(action.meta.arg.quantity);
+        if (Number.isInteger(quantity) && quantity >= 1 && state.itemPending) {
+          delete state.itemPending[action.meta.arg.productId];
+        }
         state.error = action.payload?.message || action.payload?.msg || action.payload?.error || "Couldn't update this quantity.";
       })
       .addCase(removeItem.pending, (state) => { ensurePending(state); state.itemPending.removeItem = true; state.error = null; })
@@ -177,18 +207,21 @@ const slice = createSlice({
         if (!action.payload.guest) {
           state.items = action.payload.items;
           if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
+          state.totals = action.payload.totals;
         } else {
           state.items = state.items.filter((item) => itemId(item) !== action.payload.productId);
+          state.totals = null;
         }
       })
       .addCase(removeItem.rejected, (state, action) => { if (state.itemPending) delete state.itemPending.removeItem; state.error = action.payload?.message || action.payload?.msg || action.payload?.error || "Couldn't remove this item."; })
       .addCase("auth/logout", (state) => {
         state.items = [];
+        state.totals = null;
         state.error = null;
         state.loaded = false;
       });
   },
 });
 
-export const { setCart, clearCart, optimisticUpdateQuantity, revertQuantity, clearItemError } = slice.actions;
+export const { setCart, clearCart, optimisticUpdateQuantity, revertCartItems, revertQuantity, clearItemError } = slice.actions;
 export default slice.reducer;

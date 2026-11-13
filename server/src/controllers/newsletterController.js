@@ -14,9 +14,13 @@ const env = require("../config/env");
 const { sendNewsletterEmail, isConfigured, getConfigError } = require("../services/emailService");
 const { sendMockEmail } = require("../services/mockNewsletterEmailService");
 const { generateToken, verifyToken } = require("../utils/unsubscribeToken");
-const { money, getEffectiveStatus } = require("../services/offerService");
+const { money, roundPercent, calculateOffer, getEffectiveStatus } = require("../services/offerService");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function escapeHtml(value) {
   return String(value || "")
@@ -752,30 +756,40 @@ function snapshotOffer(o) {
 exports.customerNewsletters = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
   const email = String(req.user.email || "").trim().toLowerCase();
-  const page = Math.max(1, parseInt(req.query.page || "1", 10));
-  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || "10", 10)));
-  const search = req.query.search || "";
-  const type = req.query.type || "all";
+  const parsedPage = parseInt(req.query.page || "1", 10);
+  const parsedLimit = parseInt(req.query.limit || "10", 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const limit = Number.isFinite(parsedLimit) ? Math.min(50, Math.max(1, parsedLimit)) : 10;
+  const searchTerms = String(req.query.search || "").trim().split(/\s+/).filter(Boolean);
+  const type = String(req.query.type || "all");
   const read = req.query.read || "all";
 
-  const recipientQuery = { email };
+  const campaignQuery = { status: "sent" };
+  if (type !== "all") campaignQuery.campaignType = type;
+  if (searchTerms.length) {
+    campaignQuery.$and = searchTerms.map((term) => ({
+      campaignName: { $regex: escapeRegex(term), $options: "i" },
+    }));
+  }
+  const campaignIds = await NewsletterCampaign.distinct("_id", campaignQuery);
+  const recipientQuery = { email, campaignId: { $in: campaignIds } };
   if (read === "read") recipientQuery.readAt = { $ne: null };
   else if (read === "unread") recipientQuery.readAt = null;
 
-  const recipients = await NewsletterRecipient.find(recipientQuery)
-    .populate({
-      path: "campaignId",
-      match: { status: "sent" },
-      select: "campaignName campaignType subject heading content bannerImage buttonText buttonUrl createdAt completedAt selectedProducts selectedOffers",
-    })
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(limit);
+  const [recipients, total] = await Promise.all([
+    NewsletterRecipient.find(recipientQuery)
+      .populate({
+        path: "campaignId",
+        match: { status: "sent" },
+        select: "campaignName campaignType subject heading content bannerImage buttonText buttonUrl createdAt completedAt selectedProducts selectedOffers",
+      })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit),
+    NewsletterRecipient.countDocuments(recipientQuery),
+  ]);
 
-  const items = recipients
-    .filter((r) => r.campaignId)
-    .filter((r) => type === "all" || r.campaignId.campaignType === type)
-    .map((r) => ({
+  const items = recipients.filter((r) => r.campaignId).map((r) => ({
       _id: r._id,
       campaignId: r.campaignId._id,
       campaignName: r.campaignId.campaignName,
@@ -795,17 +809,12 @@ exports.customerNewsletters = asyncHandler(async (req, res) => {
       selectedOffers: r.campaignId.selectedOffers || [],
     }));
 
-  const total = await NewsletterRecipient.countDocuments({ ...recipientQuery, email }).then((count) => count);
-  const typeFilteredTotal = await NewsletterRecipient.find(recipientQuery)
-    .populate({ path: "campaignId", match: { status: "sent" } })
-    .then((rs) => rs.filter((r) => r.campaignId && (type === "all" || r.campaignId.campaignType === type)).length);
-
   res.json({
     items,
     page,
     limit,
-    total: typeFilteredTotal,
-    pages: Math.ceil(typeFilteredTotal / limit),
+    total,
+    pages: Math.ceil(total / limit),
   });
 });
 
@@ -886,8 +895,13 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
-    endDate: { $gte: now },
-    $or: [{ isSubscriberExclusive: true }, { exclusiveDiscountValue: { $gt: 0 } }],
+    $and: [{
+      $or: [
+        { endAt: { $gte: now } },
+        { endAt: null, endDate: { $gte: now } },
+      ],
+    }],
+    $or: [{ audience: { $elemMatch: { $eq: "premium" } } }, { exclusiveDiscountValue: { $gt: 0 } }],
   })
     .populate("farmer", "name")
     .populate({
@@ -920,60 +934,45 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
         Number(product.stock) < Number(offer.minimumQuantity || 1)) continue;
 
     const effectiveStatus = getEffectiveStatus(offer, product, now);
-    if (effectiveStatus !== "Active" && effectiveStatus !== "Scheduled") continue;
+    if (effectiveStatus !== "Active") continue;
 
     const quantity = Math.max(1, Number(offer.minimumQuantity || 1));
     const originalPrice = Number(product.price);
-    const perUnitDiscount = offer.discountType === "Percentage"
-      ? originalPrice * Number(offer.discountValue) / 100
-      : Number(offer.discountValue);
-    const publicDiscount = money(Math.min(
-      originalPrice * quantity,
-      perUnitDiscount * quantity,
-      offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-    ));
-    const publicPrice = money((originalPrice * quantity - publicDiscount) / quantity);
+    const eligibleSubtotal = Math.max(originalPrice * quantity, Number(offer.minimumAmount || 0));
+    const appliedOffer = calculateOffer(product, quantity, [offer], eligibleSubtotal, true);
+    if (!appliedOffer) continue;
 
-    let exclusivePrice = null;
-    let exclusiveDiscountAmount = null;
-    let additionalSavings = null;
-    if (offer.exclusiveDiscountType && Number.isFinite(offer.exclusiveDiscountValue) && offer.exclusiveDiscountValue > 0) {
-      const exclusivePerUnit = offer.exclusiveDiscountType === "Percentage"
-        ? publicPrice * Number(offer.exclusiveDiscountValue) / 100
-        : Number(offer.exclusiveDiscountValue);
-      const exclusiveDiscount = money(Math.min(
-        publicPrice * quantity,
-        exclusivePerUnit * quantity,
-        offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-      ));
-      if (exclusiveDiscount != null && exclusiveDiscount > 0) {
-        exclusivePrice = money(publicPrice - exclusiveDiscount / quantity);
-        if (!Number.isFinite(exclusivePrice) || exclusivePrice < 0) exclusivePrice = 0;
-        exclusiveDiscountAmount = money(exclusiveDiscount / quantity);
-        additionalSavings = publicPrice != null ? money(publicPrice - exclusivePrice) : null;
-      }
-    }
-
+    const publicDiscount = appliedOffer.publicDiscount;
+    const publicPrice = appliedOffer.publicFinalUnitPrice;
+    const exclusivePrice = appliedOffer.premiumDiscount > 0 ? appliedOffer.finalUnitPrice : null;
+    const exclusiveDiscountAmount = appliedOffer.premiumDiscount > 0
+      ? money(appliedOffer.premiumDiscount / quantity)
+      : null;
+    const additionalSavings = exclusivePrice == null ? null : money(publicPrice - exclusivePrice);
+    const offerPrice = appliedOffer.finalUnitPrice;
+    const totalDiscountAmount = appliedOffer.discount / quantity;
     items.push({
       _id: offer._id,
       title: offer.title,
       description: offer.description,
       type: offer.type,
+      isPremiumExclusive: Boolean(offer.audience?.includes("premium") || offer.exclusiveDiscountValue > 0),
       discountType: offer.discountType,
       discountValue: offer.discountValue,
       minimumQuantity: offer.minimumQuantity,
+      minimumAmount: offer.minimumAmount,
       originalPrice,
       publicPrice,
-      offerPrice: exclusivePrice || publicPrice,
+      offerPrice,
       publicDiscountAmount: money(publicDiscount / quantity),
-      publicDiscountPercent: Math.round((publicDiscount / (originalPrice * quantity)) * 100),
+      publicDiscountPercent: roundPercent((publicDiscount / (originalPrice * quantity)) * 100),
       exclusiveDiscountType: offer.exclusiveDiscountType || null,
       exclusiveDiscountValue: offer.exclusiveDiscountValue || null,
       exclusivePrice,
       exclusiveDiscountAmount,
       additionalSavings,
-      discountAmount: money(exclusiveDiscountAmount != null ? exclusiveDiscountAmount : publicDiscount / quantity),
-      discountPercent: Math.round((exclusiveDiscountAmount != null ? exclusiveDiscountAmount : publicDiscount) / (originalPrice * quantity) * 100),
+      discountAmount: totalDiscountAmount,
+      discountPercent: originalPrice > 0 ? roundPercent((totalDiscountAmount / originalPrice) * 100) : 0,
       startDate: offer.startDate,
       endDate: offer.endDate,
       startAt: offer.startAt,
@@ -995,7 +994,13 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
     });
   }
 
-  res.json({ items, subscribed: true });
+  const bestOffers = new Map();
+  for (const item of items) {
+    const productId = String(item.product._id);
+    const current = bestOffers.get(productId);
+    if (!current || item.offerPrice < current.offerPrice) bestOffers.set(productId, item);
+  }
+  res.json({ items: [...bestOffers.values()], subscribed: true });
 });
 
 exports.preferences = asyncHandler(async (req, res) => {

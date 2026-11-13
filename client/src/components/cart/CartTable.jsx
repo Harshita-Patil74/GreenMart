@@ -2,6 +2,14 @@ import React from "react";
 import { Package, Trash2 } from "lucide-react";
 import getImageUrl from "../../utils/imageUrl";
 import QuantityControl from "./QuantityControl.jsx";
+import {
+  formatINR,
+  itemDiscount,
+  itemLineTotal,
+  itemPremiumDiscount,
+  itemRegularDiscount,
+  itemUnitPrice,
+} from "../../utils/cartTotals.js";
 
 export default function CartTable({ items = [], onUpdate, onRemove, disabled = false }) {
   if (!items.length) {
@@ -10,19 +18,22 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
 
   return (
     <div className="bg-white rounded-[14px] border border-gray-100 shadow-card overflow-hidden">
-      <div className="divide-y divide-gray-100 lg:hidden">
+      <div className="divide-y divide-gray-100 2xl:hidden">
         {items.map((it) => {
           const product = it.product || {};
           const id = product._id || product.id || it.productId || it.id;
           const name = product.name || it.name || "Product unavailable";
-          const price = Number(product.price ?? it.price ?? 0);
+          const price = itemUnitPrice(it);
           const offer = it.offer;
           const chargedUnitPrice = Number(offer?.finalUnitPrice ?? price);
           const unit = product.unit || "kg";
           const quantity = Number(it.quantity || 0);
           const stock = product.stock != null ? Number(product.stock) : null;
           const image = product.images?.[0];
-          const lineTotal = Number(offer?.lineTotal ?? price * quantity);
+          const itemSavings = itemDiscount(it);
+          const regularSavings = itemRegularDiscount(it);
+          const premiumSavings = itemPremiumDiscount(it);
+          const lineTotal = itemLineTotal(it);
           const itemPending = Boolean(it._pending);
 
           return (
@@ -37,10 +48,14 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
                   <span className="block break-words text-sm font-semibold text-gray-900">{name}</span>
                   <span className="mt-0.5 block text-xs text-gray-400 capitalize">{product.category || "Organic"}</span>
                   <span className="mt-1 block text-sm font-medium text-gray-700">
-                    ₹ {chargedUnitPrice.toFixed(2)} <span className="text-xs text-gray-400">/ {unit}</span>
+                    {formatINR(chargedUnitPrice)} <span className="text-xs text-gray-400">/ {unit}</span>
                   </span>
+                  {itemSavings > 0 && <span className="block text-[10px] text-gray-400 line-through">{formatINR(price)} / {unit}</span>}
+                  {regularSavings > 0 && <span className="mt-1 block text-[10px] text-emerald-700">Regular savings: {formatINR(regularSavings)}</span>}
+                  {premiumSavings > 0 && <span className="block text-[10px] font-medium text-emerald-800">Premium savings: {formatINR(premiumSavings)}</span>}
                   {offer && <span className="block text-[10px] font-medium text-emerald-700">{offer.title}</span>}
                   {product.offer && !offer && <span className="mt-1 block text-[10px] font-medium text-emerald-700">{product.offer.title}</span>}
+                  {!offer && product.subscriberOffer && <span className="mt-1 block text-[10px] font-medium text-emerald-800">Premium subscribers only</span>}
                   {stock === 0 && <span className="mt-1 block text-[10px] font-medium text-red-600">Out of stock</span>}
                 </div>
                 <button
@@ -65,14 +80,15 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
                 />
                 <div className="min-w-0 text-right">
                   <span className="block text-[10px] text-gray-400">Item total</span>
-                  <span className="whitespace-nowrap text-sm font-bold text-gray-900">₹ {lineTotal.toFixed(2)}</span>
+                  <span className="whitespace-nowrap text-sm font-bold tabular-nums text-gray-900">{formatINR(lineTotal)}</span>
+                  {itemSavings > 0 && <span className="block text-[10px] font-medium text-emerald-700">Saved {formatINR(itemSavings)}</span>}
                 </div>
               </div>
             </article>
           );
         })}
       </div>
-      <div className="hidden overflow-x-auto lg:block">
+      <div className="hidden overflow-x-auto 2xl:block">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/70 text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -88,14 +104,17 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
               const product = it.product || {};
               const id = product._id || product.id || it.productId || it.id;
               const name = product.name || it.name || "Product unavailable";
-              const price = Number(product.price ?? it.price ?? 0);
+              const price = itemUnitPrice(it);
               const offer = it.offer;
               const chargedUnitPrice = Number(offer?.finalUnitPrice ?? price);
               const unit = product.unit || "kg";
               const quantity = Number(it.quantity || 0);
               const stock = product.stock != null ? Number(product.stock) : null;
               const image = product.images?.[0];
-              const lineTotal = Number(offer?.lineTotal ?? price * quantity);
+              const itemSavings = itemDiscount(it);
+              const regularSavings = itemRegularDiscount(it);
+              const premiumSavings = itemPremiumDiscount(it);
+              const lineTotal = itemLineTotal(it);
               const itemPending = Boolean(it._pending);
 
               return (
@@ -113,14 +132,17 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
                         {product.offer && !offer && <span className="mt-[2px] block text-[10px] font-medium text-emerald-700">
                           {product.offer.title}{Number(product.offer.minimumQuantity) > quantity ? ` · buy ${product.offer.minimumQuantity} or more` : Number(product.offer.minimumAmount) > 0 ? ` · min. order ₹${product.offer.minimumAmount}` : ""}
                         </span>}
+                        {!offer && product.subscriberOffer && <span className="mt-[2px] block text-[10px] font-medium text-emerald-800">Premium subscribers only</span>}
                         {stock === 0 && <span className="mt-[2px] text-[10px] font-medium text-red-600">Out of stock</span>}
                       </div>
                     </div>
                   </td>
                   <td className="py-4 px-4 font-medium text-gray-700 whitespace-nowrap">
-                    ₹ {chargedUnitPrice.toFixed(2)} <span className="text-xs text-gray-400">/ {unit}</span>
+                    {formatINR(chargedUnitPrice)} <span className="text-xs text-gray-400">/ {unit}</span>
                     {offer && <span className="block text-[10px] font-medium text-emerald-700">{offer.title}</span>}
-                    {offer && <span className="text-[10px] text-gray-400 line-through">₹ {price.toFixed(2)}</span>}
+                    {itemSavings > 0 && <span className="text-[10px] text-gray-400 line-through">{formatINR(price)}</span>}
+                    {regularSavings > 0 && <span className="block text-[10px] text-emerald-700">Regular savings: {formatINR(regularSavings)}</span>}
+                    {premiumSavings > 0 && <span className="block text-[10px] font-medium text-emerald-800">Premium savings: {formatINR(premiumSavings)}</span>}
                   </td>
                   <td className="py-4 px-4">
                     <QuantityControl
@@ -134,7 +156,8 @@ export default function CartTable({ items = [], onUpdate, onRemove, disabled = f
                     />
                   </td>
                   <td className="py-4 px-4 font-bold text-gray-900 whitespace-nowrap">
-                    ₹ {lineTotal.toFixed(2)}
+                    {formatINR(lineTotal)}
+                    {itemSavings > 0 && <span className="block text-[10px] font-medium text-emerald-700">Saved {formatINR(itemSavings)}</span>}
                   </td>
                   <td className="py-4 px-4 text-right">
                     <button

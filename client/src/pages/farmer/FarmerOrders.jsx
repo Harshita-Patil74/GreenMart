@@ -1,15 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { useSearchParams } from "react-router-dom";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import orderApi from "../../api/orderApi";
-import { formatCurrency, formatDate, getOrderAmount, getOrderStatus, getOwnedItems, unwrapList } from "./farmerUtils";
+import { formatCurrency, formatDate, getOrderAmount, getOwnedItems } from "./farmerUtils";
 import OrderStatusBadge from "../../components/orders/OrderStatusBadge.jsx";
 import { useSelector } from "react-redux";
 import { LoaderCircle, Search } from "lucide-react";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
 import Pagination from "../../components/common/Pagination.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 const filters = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Delivery Failed", "Cancelled"];
 const nextActions = {
@@ -27,6 +29,8 @@ const nextActions = {
 };
 
 export default function FarmerOrders() {
+  const [searchParams] = useSearchParams();
+  const routedSearch = searchParams.get("search") || "";
   const { user } = useSelector((state) => state.auth);
   const farmerId = user?._id || user?.id;
   const [orders, setOrders] = useState([]);
@@ -34,7 +38,7 @@ export default function FarmerOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("All Orders");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(routedSearch);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
@@ -44,6 +48,12 @@ export default function FarmerOrders() {
   const [failureOrder, setFailureOrder] = useState("");
   const [failureReason, setFailureReason] = useState("");
   const [statusError, setStatusError] = useState("");
+  const ordersRequest = useRef(0);
+
+  useEffect(() => {
+    setSearch(routedSearch);
+    setPage(1);
+  }, [routedSearch]);
 
   const updateStatus = async (order, status, reason = "") => {
     if (updatingOrder) return;
@@ -74,36 +84,40 @@ export default function FarmerOrders() {
   };
 
   const loadOrders = async () => {
+    const requestId = ++ordersRequest.current;
     setLoading(true);
     setError("");
     try {
-      const response = await orderApi.farmer({ search, page, limit: pageSize });
+      const response = await orderApi.farmer({
+        search: search.trim(),
+        status: activeFilter,
+        from: fromDate || undefined,
+        to: toDate || undefined,
+        page,
+        limit: pageSize,
+      });
+      if (requestId !== ordersRequest.current) return;
       const data = response.data;
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setOrders(items);
       setTotal(Array.isArray(data) ? data.length : Number(data?.total) || 0);
     } catch (requestError) {
+      if (requestId !== ordersRequest.current) return;
       setError(requestError?.response?.data?.message || "We couldn't load your orders.");
     } finally {
-      setLoading(false);
+      if (requestId === ordersRequest.current) setLoading(false);
     }
   };
 
-  useEffect(() => { loadOrders(); }, [search, page, pageSize]);
+  useEffect(() => {
+    loadOrders();
+    return () => { ordersRequest.current += 1; };
+  }, [search, activeFilter, fromDate, toDate, page, pageSize]);
 
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const ownItems = getOwnedItems(order, farmerId);
-    if (!ownItems.length) return false;
-    const status = getOrderStatus(order.status);
-    const customer = order.address?.name || order.user?.name || "";
-    const names = ownItems.map((item) => item.name || item.product?.name || "").join(" ");
-    const searchable = `${order.orderNumber || order._id || ""} ${customer} ${names}`.toLowerCase();
-    const createdAt = order.createdAt ? new Date(order.createdAt) : null;
-    return (activeFilter === "All Orders" || status === activeFilter || order.status === activeFilter)
-      && (!search || searchable.includes(search.toLowerCase()))
-      && (!fromDate || (createdAt && createdAt >= new Date(`${fromDate}T00:00:00`)))
-      && (!toDate || (createdAt && createdAt <= new Date(`${toDate}T23:59:59`)));
-  }), [orders, farmerId, activeFilter, search, fromDate, toDate]);
+    return ownItems.length > 0;
+  }), [orders, farmerId]);
 
   return (
     <section className="space-y-4 pb-5 text-[13px] text-[#20312E]">
@@ -138,7 +152,7 @@ export default function FarmerOrders() {
         className="overflow-hidden rounded-lg border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F0] p-3">
-          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by ID, customer, product, or status" ariaLabel="Search orders" />
+          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search orders by order/product ID, customer, product, or status" ariaLabel="Search orders" />
           <label className="flex items-center gap-1 text-[10px] text-[#74827E]">From <input aria-label="From date" type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
           <label className="flex items-center gap-1 text-[10px] text-[#74827E]">To <input aria-label="To date" type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} className="h-8 rounded-md border border-[#DDE6E2] px-2 text-xs text-[#41514D]" /></label>
         </div>
@@ -174,7 +188,14 @@ export default function FarmerOrders() {
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-[#344640]">{orderId}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-[#74827E]">{formatDate(order.createdAt)}</td>
                       <td className="px-3 py-2.5 text-[#52615D]">{order.address?.name || order.user?.name || "Customer"}</td>
-                      <td className="max-w-[190px] px-3 py-2.5 text-[#52615D]">{items.map((item) => `${item.name || item.product?.name || "Product"} × ${item.quantity || 0}`).join(", ")}</td>
+                      <td className="max-w-[220px] px-3 py-2.5 text-[#52615D]">
+                        <div className="space-y-1">
+                          {items.map((item, index) => <div key={item._id || item.product?._id || item.product || index}>
+                            <span className="block">{item.name || item.product?.name || "Product"} × {item.quantity || 0}</span>
+                            <ProductIdentifier productId={item.productId || item.product} className="mt-0.5 flex" />
+                          </div>)}
+                        </div>
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-[#344640]">{formatCurrency(getOrderAmount(order, farmerId))}</td>
                       <td className="px-3 py-2.5"><OrderStatusBadge status={order.status} /></td>
                       <td className="px-3 py-2.5 text-right"><button type="button" aria-expanded={expandedOrder === order._id} onClick={() => setExpandedOrder(expandedOrder === order._id ? "" : order._id)} className="inline-flex h-6 items-center rounded border border-[#B9D9CC] px-2.5 text-[10px] font-medium text-[#087449] hover:bg-[#F1F8F4]">{expandedOrder === order._id ? "Hide" : "View"}</button></td>
@@ -186,6 +207,7 @@ export default function FarmerOrders() {
                           <ul className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-[#71817D]">
                             {items.map((item) => <li key={item._id || item.product}>
                               {item.name || item.product?.name || "Product"} · {item.quantity || 0} × {formatCurrency(item.price)}
+                              <ProductIdentifier productId={item.productId || item.product} className="ml-2" />
                               {item.offerSnapshot && <span className="ml-1 text-emerald-700">({item.offerSnapshot.offerTitle} · charged {formatCurrency(item.offerSnapshot.finalLineTotal)})</span>}
                               <span className="ml-2 font-semibold">{item.fulfillmentStatus || order.status}</span>
                               {item.deliveryFailureReason && <span className="ml-1 text-red-700">— {item.deliveryFailureReason}</span>}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 import { Search, X } from "lucide-react";
 
 /**
@@ -24,10 +24,20 @@ export default function SearchBar({
 }) {
   const timerRef = useRef(null);
   const inputRef = useRef(null);
+  const [draftValue, setDraftValue] = useState(value);
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
 
   const handleChange = useCallback(
     (event) => {
       const val = event.target.value;
+      setDraftValue(val);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         onChange(val);
@@ -39,6 +49,7 @@ export default function SearchBar({
   const handleClear = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (inputRef.current) inputRef.current.value = "";
+    setDraftValue("");
     inputRef.current?.focus();
     onChange("");
   };
@@ -49,13 +60,13 @@ export default function SearchBar({
       <input
         ref={inputRef}
         type="search"
-        value={value}
+        value={draftValue}
         onChange={handleChange}
         aria-label={ariaLabel}
         placeholder={placeholder}
-        className="h-9 w-full rounded-lg border pl-9 pr-3 text-xs focus:border-primary focus:outline-none"
+        className={`h-9 w-full appearance-none rounded-lg border pl-9 ${showClear ? "pr-9" : "pr-3"} text-xs focus:border-primary focus:outline-none`}
       />
-      {showClear && value && (
+      {showClear && draftValue && (
         <button
           type="button"
           onClick={handleClear}

@@ -29,6 +29,11 @@ describe("Pagination", () => {
     expect(screen.getByText("Showing 1–10 of 25 items")).toBeInTheDocument();
   });
 
+  it("uses the supplied record label and singular form", () => {
+    render(<Pagination {...defaultProps} totalRecords={1} recordLabel="offer" />);
+    expect(screen.getByText("Showing 1–1 of 1 offer")).toBeInTheDocument();
+  });
+
   it("disables First and Previous on page 1", () => {
     render(<Pagination {...defaultProps} />);
     expect(screen.getByRole("button", { name: "First" })).toBeDisabled();

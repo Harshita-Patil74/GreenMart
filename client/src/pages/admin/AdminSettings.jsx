@@ -94,7 +94,7 @@ export default function AdminSettings(){
     try{
       const {data}=await categoryApi.update(category._id,{name, icon: edit.icon});
       setCategories(list=>list.map(item=>item._id===data._id?data:item));
-      setEdits({});
+      setEdits(current=>{const next={...current};delete next[category._id];return next;});
       toast.success("Category updated.");
     }catch(e){
       setError(e?.message||"Couldn't update category.");
@@ -207,10 +207,10 @@ export default function AdminSettings(){
                     <select aria-label={`Category icon for ${category.name}`} value={edit.icon} onChange={e=>setEdits(items=>({...items,[category._id]:{...items[category._id],icon:e.target.value}}))} className="h-8 min-w-[100px] rounded border border-gray-200 bg-white px-1 text-[10px]">
                       {ICON_OPTIONS.map(({key,label})=>(<option key={key} value={key}>{label}</option>))}
                     </select>
-                     <button disabled={saving} onClick={()=>rename(category)} aria-label={`Save category ${category.name}`} className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50">Save</button>
-                    <button disabled={saving} onClick={()=>toggleActive(category)} aria-label={`${category.isActive?"Deactivate":"Activate"} category ${category.name}`} className={`disabled:opacity-50 h-8 w-8 rounded-full flex items-center justify-center text-xs ${category.isActive?"bg-gray-100 text-gray-500":"bg-emerald-50 text-[#16803C]"}`}>{category.isActive?<ToggleLeft className="h-4 w-4"/>:<ToggleRight className="h-4 w-4"/>}</button>
+                     <button type="button" disabled={saving} onClick={()=>rename(category)} aria-label={`Save category ${category.name}`} className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50">Save</button>
+                     <button type="button" disabled={saving} onClick={()=>toggleActive(category)} aria-label={`${category.isActive?"Deactivate":"Activate"} category ${category.name}`} className={`disabled:opacity-50 h-8 w-8 rounded-full flex items-center justify-center text-xs ${category.isActive?"bg-gray-100 text-gray-500":"bg-emerald-50 text-[#16803C]"}`}>{category.isActive?<ToggleLeft className="h-4 w-4"/>:<ToggleRight className="h-4 w-4"/>}</button>
                     {!category.isActive&&<span className="text-xs text-gray-500 ml-2">Inactive</span>}
-                    <button disabled={saving} onClick={()=>remove(category)} aria-label={`Delete category ${category.name}`} className="text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4"/></button>
+                    <button type="button" disabled={saving} onClick={()=>remove(category)} aria-label={`Delete category ${category.name}`} className="text-red-600 disabled:opacity-50"><Trash2 className="h-4 w-4"/></button>
                   </div>
                 );
               })}

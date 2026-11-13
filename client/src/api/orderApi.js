@@ -1,6 +1,7 @@
 import api from "./axiosInstance";
 
 export default {
+  quote: () => api.post("/orders/quote"),
   create: (d) => api.post("/orders", d),
   mine: (p = {}) => api.get("/orders/mine", { params: p }),
   farmer: (p = {}) => api.get("/orders/farmer", { params: p }),

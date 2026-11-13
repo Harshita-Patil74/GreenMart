@@ -18,7 +18,7 @@ export default function Sidebar() {
       variants={fadeVariants}
       initial="hidden"
       animate="visible"
-      className="hidden min-h-screen w-[176px] shrink-0 flex-col justify-between bg-[#064B35] text-white lg:flex"
+      className="hidden min-h-screen w-[192px] shrink-0 flex-col justify-between bg-[#064B35] text-white lg:flex"
     >
       <div>
         <div className="px-5 py-5">

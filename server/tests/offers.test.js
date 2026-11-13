@@ -233,6 +233,114 @@ describe("Farmer offers and server-priced order snapshots", () => {
     expect(options.body.products.some((product) => product._id === String(productId))).toBe(true);
   });
 
+  it("searches farmer and admin offers by supported fields without exposing another farmer's offers", async () => {
+    const productIdText = String(productId);
+    const searches = [
+      "Fig harvest offer",
+      "fresh figs",
+      "Organic Fig",
+      "fruits",
+      productIdText,
+      productIdText.slice(0, 6),
+    ];
+    for (const search of searches) {
+      const response = await request(app)
+        .get("/api/farmers/offers")
+        .query({ search: ` ${search} ` })
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.total).toBe(1);
+      expect(response.body.items[0]._id).toBe(String(offerId));
+    }
+
+    const farmerNameSearch = await request(app)
+      .get("/api/farmers/offers")
+      .query({ search: "Offer Farmer" })
+      .set("Authorization", `Bearer ${farmerToken}`);
+    expect(farmerNameSearch.body.total).toBe(0);
+
+    const adminFarmerSearch = await request(app)
+      .get("/api/admin/offers")
+      .query({ search: "Offer Farmer" })
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(adminFarmerSearch.body.items.map((offer) => offer._id)).toContain(String(offerId));
+
+    const offerIdSearch = await request(app)
+      .get("/api/admin/offers")
+      .query({ search: String(offerId) })
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(offerIdSearch.body.total).toBe(0);
+
+    const otherFarmer = await Product.findById(otherProductId).select("farmer");
+    const privateOffer = await Offer.create({
+      ...offerDraft({
+        title: "Private Farmer Search Phrase",
+        description: "Only the other farmer should see this offer.",
+        product: String(otherProductId),
+      }),
+      farmer: otherFarmer.farmer,
+    });
+    try {
+      const [farmerSearch, adminSearch] = await Promise.all([
+        request(app)
+          .get("/api/farmers/offers")
+          .query({ search: "Private Farmer Search Phrase" })
+          .set("Authorization", `Bearer ${farmerToken}`),
+        request(app)
+          .get("/api/admin/offers")
+          .query({ search: "Private Farmer Search Phrase" })
+          .set("Authorization", `Bearer ${adminToken}`),
+      ]);
+      expect(farmerSearch.body.total).toBe(0);
+      expect(adminSearch.body.items.map((offer) => offer._id)).toEqual([String(privateOffer._id)]);
+    } finally {
+      await Offer.deleteOne({ _id: privateOffer._id });
+    }
+  });
+
+  it("filters search and status before paginating offers", async () => {
+    const extraOffers = await Offer.create(Array.from({ length: 12 }, (_, index) => ({
+      ...offerDraft({
+        title: `Universal Search Pagination ${index + 1}`,
+        description: "Distinct offer for pagination verification.",
+        minimumAmount: 0,
+      }),
+      farmer: farmerId,
+      status: "Pending",
+    })));
+    try {
+      const [farmerPageOne, farmerPageTwo, adminPageOne] = await Promise.all([
+        request(app)
+          .get("/api/farmers/offers")
+          .query({ search: "Universal Search Pagination", status: "Pending", page: 1, limit: 10 })
+          .set("Authorization", `Bearer ${farmerToken}`),
+        request(app)
+          .get("/api/farmers/offers")
+          .query({ search: "Universal Search Pagination", status: "Pending", page: 2, limit: 10 })
+          .set("Authorization", `Bearer ${farmerToken}`),
+        request(app)
+          .get("/api/admin/offers")
+          .query({ search: "Universal Search Pagination", status: "Pending", page: 1, limit: 10 })
+          .set("Authorization", `Bearer ${adminToken}`),
+      ]);
+
+      expect(farmerPageOne.body).toMatchObject({ total: 12, page: 1, pages: 2 });
+      expect(farmerPageOne.body.items).toHaveLength(10);
+      expect(farmerPageTwo.body).toMatchObject({ total: 12, page: 2, pages: 2 });
+      expect(farmerPageTwo.body.items).toHaveLength(2);
+      expect(adminPageOne.body).toMatchObject({ total: 12, page: 1, pages: 2 });
+      expect(adminPageOne.body.items).toHaveLength(10);
+      const pageIds = [
+        ...farmerPageOne.body.items.map((offer) => offer._id),
+        ...farmerPageTwo.body.items.map((offer) => offer._id),
+      ];
+      expect(new Set(pageIds).size).toBe(12);
+      expect(pageIds).toEqual(expect.arrayContaining(extraOffers.map((offer) => String(offer._id))));
+    } finally {
+      await Offer.deleteMany({ _id: { $in: extraOffers.map((offer) => offer._id) } });
+    }
+  });
+
   it("keeps unapproved offers out of the public customer offers feed", async () => {
     const response = await request(app).get("/api/products/storefront/offers");
     expect(response.status).toBe(200);
@@ -248,6 +356,8 @@ describe("Farmer offers and server-priced order snapshots", () => {
         status: "Active",
         approvedAt: new Date(),
         approvedBy: admin._id,
+        exclusiveDiscountType: "Fixed Amount",
+        exclusiveDiscountValue: 5,
       },
       {
         ...offerDraft({
@@ -281,9 +391,58 @@ describe("Farmer offers and server-priced order snapshots", () => {
         offerPrice: 85,
         discountPercent: 15,
         totalSavings: 15,
+        premiumDiscountAmount: 5,
       });
+      const publicOfferFeed = await request(app).get("/api/products/storefront/offers");
+      const publicOffer = publicOfferFeed.body.items.find((offer) => offer.title === "Featured fig discount");
+      expect(publicOffer).toMatchObject({
+        originalPrice: 100,
+        offerPrice: 85,
+        premiumDiscountAmount: 5,
+      });
+      expect(publicOffer).not.toHaveProperty("exclusivePrice");
     } finally {
       await Offer.deleteMany({ _id: { $in: approvedOffers.map((offer) => offer._id) } });
+    }
+  });
+
+  it("shows subscriber offer details on product pages without exposing subscriber pricing", async () => {
+    const admin = await User.findOne({ role: "admin" });
+    const [subscriberOffer] = await Offer.create([{
+      ...offerDraft({
+        title: "Premium Fig Special",
+        discountValue: 50,
+        minimumAmount: 0,
+        maximumDiscount: 60,
+      }),
+      farmer: farmerId,
+      status: "Active",
+      approvedAt: new Date(),
+      approvedBy: admin._id,
+      isSubscriberExclusive: true,
+      exclusiveDiscountType: "Fixed Amount",
+      exclusiveDiscountValue: 5,
+    }]);
+
+    try {
+      const [detail, storefront] = await Promise.all([
+        request(app).get(`/api/products/storefront/${productId}`),
+        request(app).get("/api/products/storefront").query({ limit: 50 }),
+      ]);
+      expect(detail.status).toBe(200);
+      expect(detail.body.subscriberOffer).toMatchObject({
+        title: "Premium Fig Special",
+        regularDiscountPercent: 50,
+        regularDiscountAmount: 50,
+        premiumDiscountAmount: 5,
+        totalSavings: 55,
+      });
+      expect(detail.body.subscriberOffer).not.toHaveProperty("offerPrice");
+      expect(detail.body.subscriberOffer).not.toHaveProperty("finalUnitPrice");
+      expect(storefront.body.items.find((product) => product._id === String(productId)))
+        .not.toHaveProperty("subscriberOffer");
+    } finally {
+      await Offer.deleteMany({ _id: subscriberOffer._id });
     }
   });
 
@@ -495,6 +654,29 @@ describe("Farmer offers and server-priced order snapshots", () => {
       .set("Authorization", `Bearer ${customerToken}`)
       .send({ quantity: 3 });
     expect(qualifiedCart.body.items[0].offer.appliedDiscount).toBe(20);
+
+    const checkoutQuote = await request(app)
+      .post("/api/orders/quote")
+      .set("Authorization", `Bearer ${customerToken}`);
+    expect(checkoutQuote.body).toMatchObject({ subtotal: 300, discount: 20, deliveryCharge: 30, total: 310 });
+    expect(checkoutQuote.body.items[0].offerSnapshot).toMatchObject({
+      appliedDiscount: 20,
+      finalUnitPrice: 93.33,
+      finalLineTotal: 280,
+    });
+    const manipulatedOrder = await request(app)
+      .post("/api/orders")
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({
+        address: { name: "Offer Customer", line1: "1 Market Road", city: "Gadag", phone: "555-0101" },
+        paymentMethod: "UPI",
+        paymentConfirmed: true,
+        paymentAmount: 1,
+        subtotal: 1,
+        discount: 0,
+        total: 1,
+      });
+    expect(manipulatedOrder.status).toBe(409);
 
     const order = await request(app)
       .post("/api/orders")

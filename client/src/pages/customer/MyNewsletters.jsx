@@ -14,6 +14,7 @@ export default function MyNewsletters({ role = "customer" } = {}) {
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [readFilter, setReadFilter] = useState("all");
 
@@ -30,29 +31,40 @@ export default function MyNewsletters({ role = "customer" } = {}) {
     { value: "custom", label: "Custom Newsletter" },
   ];
 
-  const load = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    let active = true;
     setLoading(true);
     setError(null);
-    try {
-      const { data } = await fetchNewsletters({
+    fetchNewsletters({
         page,
         limit: 10,
-        search,
+        search: debouncedSearch,
         type: typeFilter,
         read: readFilter,
+      })
+      .then(({ data }) => {
+        if (!active) return;
+        setItems(Array.isArray(data?.items) ? data.items : []);
+        setTotal(data?.total || 0);
+        setPages(data?.pages || 1);
+      })
+      .catch((requestError) => {
+        if (!active) return;
+        setError(requestError?.message || "Couldn't load newsletters.");
+        setItems([]);
+        setTotal(0);
+        setPages(1);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
-      setItems(Array.isArray(data?.items) ? data.items : []);
-      setTotal(data?.total || 0);
-      setPages(data?.pages || 1);
-    } catch (e) {
-      setError(e?.message || "Couldn't load newsletters.");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [page, search, typeFilter, readFilter]);
+    return () => { active = false; };
+  }, [page, debouncedSearch, typeFilter, readFilter, fetchNewsletters]);
 
   const handleRead = async (id) => {
     try {
@@ -64,8 +76,6 @@ export default function MyNewsletters({ role = "customer" } = {}) {
       console.error("Failed to mark as read", e);
     }
   };
-
-  if (loading) return <div className="p-6 text-xs text-[#68756B]">Loading newsletters...</div>;
 
   return (
     <div className="space-y-4 pb-12 mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
@@ -81,10 +91,18 @@ export default function MyNewsletters({ role = "customer" } = {}) {
           <p className="mt-1 text-xs text-gray-500">Previously received newsletters from GreenMart.</p>
         </div>
         <input
+          type="search"
+          aria-label="Search by campaign title"
           placeholder="Search by campaign title"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs focus:border-primary focus:outline-none"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              setDebouncedSearch(search.trim());
+              setPage(1);
+            }
+          }}
+          className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-xs focus:border-primary focus:outline-none sm:w-64"
         />
       </motion.header>
 
@@ -133,7 +151,11 @@ export default function MyNewsletters({ role = "customer" } = {}) {
         </div>
       </motion.nav>
 
-      {items.length === 0 ? (
+      {loading ? (
+        <div className="rounded-xl border border-gray-100 bg-white p-12 text-center text-xs text-[#68756B]" role="status">
+          Loading newsletters...
+        </div>
+      ) : items.length === 0 ? (
         <motion.div
           variants={sectionReveal}
           initial="hidden"
@@ -141,8 +163,14 @@ export default function MyNewsletters({ role = "customer" } = {}) {
           className="rounded-xl border border-gray-100 bg-white p-12 text-center"
         >
           <span className="mx-auto h-10 w-10 text-gray-300">📭</span>
-          <h2 className="mt-3 text-sm font-semibold text-gray-900">No newsletters yet</h2>
-          <p className="mt-1 text-xs text-gray-500">When a new campaign is processed, it will appear here.</p>
+          <h2 className="mt-3 text-sm font-semibold text-gray-900">
+            {debouncedSearch || typeFilter !== "all" || readFilter !== "all" ? "No newsletters match your search and filters" : "No newsletters yet"}
+          </h2>
+          <p className="mt-1 text-xs text-gray-500">
+            {debouncedSearch || typeFilter !== "all" || readFilter !== "all"
+              ? "Try a different title or adjust the selected filters."
+              : "When a new campaign is processed, it will appear here."}
+          </p>
         </motion.div>
       ) : (
         <>

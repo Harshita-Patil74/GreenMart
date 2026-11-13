@@ -5,11 +5,12 @@ export default function ProductManagementSection({ products, onEdit, onDelete, o
   return (
     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-xs">
+        <table className="w-full min-w-[900px] text-left text-xs">
           <thead>
             <tr className="bg-gray-50 text-[10px] uppercase text-gray-500">
               <th className="px-3 py-3">Image</th>
               <th className="px-3 py-3">Product Name</th>
+              <th className="px-3 py-3">Product ID</th>
               <th className="px-3 py-3">Category</th>
               <th className="px-3 py-3">Price</th>
               <th className="px-3 py-3">Stock</th>

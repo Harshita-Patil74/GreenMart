@@ -21,6 +21,8 @@ app.use(rateLimit({ windowMs: 15*60*1000, max: env.nodeEnv === "development" ? 3
 app.get("/", (req, res) => res.json({ status: "ok", service: "GreenMart API" }));
 app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use("/api", (req, res, next) => { res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate"); res.set("Pragma", "no-cache"); res.set("Expires", "0"); next(); });
+app.get("/api", (req, res) => res.json({ success: true, message: "Welcome to GreenMart API", status: "running" }));
+app.get("/api/health", (req, res) => res.json({ success: true, message: "GreenMart API is healthy" }));
 app.use("/api", routes);
 app.use(notFound);
 app.use(errorHandler);

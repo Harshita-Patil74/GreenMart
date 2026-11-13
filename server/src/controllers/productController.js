@@ -1,14 +1,19 @@
 const fs = require('fs');
+const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
+const env = require("../config/env");
 const Category = require("../models/Category");
 const Product = require("../models/Product");
 const User = require("../models/User");
+const NewsletterSubscription = require("../models/NewsletterSubscription");
 const Offer = require("../models/Offer");
 const FarmerProfile = require("../models/FarmerProfile");
 const Wishlist = require("../models/Wishlist");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { uploadFileWithPublicId, deleteFile } = require("../services/cloudinaryUpload");
 const { createNotification, EVENT_KEY_PREFIXES } = require("../services/notificationService");
-const { attachProductOffers, getEffectiveStatus, money } = require("../services/offerService");
+const { attachProductOffers, calculateOffer, getEffectiveStatus, roundPercent } = require("../services/offerService");
+const { getSearchTerms, createSearchRegex } = require("../utils/search");
 
 const MAX_IMAGES = 6;
 
@@ -54,6 +59,28 @@ function extractPublicId(secureUrl) {
   }
 }
 
+function buildSearchFilter(search) {
+  const terms = getSearchTerms(search);
+  if (!terms.length) return null;
+  const textMatch = {
+    $and: terms.map((term) => {
+      const regex = createSearchRegex(term);
+      return {
+        $or: [
+          { name: regex },
+          { description: regex },
+          { category: regex },
+        ],
+      };
+    }),
+  };
+  const id = String(search).trim();
+  if (!mongoose.Types.ObjectId.isValid(id) || String(new mongoose.Types.ObjectId(id)) !== id.toLowerCase()) {
+    return textMatch;
+  }
+  return { $or: [textMatch, { _id: new mongoose.Types.ObjectId(id) }] };
+}
+
 async function listProducts(req, res, activeOnly) {
   const { search, category, minPrice, maxPrice, inStock, sort, showDeleted } = req.query;
   const pageNum = Number.isInteger(Number(req.query.page)) && Number(req.query.page) >= 1 ? Number(req.query.page) : 1;
@@ -62,21 +89,17 @@ async function listProducts(req, res, activeOnly) {
   const page = pageNum;
   const limit = limitNum;
   const and = [];
+  const showDeletedOnly = showDeleted === "true" || showDeleted === true;
   if (activeOnly) {
     and.push({ status: "Active" });
     and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
-  } else if (showDeleted !== "true") {
+  } else if (showDeletedOnly) {
+    and.push({ isDeleted: true });
+  } else {
     and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
   }
-  if (search && String(search).trim()) {
-    const trimmed = String(search).trim();
-    and.push({
-      $or: [
-        { $text: { $search: trimmed } },
-        { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
-      ],
-    });
-  }
+  const searchFilter = buildSearchFilter(search);
+  if (searchFilter) and.push(searchFilter);
   const normalizedCategory = category ? String(category).trim() : "";
   if (normalizedCategory && normalizedCategory !== "All Products" && normalizedCategory !== "All Categories") {
     and.push({ category: normalizedCategory });
@@ -88,6 +111,7 @@ async function listProducts(req, res, activeOnly) {
     and.push({ price: priceFilter });
   }
   if (inStock === "true") and.push({ stock: { $gt: 0 } });
+  else if (inStock === "false") and.push({ stock: { $lte: 0 } });
   if (req.query.farmer) and.push({ farmer: req.query.farmer });
   const q = and.length ? { $and: and } : {};
   let sortObj = { createdAt: -1 };
@@ -118,10 +142,40 @@ exports.list = asyncHandler(async (req,res) => listProducts(req, res, false));
 exports.storefront = asyncHandler(async (req,res) => listProducts(req, res, true));
 exports.storefrontOffers = asyncHandler(async (req, res) => {
   const now = new Date();
+  // Optional authentication: resolve user if a valid Bearer token is present
+  let user = null;
+  try {
+    const h = req.headers.authorization || "";
+    const token = h.startsWith("Bearer ") ? h.slice(7) : null;
+    if (token) {
+      const decoded = jwt.verify(token, env.jwtSecret);
+      user = await User.findById(decoded.id).select("-passwordHash -activationTokenHash -activationTokenExpiry -resetTokenHash -resetTokenExpiry");
+    }
+  } catch (e) {
+    // Ignore auth errors – unauthenticated visitors see public offers only
+  }
+
+  // Determine if the user has an active Premium subscription
+  let isPremium = false;
+  if (user && user.role === "customer") {
+    const subscription = await NewsletterSubscription.findOne({ user: user._id }).sort({ createdAt: -1 });
+    if (subscription && subscription.status === "active") {
+      const endDate = subscription.endDate ? new Date(subscription.endDate) : null;
+      if (!endDate || now <= endDate) isPremium = true;
+    }
+  }
+
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
-    endDate: { $gte: now },
+    $or: [
+      { startAt: { $lte: now }, endAt: { $gte: now } },
+      { startAt: { $gt: now } },
+      { startAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+      { startAt: { $exists: false }, startDate: { $gt: now } },
+      { endAt: { $exists: false }, startDate: { $lte: now }, endDate: { $gte: now } },
+      { endAt: { $exists: false }, startDate: { $gt: now } },
+    ],
   })
     .sort({ createdAt: -1 })
     .populate("farmer", "name")
@@ -156,15 +210,13 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
     if (effectiveStatus !== "Active" && effectiveStatus !== "Scheduled") return [];
     const quantity = Math.max(1, Number(offer.minimumQuantity) || 1);
     const originalPrice = Number(product.price);
-    const perUnitDiscount = offer.discountType === "Percentage"
-      ? originalPrice * Number(offer.discountValue) / 100
-      : Number(offer.discountValue);
-    const discount = money(Math.min(
-      originalPrice * quantity,
-      perUnitDiscount * quantity,
-      offer.maximumDiscount == null ? Number.POSITIVE_INFINITY : Number(offer.maximumDiscount)
-    ));
-    if (!Number.isFinite(originalPrice) || originalPrice <= 0 || !Number.isFinite(discount) || discount <= 0) return [];
+    const eligibleSubtotal = Math.max(originalPrice * quantity, Number(offer.minimumAmount || 0));
+    const publicOffer = calculateOffer(product, quantity, [offer], eligibleSubtotal, false);
+    const premiumOffer = calculateOffer(product, quantity, [offer], eligibleSubtotal, true);
+    if (!Number.isFinite(originalPrice) || originalPrice <= 0) return [];
+
+    const isPremiumOffer = offer.audience?.includes("premium") === true && !offer.audience?.includes("public");
+    const isPublicOffer = offer.audience?.includes("public") === true;
 
     return [{
       ...offer.toObject(),
@@ -172,9 +224,14 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
       farmer: offer.farmer,
       effectiveStatus,
       originalPrice,
-      offerPrice: money((originalPrice * quantity - discount) / quantity),
-      discountAmount: money(discount / quantity),
-      discountPercent: Math.round((discount / (originalPrice * quantity)) * 100),
+      publicOfferPrice: publicOffer?.publicFinalUnitPrice ?? null,
+      publicDiscountAmount: publicOffer?.discount / quantity ?? 0,
+      publicDiscountPercent: publicOffer ? roundPercent((publicOffer.discount / (originalPrice * quantity)) * 100) : 0,
+      premiumOfferPrice: premiumOffer?.publicFinalUnitPrice ?? null,
+      premiumDiscountAmount: premiumOffer?.premiumDiscount > 0 ? premiumOffer.premiumDiscount / quantity : null,
+      premiumDiscountPercent: premiumOffer?.premiumDiscount > 0 && premiumOffer.publicFinalUnitPrice > 0 ? roundPercent((premiumOffer.premiumDiscount / (premiumOffer.publicFinalUnitPrice * quantity)) * 100) : null,
+      offerPrice: isPremium && premiumOffer ? premiumOffer.publicFinalUnitPrice : (publicOffer?.publicFinalUnitPrice ?? originalPrice),
+      isPremiumEligible: isPremium && !!premiumOffer,
     }];
   });
 
@@ -183,7 +240,7 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
 exports.storefrontGet = asyncHandler(async (req,res) => {
   const p = await Product.findOne({ _id: req.params.id, status: "Active" }).populate("farmer","name");
   if (!p) return res.status(404).json({ message: "Not found" });
-  res.json((await attachProductOffers([p]))[0]);
+  res.json((await attachProductOffers([p], { includeSubscriberOffers: true }))[0]);
 });
 exports.mine = asyncHandler(async (req,res) => {
   const { search, category, page=1, limit=10, showDeleted, status } = req.query;
@@ -191,18 +248,13 @@ exports.mine = asyncHandler(async (req,res) => {
   let limitNum = Number.isInteger(Number(limit)) && Number(limit) >= 1 ? Number(limit) : 10;
   if (limitNum > 50) limitNum = 50;
   const and = [];
-  if (showDeleted !== "true") {
+  if (showDeleted === "true") {
+    and.push({ isDeleted: true });
+  } else {
     and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
   }
-  if (search && search.trim()) {
-    const trimmed = String(search).trim();
-    and.push({
-      $or: [
-        { $text: { $search: trimmed } },
-        { category: { $regex: new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } },
-      ],
-    });
-  }
+  const searchFilter = buildSearchFilter(search);
+  if (searchFilter) and.push(searchFilter);
   if (category && category !== "All Products" && category !== "All Categories") and.push({ category });
   if (status && status !== "All Status") {
     if (status === "Active") and.push({ status: "Active" });

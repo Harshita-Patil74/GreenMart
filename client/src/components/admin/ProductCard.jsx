@@ -2,6 +2,7 @@ import React from "react";
 import { Edit2, Trash2, RotateCcw } from "lucide-react";
 import ImageWithFallback from "../common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
+import ProductIdentifier from "../product/ProductIdentifier.jsx";
 
 export default function ProductCard({ product, onEdit, onDelete, onRestore, isLoading }) {
   return (
@@ -10,6 +11,7 @@ export default function ProductCard({ product, onEdit, onDelete, onRestore, isLo
         <ImageWithFallback src={getImageUrl(product.images?.[0])} alt={product.name} className="h-10 w-10 rounded-md object-cover border border-gray-200" />
       </td>
       <td className="px-3 py-2 font-medium text-gray-900">{product.name}</td>
+      <td className="px-3 py-2"><ProductIdentifier productId={product._id} compact /></td>
       <td className="px-3 py-2 text-gray-600 text-[10px]">{product.category}</td>
       <td className="px-3 py-2 font-semibold text-gray-900">₹{product.price}</td>
       <td className="px-3 py-2 text-gray-600 text-[10px]">{product.stock}</td>

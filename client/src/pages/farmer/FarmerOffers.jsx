@@ -14,8 +14,9 @@ import StatusBadge from "../../components/common/StatusBadge.jsx";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
 import { formatCurrency, formatDate } from "./farmerUtils.js";
 import getImageUrl from "../../utils/imageUrl.js";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
 const OFFER_TYPES = ["Seasonal Offer", "Farmer Special", "Limited-Time Deal", "Bundle Offer"];
 const DISCOUNT_TYPES = ["Percentage", "Fixed Amount"];
 const EMPTY_DRAFT = {
@@ -55,6 +56,7 @@ export default function FarmerOffers() {
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const productSelectRef = useRef(null);
+  const offersRequest = useRef(0);
 
   const loadProducts = async () => {
     setProductsLoading(true);
@@ -71,27 +73,32 @@ export default function FarmerOffers() {
   };
 
   const loadOffers = async () => {
+    const requestId = ++offersRequest.current;
     setLoading(true);
     setError("");
     try {
       const { data } = await farmerOffersApi.list({
-        page, limit: PAGE_SIZE, search: search.trim(), type: typeFilter, status: statusFilter,
+        page, limit: pageSize, search: search.trim(), type: typeFilter, status: statusFilter,
       });
+      if (requestId !== offersRequest.current) return;
       setOffers(Array.isArray(data?.items) ? data.items : []);
       setTotal(Number(data?.total) || 0);
-      setStats(data?.stats || stats);
+      setStats((current) => data?.stats || current);
     } catch (requestError) {
-      setError(requestError?.message || "Couldn't load your offers.");
+      if (requestId === offersRequest.current) setError(requestError?.message || "Couldn't load your offers.");
     } finally {
-      setLoading(false);
+      if (requestId === offersRequest.current) setLoading(false);
     }
   };
 
   useEffect(() => { loadProducts(); }, []);
   useEffect(() => {
-    const timer = window.setTimeout(loadOffers, 200);
-    return () => window.clearTimeout(timer);
-  }, [page, search, typeFilter, statusFilter]);
+    const timer = window.setTimeout(loadOffers, 350);
+    return () => {
+      window.clearTimeout(timer);
+      offersRequest.current += 1;
+    };
+  }, [page, pageSize, search, typeFilter, statusFilter]);
 
   const selectedProduct = useMemo(
     () => products.find((product) => String(product._id) === String(draft.product)),
@@ -240,10 +247,11 @@ export default function FarmerOffers() {
         className="overflow-hidden rounded-xl border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]"
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F0] p-4">
-          <label className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-[220px] flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#91A09B]" />
-            <input aria-label="Search offers" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search offer or product" className="h-9 w-full rounded-md border border-[#DDE6E2] bg-white pl-9 pr-3 text-xs outline-none focus:border-[#179361]" />
-          </label>
+            <input aria-label="Search offers" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search by Product ID, product name, offer title, description, or category..." className="h-9 w-full rounded-md border border-[#DDE6E2] bg-white pl-9 pr-9 text-xs outline-none focus:border-[#179361]" />
+            {search && <button type="button" aria-label="Clear offer search" onClick={() => { setSearch(""); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#71817D] hover:bg-[#F3F7F4] hover:text-[#245C3A]"><X size={14} /></button>}
+          </div>
           <select aria-label="Filter by offer type" value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }} className="h-9 min-w-[150px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
             <option value="">All Types</option>{OFFER_TYPES.map((type) => <option key={type}>{type}</option>)}
           </select>
@@ -275,7 +283,7 @@ export default function FarmerOffers() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <ImageWithFallback src={getImageUrl(product.images?.[0])} alt="" className="h-11 w-11 shrink-0 rounded-md border border-[#E9EFEC] object-cover" />
-                          <div className="min-w-0"><p className="max-w-[240px] truncate text-xs font-semibold text-[#293D36]" title={offer.title}>{offer.title}</p><p className="max-w-[240px] truncate text-[10px] text-[#81908A]">{product.name || "Product unavailable"}</p></div>
+                          <div className="min-w-0"><p className="max-w-[240px] truncate text-xs font-semibold text-[#293D36]" title={offer.title}>{offer.title}</p><p className="max-w-[240px] truncate text-[10px] text-[#81908A]">{product.name || "Product unavailable"}</p><ProductIdentifier productId={product._id || offer.product} compact className="mt-1 flex" /></div>
                         </div>
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={offer.type} /></td>
@@ -302,7 +310,7 @@ export default function FarmerOffers() {
             </table>
           </div>
         )}
-        {!loading && total > 0 && <Pagination page={page} pageSize={pageSize} totalRecords={total} onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />}
+        {!loading && total > 0 && <Pagination page={page} pageSize={pageSize} totalRecords={total} recordLabel="offer" onChange={(nextPage, nextSize) => { setPage(nextPage); if (nextSize) setPageSize(nextSize); }} />}
       </motion.section>
 
       <Modal open={dialog?.mode === "form"} onClose={() => !saving && setDialog(null)} title={editing ? "Edit Offer" : "Create Offer"}>
@@ -359,6 +367,7 @@ export default function FarmerOffers() {
                 <p className="mt-1 text-[10px] text-[#71817D]">
                   {formatCurrency(selectedProduct.price)} / {selectedProduct.unit || "unit"} · {selectedProduct.stock} in stock
                 </p>
+                <ProductIdentifier productId={selectedProduct._id} className="mt-1 flex" />
               </div>
               <button
                 type="button"
@@ -425,7 +434,7 @@ export default function FarmerOffers() {
           return <div className="space-y-3 text-xs">
             <div className="flex items-center gap-3 rounded-lg bg-[#F4F8F5] p-3">
               <ImageWithFallback src={getImageUrl(product.images?.[0])} alt="" className="h-14 w-14 rounded-lg object-cover" />
-              <div><p className="font-semibold text-[#263B34]">{offer.title}</p><p className="mt-1 text-[10px] text-[#71817D]">{product.name}</p><p className="mt-1 font-semibold text-[#07814E]">{formatCurrency(effectivePrice)} <span className="font-normal text-[#75847E]">per unit at minimum quantity {eligibleQuantity} · base {formatCurrency(product.price)}</span></p>{Number(offer.minimumAmount) > 0 && <p className="text-[10px] text-[#71817D]">Also requires cart subtotal of {formatCurrency(offer.minimumAmount)}.</p>}</div>
+              <div><p className="font-semibold text-[#263B34]">{offer.title}</p><p className="mt-1 text-[10px] text-[#71817D]">{product.name}</p><ProductIdentifier productId={product._id || offer.product} className="mt-1 flex" /><p className="mt-1 font-semibold text-[#07814E]">{formatCurrency(effectivePrice)} <span className="font-normal text-[#75847E]">per unit at minimum quantity {eligibleQuantity} · base {formatCurrency(product.price)}</span></p>{Number(offer.minimumAmount) > 0 && <p className="text-[10px] text-[#71817D]">Also requires cart subtotal of {formatCurrency(offer.minimumAmount)}.</p>}</div>
             </div>
             <p className="leading-5 text-[#52645D]">{offer.description}</p>
             <div className="grid grid-cols-2 gap-2">

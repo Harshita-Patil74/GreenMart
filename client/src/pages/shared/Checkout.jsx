@@ -1,26 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { sectionReveal } from "../../animations/variants.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import toast from "react-hot-toast";
-import { MapPin, Plus, Phone, Mail, CreditCard, Wallet } from "lucide-react";
+import { MapPin, Plus, Phone, ShieldCheck } from "lucide-react";
 import CheckoutStepper from "../../components/checkout/CheckoutStepper.jsx";
+import PaymentMethodSection from "../../components/checkout/PaymentMethodSection.jsx";
 import OrderSummary from "../../components/cart/OrderSummary.jsx";
 import { clearCart, fetchCart, fetchDeliveryCharge } from "../../features/cart/cartSlice.js";
 import addressApi from "../../api/addressApi";
 import orderApi from "../../api/orderApi";
+import { calculateCartTotals } from "../../utils/cartTotals.js";
 
 const blankAddress = { name: "", line1: "", city: "", phone: "" };
 const blankUpi = { vpa: "" };
-const blankCard = { number: "", expiry: "", cvv: "" };
-
-const PAYMENT_METHODS = [
-  { id: "upi", label: "UPI Payment", subtitle: "Google Pay, PhonePe, Paytm, BHIM", icon: Wallet },
-  { id: "card", label: "Credit / Debit Card", subtitle: "Visa, Mastercard, RuPay", icon: CreditCard },
-  { id: "cod", label: "Cash on Delivery", subtitle: "Pay when your order arrives", icon: Mail },
-];
+const blankCard = { name: "", number: "", expiry: "", cvv: "" };
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -39,10 +35,15 @@ export default function Checkout() {
   const [error, setError] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(null);
   const [paymentFailed, setPaymentFailed] = useState(false);
+  const [checkoutQuote, setCheckoutQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState(null);
   const [upiForm, setUpiForm] = useState(blankUpi);
   const [cardForm, setCardForm] = useState(blankCard);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const quoteRequestId = useRef(0);
 
   useEffect(() => {
     if (!token || token === "demo-token" || user?.role !== "customer") {
@@ -77,10 +78,74 @@ export default function Checkout() {
     if (user?.role === "customer" && token && token !== "demo-token") loadAddresses();
   }, [user?.role, token]);
 
-  const subtotal = items.reduce((sum, item) => sum + Number(item.product?.price ?? item.price ?? 0) * Number(item.quantity || 0), 0);
-  const discount = items.reduce((sum, item) => sum + Number(item.offer?.appliedDiscount || 0), 0);
-  const total = subtotal > 0 && deliveryCharge != null ? subtotal - discount + deliveryCharge : 0;
+  const { subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge: delivery, total, deliveryReady } = calculateCartTotals(items, deliveryCharge);
+  const loadCheckoutQuote = useCallback(async () => {
+    const requestId = quoteRequestId.current + 1;
+    quoteRequestId.current = requestId;
+    setQuoteLoading(true);
+    setQuoteError(null);
+    setCheckoutQuote(null);
+    try {
+      const { data } = await orderApi.quote();
+      const quote = {
+        items: Array.isArray(data?.items) ? data.items : null,
+        subtotal: Number(data?.subtotal),
+        regularDiscount: data?.regularDiscount == null ? undefined : Number(data.regularDiscount),
+        premiumDiscount: data?.premiumDiscount == null ? undefined : Number(data.premiumDiscount),
+        discount: Number(data?.discount),
+        deliveryCharge: Number(data?.deliveryCharge),
+        total: Number(data?.total),
+      };
+      if ([quote.subtotal, quote.discount, quote.deliveryCharge, quote.total]
+        .some((amount) => !Number.isFinite(amount) || amount < 0)) {
+        throw new Error("The payable amount is unavailable. Please try again.");
+      }
+      if ([quote.regularDiscount, quote.premiumDiscount]
+        .some((amount) => amount != null && (!Number.isFinite(amount) || amount < 0))) {
+        throw new Error("The discount breakdown is unavailable. Please try again.");
+      }
+      if (requestId !== quoteRequestId.current) return null;
+      setCheckoutQuote(quote);
+      return quote;
+    } catch (quoteRequestError) {
+      if (requestId !== quoteRequestId.current) return null;
+      setCheckoutQuote(null);
+      setQuoteError(quoteRequestError?.response?.data?.message || quoteRequestError?.message || "Couldn't validate your checkout amount.");
+      return null;
+    } finally {
+      if (requestId === quoteRequestId.current) setQuoteLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (cartLoaded && items.length && user?.role === "customer" && token && token !== "demo-token") {
+      setPaymentConfirmed(false);
+      setPaymentAmount(null);
+      setPaymentFailed(false);
+      loadCheckoutQuote();
+      return;
+    }
+    quoteRequestId.current += 1;
+    setCheckoutQuote(null);
+    setQuoteError(null);
+    setQuoteLoading(false);
+    setPaymentConfirmed(false);
+    setPaymentAmount(null);
+    setPaymentFailed(false);
+  }, [cartLoaded, items, loadCheckoutQuote, token, user?.role]);
+
+  const summary = checkoutQuote || { subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge: delivery, total };
+  const summaryDeliveryReady = checkoutQuote ? true : deliveryReady;
   const selectedAddress = addresses.find((address) => address._id === selectedAddressId);
+  const canPlaceOrder = Boolean(cartLoaded)
+    && !cartError
+    && Boolean(checkoutQuote)
+    && Boolean(items.length)
+    && Boolean(selectedAddress)
+    && summaryDeliveryReady
+    && !quoteLoading
+    && !deliveryLoading
+    && !addressLoading;
 
 const [addressErrors, setAddressErrors] = useState({});
 
@@ -121,16 +186,28 @@ const validateAddress = (addr) => {
     setPaymentProcessing(true);
     setPaymentConfirmed(false);
     setPaymentFailed(false);
+    setPaymentAmount(null);
     try {
+      const quote = await loadCheckoutQuote();
+      if (!quote) throw new Error("Payment could not be initiated. Please retry.");
+      const amount = Number(quote.total);
       await new Promise((resolve) => setTimeout(resolve, 1200));
+      setPaymentAmount(amount);
       setPaymentConfirmed(true);
-      toast.success(`Payment successful via ${method}.`);
-    } catch (err) {
+      toast.success(`Payment successful via ${method} for ₹${amount.toFixed(2)}.`);
+    } catch (paymentError) {
       setPaymentFailed(true);
-      toast.error("Payment failed. Please try again.");
+      toast.error(paymentError?.response?.data?.message || paymentError?.message || "Payment failed. Please try again.");
     } finally {
       setPaymentProcessing(false);
     }
+  };
+
+  const selectPaymentMethod = (method) => {
+    setPaymentMethod(method);
+    setPaymentConfirmed(false);
+    setPaymentFailed(false);
+    setPaymentAmount(null);
   };
 
   const placeOrder = async () => {
@@ -163,12 +240,13 @@ const validateAddress = (addr) => {
         },
         paymentMethod,
         paymentConfirmed,
+        ...(paymentConfirmed && paymentAmount != null ? { paymentAmount } : {}),
       });
       dispatch(clearCart());
       toast.success("Order placed successfully.");
       navigate(`/order-confirmation/${data._id}`);
     } catch (requestError) {
-      setError(requestError?.message || "Couldn't place your order.");
+      setError(requestError?.response?.data?.message || requestError?.message || "Couldn't place your order.");
     } finally {
       setPlacingOrder(false);
     }
@@ -191,7 +269,7 @@ const validateAddress = (addr) => {
             variants={sectionReveal}
             initial="hidden"
             animate="visible"
-            className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+            className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_3px_rgba(38,53,43,0.06)] sm:p-5"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
@@ -247,113 +325,22 @@ const validateAddress = (addr) => {
             variants={sectionReveal}
             initial="hidden"
             animate="visible"
-            className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
           >
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">Payment Method</h2>
-                <p className="mt-1 text-[11px] text-gray-500">Choose how you want to pay.</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {PAYMENT_METHODS.map((method) => {
-                const isSelected = paymentMethod === method.id;
-                return (
-                  <label key={method.id} onClick={() => { setPaymentMethod(method.id); setPaymentConfirmed(false); setPaymentFailed(false); }} className={`cursor-pointer rounded-lg border p-3 transition-all ${isSelected ? "border-primary bg-emerald-50/50" : "border-gray-200 hover:bg-gray-50"}`}>
-                    <div className="flex items-center gap-3">
-                      <input type="radio" name="paymentMethod" checked={isSelected} onChange={() => setPaymentMethod(method.id)} className="mt-1 accent-primary" />
-                      <div className="flex items-center gap-2">
-                        <method.icon className="h-5 w-5 text-primary" />
-                        <div>
-                          <span className="block text-xs font-semibold text-gray-900">{method.label}</span>
-                          <span className="mt-1 block text-[10px] text-gray-500">{method.subtitle}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-
-            {paymentMethod === "upi" && (
-              <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-semibold text-gray-900">UPI Payment</span>
-                </div>
-                <p className="text-[10px] text-gray-500 mb-3">Enter your UPI ID (VPA) to proceed. This is a simulated payment — no real money will be deducted.</p>
-                <div className="space-y-2">
-                  <label className="flex flex-col gap-1 text-[10px] font-medium text-gray-600">
-                    UPI ID (e.g., name@upi)
-                    <input required value={upiForm.vpa} onChange={(e) => setUpiForm((c) => ({ ...c, vpa: e.target.value }))} placeholder="name@upi" className="mt-1 h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none" />
-                  </label>
-                  <button
-                    disabled={paymentProcessing || !upiForm.vpa}
-                    onClick={() => processMockPayment("UPI")}
-                    className={`w-full h-8 rounded-lg px-3 text-[10px] font-semibold disabled:opacity-60 ${paymentProcessing || !upiForm.vpa ? "bg-gray-200 text-gray-500" : "bg-primary text-white"}`}
-                  >
-                    {paymentProcessing ? "Processing…" : "Pay via UPI"}
-                  </button>
-                  {paymentConfirmed === true && (
-                    <p className="mt-2 text-[10px] font-semibold text-green-600">✓ Payment successful via UPI</p>
-                  )}
-                  {paymentFailed && (
-                    <p className="mt-2 text-[10px] font-semibold text-red-600">✗ Payment failed. Try again.</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === "card" && (
-              <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <CreditCard className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-semibold text-gray-900">Credit / Debit Card</span>
-                </div>
-                <p className="text-[10px] text-gray-500 mb-3">Enter your card details to proceed. This is a simulated payment — no real money will be deducted.</p>
-                <div className="space-y-2">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <label className="flex flex-col gap-1 text-[10px] font-medium text-gray-600">
-                      Card number
-                      <input required value={cardForm.number} onChange={(e) => setCardForm((c) => ({ ...c, number: e.target.value }))} placeholder="1234 5678 9012 3456" className="mt-1 h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none" />
-                    </label>
-                    <label className="flex flex-col gap-1 text-[10px] font-medium text-gray-600">
-                      Expiry (MM/YY)
-                      <input required value={cardForm.expiry} onChange={(e) => setCardForm((c) => ({ ...c, expiry: e.target.value }))} placeholder="12/30" className="mt-1 h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none" />
-                    </label>
-                    <label className="flex flex-col gap-1 text-[10px] font-medium text-gray-600">
-                      CVV
-                      <input required value={cardForm.cvv} onChange={(e) => setCardForm((c) => ({ ...c, cvv: e.target.value }))} placeholder="123" className="mt-1 h-8 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-900 focus:border-primary focus:outline-none" />
-                    </label>
-                  </div>
-                  <button
-                    disabled={paymentProcessing || !cardForm.number || !cardForm.expiry || !cardForm.cvv}
-                    onClick={() => processMockPayment("Card")}
-                    className={`w-full h-8 rounded-lg px-3 text-[10px] font-semibold disabled:opacity-60 ${paymentProcessing || !cardForm.number || !cardForm.expiry || !cardForm.cvv ? "bg-gray-200 text-gray-500" : "bg-primary text-white"}`}
-                  >
-                    {paymentProcessing ? "Processing…" : "Pay via Card"}
-                  </button>
-                  {paymentConfirmed === true && (
-                    <p className="mt-2 text-[10px] font-semibold text-green-600">✓ Payment successful via Card</p>
-                  )}
-                  {paymentFailed && (
-                    <p className="mt-2 text-[10px] font-semibold text-red-600">✗ Payment failed. Try again.</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === "cod" && (
-              <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-primary" />
-                  <div>
-                    <span className="block text-xs font-semibold text-gray-900">Pay on Delivery</span>
-                    <span className="mt-1 text-[10px] text-gray-500">Pay in cash when your order is delivered. No online payment required.</span>
-                  </div>
-                </div>
-              </div>
-            )}
+            <PaymentMethodSection
+              paymentMethod={paymentMethod}
+              onSelectPaymentMethod={selectPaymentMethod}
+              upiForm={upiForm}
+              onUpiChange={(value) => setUpiForm({ vpa: value })}
+              cardForm={cardForm}
+              onCardChange={(key, value) => setCardForm((current) => ({ ...current, [key]: value }))}
+              paymentProcessing={paymentProcessing}
+              paymentConfirmed={paymentConfirmed}
+              paymentFailed={paymentFailed}
+              onPay={processMockPayment}
+              onPlaceOrder={placeOrder}
+              placingOrder={placingOrder}
+              orderButtonDisabled={!canPlaceOrder}
+            />
           </motion.section>
         </div>
 
@@ -364,18 +351,23 @@ const validateAddress = (addr) => {
           className="space-y-3"
         >
           {cartError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{cartError} <button onClick={() => dispatch(fetchCart())} className="font-semibold underline">Retry</button></p>}
+          {quoteError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{quoteError} <button onClick={loadCheckoutQuote} className="font-semibold underline">Retry</button></p>}
           {deliveryError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{deliveryError} <button onClick={() => dispatch(fetchDeliveryCharge())} className="font-semibold underline">Retry</button></p>}
           {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{error}</p>}
           <OrderSummary
-            subtotal={subtotal}
-            discount={discount}
-            delivery={deliveryCharge ?? 0}
-            total={total}
-            items={items}
+            subtotal={summary.subtotal}
+            regularDiscount={summary.regularDiscount}
+            premiumDiscount={summary.premiumDiscount}
+            discount={summary.discount}
+            delivery={summary.deliveryCharge}
+            total={summary.total}
+            deliveryReady={summaryDeliveryReady}
+            items={checkoutQuote?.items || items}
             showItems
             buttonLabel="Place Order"
             onAction={placeOrder}
-            loading={placingOrder || addressLoading || cartLoading || deliveryLoading || deliveryCharge == null}
+            loading={placingOrder || addressLoading || cartLoading || deliveryLoading || quoteLoading || !summaryDeliveryReady}
+            disabled={!cartLoaded || cartError || quoteError || !checkoutQuote || !items.length}
           />
           {!items.length && !cartLoading && <div className="rounded-lg border border-gray-100 bg-white p-3 text-center text-xs text-gray-500">Your cart is empty. <Link to="/shop" className="font-semibold text-primary">Shop now</Link></div>}
         </motion.div>

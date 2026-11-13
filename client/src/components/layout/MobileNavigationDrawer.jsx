@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { motion } from "framer-motion";
-import { slideLeftVariants, fadeVariants } from "../../animations/variants.js";
+import { fadeVariants } from "../../animations/variants.js";
 import { logout } from "../../features/auth/authSlice.js";
 import {
   BarChart3,
@@ -25,6 +25,7 @@ import {
   Truck,
   User,
   Users,
+  X,
 } from "lucide-react";
 import getImageUrl from "../../utils/imageUrl.js";
 
@@ -69,6 +70,7 @@ const navigationByRole = {
     { label: "Offers Management", path: "/admin/offers", icon: Tag },
     { label: "Newsletter Management", path: "/admin/newsletter", icon: Mail },
     { label: "Reports and Analytics", path: "/admin/reports", icon: BarChart3 },
+    { label: "Analytics", path: "/admin/analytics", icon: BarChart3 },
     { label: "Notifications", path: "/admin/notifications", icon: Bell },
     { label: "Settings", path: "/admin/settings", icon: Settings },
   ],
@@ -148,12 +150,12 @@ export default function MobileNavigationDrawer({
         aria-hidden={!open}
         aria-label={label}
         variants={{
-          hidden: { opacity: 0, x: "100%", pointerEvents: "none" },
+          hidden: { opacity: 0, x: "-100%", pointerEvents: "none" },
           visible: { opacity: 1, x: 0, pointerEvents: "auto" },
         }}
         initial={open ? "visible" : "hidden"}
         animate={open ? "visible" : "hidden"}
-        exit={{ opacity: 0, x: "100%", transition: { duration: 0.2 } }}
+        exit={{ opacity: 0, x: "-100%", transition: { duration: 0.2 } }}
         className={`fixed inset-y-0 left-0 z-50 flex h-[100vh] h-[100dvh] w-[min(280px,85vw)] max-w-[85vw] flex-col overflow-y-auto overscroll-contain pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:hidden ${
           open ? "visible translate-x-0" : "invisible -translate-x-full"
         } ${className}`}
@@ -178,11 +180,7 @@ export default function MobileNavigationDrawer({
             aria-label="Close navigation"
             className="inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
-            <span className="relative inline-block h-[14px] w-[14px]">
-              <span className="absolute inset-0 bg-current rounded-sm" />
-              <span className="absolute inset-0 bg-current rounded-sm -translate-y-[14px]" />
-              <span className="absolute inset-0 bg-current rounded-sm translate-y-[14px]" />
-            </span>
+            <X aria-hidden="true" className="h-5 w-5" />
           </button>
         </div>
 

@@ -129,6 +129,55 @@ afterAll(async () => {
 });
 
 describe("Product availability and farmer data", () => {
+  it("filters storefront stock before pagination and counts only matching products", async () => {
+    const productNames = [
+      "Availability stock regression in",
+      "Availability stock regression out zero",
+      "Availability stock regression out negative",
+    ];
+    await Product.create([
+      { name: productNames[0], description: "Stock filter regression test", category: "Vegetables", price: 4, stock: 3, farmer: farmerId },
+      { name: productNames[1], description: "Stock filter regression test", category: "Vegetables", price: 4, stock: 0, farmer: farmerId },
+      { name: productNames[2], description: "Stock filter regression test", category: "Vegetables", price: 4, stock: -1, farmer: farmerId },
+    ]);
+
+    try {
+      const inStock = await request(app)
+        .get("/api/products/storefront")
+        .query({ search: "Availability stock regression", inStock: "true", limit: 1, page: 1 });
+      expect(inStock.status).toBe(200);
+      expect(inStock.body.total).toBe(1);
+      expect(inStock.body.pages).toBe(1);
+      expect(inStock.body.items.map((product) => product.name)).toEqual([productNames[0]]);
+
+      const outOfStockPageOne = await request(app)
+        .get("/api/products/storefront")
+        .query({ search: "Availability stock regression", inStock: "false", limit: 1, page: 1, category: "Vegetables", maxPrice: 5 });
+      expect(outOfStockPageOne.status).toBe(200);
+      expect(outOfStockPageOne.body.total).toBe(2);
+      expect(outOfStockPageOne.body.pages).toBe(2);
+      expect(outOfStockPageOne.body.items).toHaveLength(1);
+      expect(outOfStockPageOne.body.items[0].stock).toBeLessThanOrEqual(0);
+
+      const outOfStockPageTwo = await request(app)
+        .get("/api/products/storefront")
+        .query({ search: "Availability stock regression", inStock: "false", limit: 1, page: 2 });
+      expect(outOfStockPageTwo.status).toBe(200);
+      expect(outOfStockPageTwo.body.total).toBe(2);
+      expect(outOfStockPageTwo.body.pages).toBe(2);
+      expect(outOfStockPageTwo.body.items).toHaveLength(1);
+      expect(outOfStockPageTwo.body.items[0].stock).toBeLessThanOrEqual(0);
+
+      const allAvailability = await request(app)
+        .get("/api/products/storefront")
+        .query({ search: "Availability stock regression", inStock: "invalid" });
+      expect(allAvailability.status).toBe(200);
+      expect(allAvailability.body.total).toBe(3);
+    } finally {
+      await Product.deleteMany({ name: { $in: productNames } });
+    }
+  });
+
   it("does not expose inactive products in the customer storefront", async () => {
     const response = await request(app).get("/api/products/storefront");
 
@@ -169,10 +218,45 @@ describe("Product availability and farmer data", () => {
       .get("/api/products/mine?showDeleted=true")
       .set("Authorization", `Bearer ${farmerToken}`);
     expect(response.status).toBe(200);
-    expect(response.body.total).toBe(2);
+    expect(response.body.total).toBe(1);
     expect(response.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
-    expect(response.body.items.map((item) => item.name)).toContain("Farmer One crop");
+    expect(response.body.items.map((item) => item.name)).not.toContain("Farmer One crop");
+    expect(response.body.items.every((item) => item.isDeleted === true)).toBe(true);
     expect(response.body.items.every((item) => String(item.farmer) === String(farmerId))).toBe(true);
+  });
+
+  it("filters deleted products before search and pagination", async () => {
+    const unrelated = await Product.create({
+      name: "Farmer One pending crop",
+      description: "Not deleted, but has another status",
+      category: "Vegetables",
+      price: 4,
+      farmer: farmerId,
+      status: "Pending",
+      isDeleted: false,
+    });
+    const legacy = await Product.collection.insertOne({
+      name: "Farmer One unmarked crop",
+      description: "Legacy product without a deleted flag",
+      category: "Vegetables",
+      price: 6,
+      farmer: farmerId,
+      status: "Inactive",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    try {
+      const response = await request(app)
+        .get("/api/products/mine?showDeleted=true&search=deleted%20crop&page=1&limit=1")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.total).toBe(1);
+      expect(response.body.pages).toBe(1);
+      expect(response.body.items.map((item) => item.name)).toEqual(["Farmer One deleted crop"]);
+    } finally {
+      await Product.deleteMany({ _id: { $in: [unrelated._id, legacy.insertedId] } });
+    }
   });
 
   it("allows the farmer to restore their own deleted product", async () => {
@@ -204,17 +288,28 @@ describe("Product availability and farmer data", () => {
   });
 
   it("lets an admin view and restore deleted products", async () => {
+    const adminDeletedProduct = await Product.create({
+      name: "Admin deleted crop",
+      description: "Admin-only deleted product check",
+      category: "Vegetables",
+      price: 7,
+      farmer: farmerId,
+      status: "Inactive",
+      isDeleted: true,
+    });
+
     const list = await request(app)
       .get("/api/products?showDeleted=true")
       .set("Authorization", `Bearer ${adminToken}`);
     expect(list.status).toBe(200);
-    expect(list.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
+    expect(list.body.items.map((item) => item.name)).toContain("Admin deleted crop");
 
     const restore = await request(app)
-      .patch(`/api/products/${deletedProductId}/restore`)
+      .patch(`/api/products/${adminDeletedProduct._id}/restore`)
       .set("Authorization", `Bearer ${adminToken}`);
     expect(restore.status).toBe(200);
     expect(restore.body.product.isDeleted).toBe(false);
+    await Product.findByIdAndDelete(adminDeletedProduct._id);
   });
 
   it("prevents a customer from accessing the product restore endpoint", async () => {
@@ -234,6 +329,49 @@ describe("Product availability and farmer data", () => {
     expect(response.body.pages).toBe(Math.ceil(response.body.total / response.body.limit));
     expect(response.body.limit).toBe(10);
     expect(response.body.items.length).toBeGreaterThan(0);
+  });
+
+  it("uses only explicitly deleted products for deleted-view pagination", async () => {
+    const deleted = await Product.create({
+      name: "Farmer One temporary deleted crop",
+      description: "Deleted crop used for filter coverage",
+      category: "Vegetables",
+      price: 8,
+      farmer: farmerId,
+      status: "Inactive",
+      isDeleted: true,
+    });
+    const unrelated = await Product.create({
+      name: "Farmer One pending crop",
+      description: "Not deleted, but has another status",
+      category: "Vegetables",
+      price: 4,
+      farmer: farmerId,
+      status: "Pending",
+      isDeleted: false,
+    });
+    const legacy = await Product.collection.insertOne({
+      name: "Farmer One unmarked crop",
+      description: "Legacy product without a deleted flag",
+      category: "Vegetables",
+      price: 6,
+      farmer: farmerId,
+      status: "Inactive",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    try {
+      const response = await request(app)
+        .get("/api/products/mine?showDeleted=true&search=temporary%20deleted%20crop&page=1&limit=1")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.total).toBe(1);
+      expect(response.body.pages).toBe(1);
+      expect(response.body.items.map((item) => item.name)).toEqual(["Farmer One temporary deleted crop"]);
+    } finally {
+      await Product.deleteMany({ _id: { $in: [deleted._id, unrelated._id, legacy.insertedId] } });
+    }
   });
 
   it("requires an authenticated farmer", async () => {

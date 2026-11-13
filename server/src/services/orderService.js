@@ -4,7 +4,7 @@ const Cart = require("../models/Cart");
 const generateOrderNumber = require("../utils/generateOrderNumber");
 const { generateInvoiceNumber } = require("../utils/invoiceNumbers");
 const { STATUS_FLOW, FARMER_TRANSITIONS } = require("../constants/orderStatus");
-const { getActiveOffers, calculateOffer, money } = require("./offerService");
+const { getActiveOffers, calculateOffer, computeCartTotals, money } = require("./offerService");
 const { isPremiumCustomer } = require("./premiumService");
 
 const DELIVERY_FAILED = "Delivery Failed";
@@ -25,18 +25,29 @@ function getOverallStatus(items, fallback) {
   );
 }
 
-async function createOrder(userId, { address, coordinates, paymentMethod, paymentConfirmed }) {
+async function prepareCheckout(userId, placedAt = new Date()) {
   const cart = await Cart.findOne({ user: userId }).populate("items.product");
-  if (!cart || !cart.items.length) throw new Error("Cart empty");
-  for (const it of cart.items) {
-    if (!it.product || it.product.status !== "Active") throw new Error("A product in your cart is no longer available");
-    if (it.product.stock < it.quantity) throw new Error("Insufficient stock");
+  if (!cart || !cart.items.length) {
+    throw Object.assign(new Error("Cart empty"), { status: 400 });
   }
-  const placedAt = new Date();
-  const invoiceNumber = await generateInvoiceNumber(placedAt);
+  for (const it of cart.items) {
+    const quantity = Number(it.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw Object.assign(new Error("Cart contains an invalid quantity."), { status: 400 });
+    }
+    if (!it.product || it.product.status !== "Active") {
+      throw Object.assign(new Error("A product in your cart is no longer available."), { status: 409 });
+    }
+    if (!Number.isFinite(Number(it.product.price)) || Number(it.product.price) < 0) {
+      throw Object.assign(new Error("A product in your cart has an invalid price."), { status: 409 });
+    }
+    if (!Number.isFinite(Number(it.product.stock)) || Number(it.product.stock) < quantity) {
+      throw Object.assign(new Error("Insufficient stock."), { status: 409 });
+    }
+  }
   const activeOffers = await getActiveOffers(cart.items.map((item) => item.product._id), placedAt);
-  const cartSubtotal = cart.items.reduce((sum, item) =>
-    sum + Number(item.product.price) * Number(item.quantity), 0);
+  const cartSubtotal = money(cart.items.reduce((sum, item) =>
+    sum + Number(item.product.price) * Number(item.quantity), 0));
   const premium = await isPremiumCustomer(userId);
   const items = cart.items.map((it) => {
     const appliedOffer = calculateOffer(it.product, it.quantity, activeOffers, cartSubtotal, premium);
@@ -54,6 +65,7 @@ async function createOrder(userId, { address, coordinates, paymentMethod, paymen
           offerType: appliedOffer.offer.type,
           discountType: appliedOffer.offer.discountType,
           discountValue: appliedOffer.offer.discountValue,
+          isPremiumExclusive: appliedOffer.offer.audience?.includes("premium") === true,
           originalUnitPrice: Number(it.product.price),
           appliedDiscount: appliedOffer.discount,
           premiumDiscount: appliedOffer.premiumDiscount,
@@ -66,13 +78,32 @@ async function createOrder(userId, { address, coordinates, paymentMethod, paymen
       fulfillmentHistory: [{ status: "Order Placed", at: placedAt }],
     };
   });
-  const subtotal = items.reduce((s,i)=>s+i.price*i.quantity,0);
-  const discount = money(items.reduce((sum, item) => sum + Number(item.offerSnapshot?.appliedDiscount || 0), 0));
   const setting = await require("../models/Setting").findOne();
-  const deliveryCharge = setting ? setting.deliveryCharge : 30;
-  // Server-side payment status determination: never trust frontend-supplied paymentStatus
+  const configuredDelivery = setting && setting.deliveryCharge != null ? Number(setting.deliveryCharge) : 30;
+  if (!Number.isFinite(configuredDelivery) || configuredDelivery < 0) {
+    throw new Error("The delivery charge is temporarily unavailable.");
+  }
+  const { subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total } = computeCartTotals(items, configuredDelivery);
+  return { cart, items, subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total, placedAt };
+}
+
+async function getCheckoutQuote(userId) {
+  const { items, subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total } = await prepareCheckout(userId);
+  return { items, subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total };
+}
+
+async function createOrder(userId, { address, coordinates, paymentMethod, paymentConfirmed, paymentAmount }) {
+  const { cart, items, subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total, placedAt } = await prepareCheckout(userId);
+  if (paymentConfirmed === true && ["upi", "card"].includes(String(paymentMethod).toLowerCase())) {
+    const confirmedAmount = Number(paymentAmount);
+    if (!Number.isFinite(confirmedAmount) || money(confirmedAmount) !== total) {
+      throw Object.assign(new Error("The payable amount changed. Review your order and retry payment."), { status: 409 });
+    }
+  }
+  const invoiceNumber = await generateInvoiceNumber(placedAt);
+  // Server-side payment status determination: never trust frontend-supplied totals or paymentStatus
   let paymentStatus = "Pending";
-  if (paymentMethod === "upi" || paymentMethod === "card") {
+  if (["upi", "card"].includes(String(paymentMethod).toLowerCase())) {
     if (paymentConfirmed === true) paymentStatus = "Paid";
   }
   // COD always remains "Pending"
@@ -84,8 +115,7 @@ async function createOrder(userId, { address, coordinates, paymentMethod, paymen
     items, address, coordinates, paymentMethod, paymentStatus,
     status: "Order Placed",
     statusHistory: [{ status: "Order Placed", at: placedAt }],
-    subtotal, discount, deliveryCharge,
-    total: discount > 0 ? money(subtotal - discount + deliveryCharge) : subtotal + deliveryCharge,
+    subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge, total,
   });
   // reduce stock
   for (const it of cart.items) {
@@ -232,4 +262,4 @@ async function updateCustomerStatus(orderId, userId, status) {
   return order;
 }
 
-module.exports = { createOrder, updateStatus, updateFarmerStatus, updateCustomerStatus, getItemStatus };
+module.exports = { createOrder, getCheckoutQuote, updateStatus, updateFarmerStatus, updateCustomerStatus, getItemStatus };

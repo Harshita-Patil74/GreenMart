@@ -133,6 +133,7 @@ describe("Admin sales analytics", () => {
     expect(potatoSale).toBeDefined();
     expect(potatoSale.quantity).toBe(1);
     expect(potatoSale.revenue).toBe(30);
+    expect(potatoSale.productIds).toContain(String(deletedProductId));
   });
 
   it("excludes cancelled and failed orders from sales totals", async () => {
@@ -178,6 +179,7 @@ describe("Admin sales analytics", () => {
     expect(carrots).toBeDefined();
     expect(carrots.quantity).toBe(2);
     expect(carrots.revenue).toBe(20);
+    expect(carrots.productIds).toContain(String(productAId));
   });
 
   it("rejects invalid dates instead of returning zero", async () => {

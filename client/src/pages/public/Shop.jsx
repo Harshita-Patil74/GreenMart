@@ -21,7 +21,7 @@ export default function Shop() {
   const search = params.get("search") || "";
   const page = Math.max(1, Number(params.get("page") || 1));
   const [maxPrice, setMaxPrice] = useState(Number(params.get("maxPrice") || 1000));
-  const [inStock, setInStock] = useState(true);
+  const [inStock, setInStock] = useState(false);
   const [outOfStock, setOutOfStock] = useState(false);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -81,27 +81,38 @@ export default function Shop() {
     setParam("maxPrice", value < 1000 ? String(value) : "");
   };
 
+  const updateAvailability = (type, checked) => {
+    if (type === "inStock") setInStock(checked);
+    else setOutOfStock(checked);
+    setParam("page", "");
+  };
+
   const filters = {
     category,
     setCategory: (value) => setParam("category", value),
     inStock,
-    setInStock,
+    setInStock: (checked) => updateAvailability("inStock", checked),
     outOfStock,
-    setOutOfStock,
+    setOutOfStock: (checked) => updateAvailability("outOfStock", checked),
     maxPrice,
     setMaxPrice: setPrice,
   };
 
   return (
-    <div className="gm-container py-5 pb-16">
+    <div className="gm-container w-full max-w-none py-5 pb-16">
       <BackButton fallback="/" />
       <motion.div
         variants={sectionReveal}
         initial="hidden"
         animate="visible"
-        className="mb-4 flex flex-wrap items-end justify-between gap-3"
+        className="mb-5 flex flex-wrap items-end justify-between gap-3"
       >
-        <button onClick={() => setMobileFilterOpen(true)} className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 md:hidden"><SlidersHorizontal className="h-4 w-4 text-primary" />Filters</button>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Fresh from local farmers</p>
+          <h1 className="mt-1 text-2xl font-heading font-bold text-gray-900 sm:text-3xl">Shop organic favourites</h1>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500">Explore fresh harvests, pantry essentials, and special offers from GreenMart farmers.</p>
+        </div>
+        <button onClick={() => setMobileFilterOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 shadow-sm md:hidden"><SlidersHorizontal className="h-4 w-4 text-primary" />Filters</button>
       </motion.div>
 
       <motion.div

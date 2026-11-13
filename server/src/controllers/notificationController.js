@@ -1,5 +1,23 @@
 const Notification = require("../models/Notification");
+const Order = require("../models/Order");
 const { asyncHandler } = require("../utils/asyncHandler");
+
+async function includeFarmerOrderNumbers(items, user) {
+  if (user.role !== "farmer") return items;
+  const orderIds = [...new Set(items.map((item) => item.orderId && String(item.orderId)).filter(Boolean))];
+  if (!orderIds.length) return items;
+
+  const orders = await Order.find({
+    _id: { $in: orderIds },
+    "items.farmer": user._id,
+  }).select("orderNumber").lean();
+  const orderNumbers = new Map(orders.map((order) => [String(order._id), order.orderNumber]));
+  return items.map((item) => {
+    const notification = item.toObject ? item.toObject() : item;
+    const orderNumber = orderNumbers.get(String(item.orderId));
+    return orderNumber ? { ...notification, orderNumber } : notification;
+  });
+}
 
 // Map notification `type` -> standard `category` for legacy records that were
 // saved without a category. Keeps type and category distinct: type is the
@@ -62,7 +80,7 @@ exports.list = asyncHandler(async (req, res) => {
   // Backward compatible: when no pagination params are supplied, return a plain array.
   if (!page && !limit) {
     const items = await Notification.find(query).sort({ createdAt: -1 });
-    return res.json(items);
+    return res.json(await includeFarmerOrderNumbers(items, user));
   }
 
   const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
@@ -72,7 +90,7 @@ exports.list = asyncHandler(async (req, res) => {
     Notification.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
     Notification.countDocuments(query),
   ]);
-  res.json({ items, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
+  res.json({ items: await includeFarmerOrderNumbers(items, user), total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum });
 });
 
 exports.unreadCount = asyncHandler(async (req, res) => res.json({ count: await Notification.countDocuments({ user: req.user._id, isRead: false }) }));

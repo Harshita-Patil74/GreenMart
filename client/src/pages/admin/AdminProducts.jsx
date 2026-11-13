@@ -10,6 +10,7 @@ import { getImageUrl } from "../../utils/imageUrl.js";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
 import ProductManagementSection from "../../components/admin/ProductManagementSection.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 import Modal from "../../components/common/Modal.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import Pagination from "../../components/common/Pagination.jsx";
@@ -130,11 +131,17 @@ export default function AdminProducts() {
     setSavingForm(true);
     setError(null);
     try {
-      if (editingProduct) await productApi.update(editingProduct._id, formData);
-      else await productApi.create(formData);
+      const { data: savedProduct } = editingProduct
+        ? await productApi.update(editingProduct._id, formData)
+        : await productApi.create(formData);
       await load();
       setDialogOpen(false);
-      showSuccess(editingProduct ? "Product updated" : "Product added", `${draft.name} has been saved.`);
+      showSuccess(
+        editingProduct ? "Product updated" : "Product added",
+        editingProduct
+          ? `${draft.name} has been saved.`
+          : `${draft.name} has been saved.${savedProduct?._id ? ` Product ID: ${savedProduct._id}` : ""}`,
+      );
     } catch (requestError) {
       showError("Save failed", requestError?.message || "Couldn't save the product.");
     } finally {
@@ -209,7 +216,7 @@ export default function AdminProducts() {
       className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 p-3">
-        <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, farmer, or status" ariaLabel="Search products" />
+        <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, or description" ariaLabel="Search products" />
         <select aria-label="Filter by category" value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs"><option value="">All Categories</option>{categories.map((item) => <option key={item}>{item}</option>)}</select>
         <select aria-label="Filter by status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs"><option value="">All Status</option><option>Active</option><option>Inactive</option></select>
           <label className="flex items-center gap-1.5 cursor-pointer">
@@ -234,6 +241,12 @@ export default function AdminProducts() {
     <Modal open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingProduct ? "Edit Product" : "Add Product"}>
       <form onSubmit={saveProduct} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
+          {editingProduct && <div className="sm:col-span-2">
+            <p className="text-xs text-gray-600">Product ID (read-only)</p>
+            <div className="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+              <ProductIdentifier productId={editingProduct._id} />
+            </div>
+          </div>}
           <label className="text-xs text-gray-600">Product name<input required value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))} className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"/></label>
           <label className="text-xs text-gray-600">Category<input required list="admin-product-categories" value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"/><datalist id="admin-product-categories">{categories.map(item => <option key={item} value={item} />)}</datalist></label>
           <label className="text-xs text-gray-600">Price<input required min="0" step="0.01" type="number" value={draft.price} onChange={e => setDraft(d => ({ ...d, price: e.target.value }))} className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"/></label>

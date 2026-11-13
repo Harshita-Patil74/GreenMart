@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import farmerApi from "../../api/farmerApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import Pagination from "../../components/common/Pagination.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import { TrendingUp, DollarSign, Package, LayoutGrid, RotateCcw } from "lucide-react";
 
@@ -188,6 +189,7 @@ export default function SalesManagement() {
             <div key={p.name} className="flex items-center justify-between p-2 rounded border border-[#EDF1F0] bg-[#FAF8F1]">
               <div>
                 <div className="text-xs font-medium text-[#172A27]">{p.name}</div>
+                {(p.productIds || []).map((productId) => <ProductIdentifier key={productId} productId={productId} compact className="mt-1 flex" />)}
                 <div className="text-[10px] text-[#71817D]">{formatCurrency(p.revenue)} revenue</div>
               </div>
               <div className="text-right">
@@ -221,13 +223,17 @@ export default function SalesManagement() {
               {sales.map((s) => {
                 const items = (s.items || []).filter((it) => String(it.farmer) === String(s.items[0]?.farmer));
                  const amount = items.reduce((sum, it) => sum + (Number((it.offerSnapshot?.finalLineTotal ?? it.price) || 0) * Number(it.quantity || 0)), 0);
-                const names = items.map((it) => it.name || "Product").join(", ");
                 return (
                   <tr key={s._id} className="h-[56px] hover:bg-[#FBFCFC]">
                     <td className="px-3 py-2 font-medium text-[#344640]">#{String(s.orderNumber || s._id).slice(-6)}</td>
                     <td className="px-3 py-2 text-[#74827E]">{s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-IN") : "?"}</td>
                     <td className="px-3 py-2 text-[#52615D]">Customer</td>
-                    <td className="px-3 py-2 text-[#52615D] max-w-[200px] truncate">{names}</td>
+                    <td className="px-3 py-2 text-[#52615D] max-w-[220px]">
+                      {items.map((item, index) => <div key={item._id || item.product?._id || item.product || index} className="mb-1 last:mb-0">
+                        <span className="block truncate">{item.name || "Product"}</span>
+                        <ProductIdentifier productId={item.product?._id || item.product} compact className="mt-0.5 flex" />
+                      </div>)}
+                    </td>
                     <td className="px-3 py-2 text-right font-medium text-[#344640]">{formatCurrency(amount)}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold ${s.status === "Delivered" ? "bg-emerald-50 text-emerald-700" : s.status === "Cancelled" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>

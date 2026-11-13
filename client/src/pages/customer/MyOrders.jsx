@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import orderApi from "../../api/orderApi";
 import BackButton from "../../components/common/BackButton.jsx";
-import SearchBar from "../../components/common/SearchBar.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { motion } from "framer-motion";
 import { sectionReveal, staggerContainer, staggerItem } from "../../animations/variants.js";
@@ -13,25 +12,35 @@ import { subscribeOrderStatus } from "../../socket/socketClient.js";
 import toast from "react-hot-toast";
 import { Search, X, Download, ArrowRight } from "lucide-react";
 import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 
 const statuses = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Cancelled"];
-const statusAliases = {
-  Pending: ["Order Placed", "Pending"],
-  Shipped: ["Shipped", "Out for Delivery"],
-};
-
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [status, setStatus] = useState("All Orders");
   const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [downloading, setDownloading] = useState({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const ordersRequest = useRef(0);
+
+  useEffect(() => {
+    const normalizedSearch = search.trim();
+    const timeoutId = setTimeout(() => {
+      if (normalizedSearch !== submittedSearch) {
+        setPage(1);
+        setSubmittedSearch(normalizedSearch);
+      }
+    }, 450);
+    return () => clearTimeout(timeoutId);
+  }, [search, submittedSearch]);
 
   const downloadInvoice = async (order) => {
     const id = order._id || order.orderNumber;
@@ -75,35 +84,41 @@ export default function MyOrders() {
   };
 
   const loadOrders = useCallback(async () => {
+    const requestId = ++ordersRequest.current;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await orderApi.mine({ page, limit: pageSize, search, status, fromDate, toDate });
+      const { data } = await orderApi.mine({
+        page,
+        limit: pageSize,
+        search: submittedSearch,
+        status: status === "All Orders" ? undefined : status,
+        from: fromDate || undefined,
+        to: toDate || undefined,
+      });
+      if (requestId !== ordersRequest.current) return;
       setOrders(Array.isArray(data?.items) ? data.items : data);
       setTotal(data?.total || 0);
     } catch (requestError) {
+      if (requestId !== ordersRequest.current) return;
       setError(requestError?.message || "Couldn't load your orders.");
     } finally {
-      setLoading(false);
+      if (requestId === ordersRequest.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
-  }, [search, status, fromDate, toDate, page, pageSize]);
+  }, [submittedSearch, status, fromDate, toDate, page, pageSize]);
 
-  useEffect(() => { loadOrders(); }, [loadOrders]);
+  useEffect(() => {
+    loadOrders();
+    return () => { ordersRequest.current += 1; };
+  }, [loadOrders]);
   useEffect(() => subscribeOrderStatus((updated) => {
     setOrders((current) => current.map((order) => String(order._id) === String(updated?._id) ? updated : order));
   }), []);
 
-  const filteredOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
-      const matchesStatus = status === "All Orders" || (statusAliases[status] || [status]).some((value) => order.status?.toLowerCase() === value.toLowerCase());
-      const matchesSearch = !query || [order.orderNumber, ...(order.items || []).map((item) => item.name)].some((value) => value?.toLowerCase().includes(query));
-      const date = order.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : "";
-      return matchesStatus && matchesSearch && (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
-    });
-  }, [orders, status, search, fromDate, toDate]);
-
-  if (loading) return <div className="rounded-xl border border-gray-100 bg-white p-5 text-sm text-gray-500">Loading orders...</div>;
+  if (loading && !hasLoaded) return <div className="rounded-xl border border-gray-100 bg-white p-5 text-sm text-gray-500">Loading orders...</div>;
   if (error) return <ErrorState message={error} onRetry={loadOrders} />;
 
   return (
@@ -125,7 +140,7 @@ export default function MyOrders() {
         className="flex gap-1 overflow-x-auto rounded-xl border border-gray-100 bg-white p-1 shadow-sm"
       >
         {statuses.map((item) => (
-          <button key={item} onClick={() => setStatus(item)} className={`shrink-0 rounded-lg px-3 py-2 text-[11px] font-medium ${status === item ? "bg-emerald-50 text-primary" : "text-gray-500 hover:bg-gray-50"}`}>
+          <button key={item} onClick={() => { setStatus(item); setPage(1); }} className={`shrink-0 rounded-lg px-3 py-2 text-[11px] font-medium ${status === item ? "bg-emerald-50 text-primary" : "text-gray-500 hover:bg-gray-50"}`}>
             {item}
           </button>
         ))}
@@ -143,8 +158,8 @@ export default function MyOrders() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             aria-label="Search orders"
-            placeholder="Search orders by ID, product, or status"
-            className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-3 text-xs focus:border-primary focus:outline-none"
+            placeholder="Search orders by order/product ID, product, or status"
+            className="h-9 w-full appearance-none rounded-lg border border-gray-200 pl-9 pr-9 text-xs focus:border-primary focus:outline-none"
           />
           {search && (
             <button
@@ -157,8 +172,8 @@ export default function MyOrders() {
             </button>
           )}
         </label>
-        <label className="flex items-center gap-2 text-[10px] text-gray-500">From<input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
-        <label className="flex items-center gap-2 text-[10px] text-gray-500">To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
+        <label className="flex items-center gap-2 text-[10px] text-gray-500">From<input aria-label="From date" type="date" value={fromDate} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
+        <label className="flex items-center gap-2 text-[10px] text-gray-500">To<input aria-label="To date" type="date" value={toDate} onChange={(event) => { setToDate(event.target.value); setPage(1); }} className="h-9 rounded-lg border border-gray-200 px-2 text-xs text-gray-700" /></label>
       </motion.div>
       <motion.section
         variants={sectionReveal}
@@ -179,15 +194,19 @@ export default function MyOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100" variants={staggerContainer} initial="hidden" animate="visible">
-              {filteredOrders.map((order) => {
+              {orders.map((order) => {
                 const items = order.items || [];
-                const itemNames = items.map((item) => item.name).filter(Boolean);
                 return (
                   <motion.tr key={order._id} variants={staggerItem} initial="hidden" animate="visible" className="hover:bg-gray-50/60">
                     <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">#{order.orderNumber}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}</td>
                     <td className="max-w-[220px] px-4 py-3 text-gray-600">
-                      <span className="block truncate">{itemNames.join(", ") || "No item details"}</span>
+                      {items.length ? <div className="space-y-1">
+                        {items.map((item, index) => <div key={item._id || item.product?._id || item.product || index} className="min-w-0">
+                          <span className="block truncate">{item.name || item.product?.name || "Product"}</span>
+                          <ProductIdentifier productId={item.productId || item.product} className="mt-0.5 flex" />
+                        </div>)}
+                      </div> : <span className="block">No item details</span>}
                       <span className="text-[10px] text-gray-400">{items.length} item{items.length === 1 ? "" : "s"}</span>
                       {items.some((item) => item.fulfillmentStatus && item.fulfillmentStatus !== order.status) && (
                         <span className="mt-1 block truncate text-[10px] text-gray-500">
@@ -219,11 +238,12 @@ export default function MyOrders() {
                   </motion.tr>
                 );
               })}
-              {filteredOrders.length === 0 && (
+              {orders.length === 0 && (
                 <tr>
                   <td colSpan="6" className="px-4 py-10 text-center text-xs text-gray-500">
-                    {orders.length ? "No orders match these filters." : "You haven't placed any orders yet."}
-                    {orders.length === 0 && <Link to="/shop" className="font-semibold text-primary">Browse products</Link>}
+                    {submittedSearch || status !== "All Orders" || fromDate || toDate
+                      ? "No orders match these filters."
+                      : <>You haven't placed any orders yet. <Link to="/shop" className="font-semibold text-primary">Browse products</Link></>}
                   </td>
                 </tr>
               )}

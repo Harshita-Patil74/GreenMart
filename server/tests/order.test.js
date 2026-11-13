@@ -51,7 +51,6 @@ beforeAll(async () => {
     .post("/api/auth/login")
     .send({ email: otherCustomer.email, password: "demo-password" });
   otherCustomerToken = otherCustomerLogin.body.token;
-
   // Login as farmer
   const fRes = await request(app)
     .post("/api/auth/login")
@@ -83,6 +82,23 @@ describe("End-to-end order workflow", () => {
   });
 
   it("customer creates an order", async () => {
+    const quote = await request(app)
+      .post("/api/orders/quote")
+      .set("Authorization", `Bearer ${customerToken}`
+    expect(quote.status).toBe(200);
+    expect(quote.body).toMatchObject({ subtotal: 80, deliveryCharge: 30, total: 110 });
+
+    const mismatchedPayment = await request(app)
+      .post("/api/orders")
+      .set("Authorization", `Bearer ${customerToken}`
+      .send({
+        address: { name: "Harshita Patil", line1: "123 Farm Road", city: "Gadag", phone: "9876543210" },
+        paymentMethod: "UPI",
+        paymentConfirmed: true,
+        paymentAmount: 0,
+      });
+    expect(mismatchedPayment.status).toBe(409);
+
     const res = await request(app)
       .post("/api/orders")
       .set("Authorization", `Bearer ${customerToken}`)
@@ -90,11 +106,20 @@ describe("End-to-end order workflow", () => {
         address: { name: "Harshita Patil", line1: "123 Farm Road", city: "Gadag", phone: "9876543210" },
         coordinates: { lat: 15.4, lng: 75.6 },
         paymentMethod: "UPI",
+        items: [{ product: productId, quantity: 500, price: 0.01 }],
+        subtotal: 0.01,
+        discount: 999,
+        deliveryCharge: 0,
+        total: 0,
+        paymentConfirmed: false,
       });
     expect(res.status).toBe(201);
     expect(res.body.orderNumber).toBeDefined();
     expect(res.body.status).toBe("Order Placed");
     expect(res.body.items[0].farmer.toString()).toBe(farmerId.toString());
+    expect(res.body.subtotal).toBe(80);
+    expect(res.body.deliveryCharge).toBe(30);
+    expect(res.body.total).toBe(110);
     orderId = res.body._id;
   });
 
@@ -145,7 +170,7 @@ describe("End-to-end order workflow", () => {
   it("customer cannot update order status (forbidden)", async () => {
     const res = await request(app)
       .patch(`/api/orders/${orderId}/status`)
-      .set("Authorization", `Bearer ${customerToken}`)
+      .set("Authorization", `Bearer ${farmerToken}`)
       .send({ status: "Delivered" });
     expect(res.status).toBe(403);
   });

@@ -19,11 +19,11 @@ const order = {
   items: [{ _id: "item-1", farmer: "farmer-1", name: "Tomatoes", price: 40, quantity: 1, fulfillmentStatus: "Order Placed" }],
 };
 
-function renderOrders() {
+function renderOrders(initialEntries = ["/farmer/orders"]) {
   const store = configureStore({ reducer: { auth: () => ({ user: { id: "farmer-1" } }) } });
   return render(
     <Provider store={store}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <FarmerOrders />
       </MemoryRouter>
     </Provider>
@@ -67,5 +67,13 @@ describe("Farmer order status management", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm failure" }));
 
     await waitFor(() => expect(update).toHaveBeenCalledWith("order-1", { status: "Delivery Failed", reason: "Customer unavailable" }));
+  });
+
+  it("loads an order search passed from a notification link", async () => {
+    const list = vi.spyOn(orderApi, "farmer").mockResolvedValue({ data: [order] });
+    renderOrders(["/farmer/orders?search=GM-1001"]);
+
+    await screen.findByText("GM-1001");
+    await waitFor(() => expect(list).toHaveBeenCalledWith(expect.objectContaining({ search: "GM-1001" })));
   });
 });

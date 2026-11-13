@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, MoreVertical, Plus, Trash2, RotateCcw } from "lucide-react";
 import BackButton from "../../components/common/BackButton.jsx";
 import SearchBar from "../../components/common/SearchBar.jsx";
+import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
 import toast from "react-hot-toast";
 import productApi from "../../api/productApi";
 import ImageWithFallback from "../../components/common/ImageWithFallback.jsx";
@@ -20,11 +21,13 @@ function availability(product) {
 
 export default function MyProducts() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const routedSearch = searchParams.get("search") || "";
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(routedSearch);
   const [category, setCategory] = useState("All Categories");
   const [status, setStatus] = useState("All Status");
   const [page, setPage] = useState(1);
@@ -33,25 +36,42 @@ export default function MyProducts() {
   const [serverPages, setServerPages] = useState(1);
   const [openActions, setOpenActions] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState({});
+  const productsRequest = useRef(0);
+
+  useEffect(() => {
+    setSearch(routedSearch);
+    setPage(1);
+  }, [routedSearch]);
 
   const loadProducts = async () => {
+    const requestId = ++productsRequest.current;
     setLoading(true);
     setError("");
     try {
       const response = await productApi.mine({ search, category, status, page, limit: pageSize, showDeleted: showDeleted ? "true" : undefined });
       const data = response.data;
-      setProducts(Array.isArray(data?.items) ? data.items : []);
-      setTotal(Number(data?.total) || 0);
+      if (requestId !== productsRequest.current) return;
+      const results = Array.isArray(data?.items) ? data.items : [];
+      const normalizedResults = showDeleted
+        ? results.filter((product) => product && product.isDeleted === true)
+        : results.filter((product) => !(product && product.isDeleted === true));
+      setProducts(normalizedResults);
+      setTotal(Number(data?.total) || normalizedResults.length);
       setServerPages(Number(data?.pages) || 1);
       if (page > Number(data?.pages || 1)) setPage(Number(data?.pages || 1));
     } catch (requestError) {
+      if (requestId !== productsRequest.current) return;
       setError(requestError?.response?.data?.message || "We couldn't load your products.");
     } finally {
-      setLoading(false);
+      if (requestId === productsRequest.current) setLoading(false);
     }
   };
 
-  useEffect(() => { loadProducts(); }, [search, category, status, page, pageSize, showDeleted]);
+  useEffect(() => {
+    loadProducts();
+  }, [search, category, status, page, pageSize, showDeleted]);
+
+  useEffect(() => () => { productsRequest.current += 1; }, []);
 
   const categories = useMemo(
     () => [...new Set(products.map((product) => product.category).filter(Boolean))].sort(),
@@ -93,7 +113,14 @@ export default function MyProducts() {
     setUpdatingStatus((current) => ({ ...current, [product._id]: true }));
     try {
       await productApi.restore(product._id);
-      setProducts((current) => current.map((item) => item._id === product._id ? { ...item, isDeleted: false } : item));
+      if (showDeleted) {
+        setProducts((current) => current.filter((item) => item._id !== product._id));
+        setTotal((current) => Math.max(0, current - 1));
+        setServerPages((current) => Math.max(1, Math.ceil(Math.max(0, total - 1) / pageSize)));
+        if (page > 1 && products.length === 1) setPage((current) => current - 1);
+      } else {
+        setProducts((current) => current.map((item) => item._id === product._id ? { ...item, isDeleted: false } : item));
+      }
       setOpenActions("");
       toast.success("Product restored successfully.");
     } catch (requestError) {
@@ -108,10 +135,16 @@ export default function MyProducts() {
     setUpdatingStatus((current) => ({ ...Object.fromEntries(products.filter(p => p.isDeleted).map(p => [p._id, true])) }));
     try {
       const { data } = await productApi.restoreAll();
-      setProducts((current) => current.map((item) => ({ ...item, isDeleted: false })));
+      if (showDeleted) {
+        setProducts([]);
+        setTotal(0);
+        setServerPages(1);
+        setPage(1);
+      } else {
+        setProducts((current) => current.map((item) => ({ ...item, isDeleted: false })));
+      }
       setOpenActions("");
       toast.success(data.message || "All deleted products restored.");
-      await loadProducts();
     } catch (requestError) {
       toast.error(requestError?.response?.data?.message || "Couldn't restore all products.");
     } finally {
@@ -137,7 +170,7 @@ export default function MyProducts() {
 
       <div className="overflow-hidden rounded-xl border border-[#E7EEEC] bg-white shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F0] p-4">
-          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, farmer, or status" ariaLabel="Search products" />
+          <SearchBar value={search} onChange={(val) => { setSearch(val); setPage(1); }} placeholder="Search products by name, ID, category, or description" ariaLabel="Search products" />
           <select aria-label="Filter by category" value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }} className="h-9 min-w-[150px] rounded-md border border-[#DDE6E2] bg-white px-3 text-xs text-[#41514D]">
             <option>All Categories</option>
             {categories.map((item) => <option key={item}>{item}</option>)}
@@ -164,11 +197,12 @@ export default function MyProducts() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-xs">
+              <table className="w-full min-w-[1020px] text-left text-xs">
                 <thead className="border-b border-[#E9EFED] bg-[#F7F9F8] text-[10px] font-semibold uppercase tracking-wide text-[#71817D]">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Image</th>
                     <th className="px-4 py-3 font-semibold">Product Name</th>
+                    <th className="px-4 py-3 font-semibold">Product ID</th>
                     <th className="px-4 py-3 font-semibold">Category</th>
                     <th className="px-4 py-3 font-semibold">Price</th>
                     <th className="px-4 py-3 font-semibold">Stock</th>
@@ -182,7 +216,10 @@ export default function MyProducts() {
                       <td className="px-4 py-3">
                         <ImageWithFallback src={getImageUrl(product.images?.[0])} alt={product.name} className="h-11 w-11 rounded-md border border-[#E9EFEC] object-cover" />
                       </td>
-                      <td className="px-4 py-3 text-xs font-medium text-[#263834]">{product.name}</td>
+                      <td className="px-4 py-3 text-xs font-medium text-[#263834]">
+                        {product.name}
+                      </td>
+                      <td className="px-4 py-3"><ProductIdentifier productId={product._id} compact /></td>
                       <td className="px-4 py-3 text-xs text-[#74827E]">{product.category || "—"}</td>
                       <td className="px-4 py-3 text-xs font-medium text-[#32443F]">{formatCurrency(product.price)} <span className="text-[10px] font-normal text-[#899691]">/ {product.unit || "unit"}</span></td>
                       <td className="px-4 py-3 text-xs text-[#52615D]">{product.stock ?? 0} {product.unit || ""}</td>
@@ -208,7 +245,7 @@ export default function MyProducts() {
                       </td>
                     </tr>
                   ))}
-                  {!visibleProducts.length && <tr><td colSpan="7" className="px-4 py-12 text-center text-xs text-[#82908B]">{showDeleted ? "No deleted products found." : "No products match these filters."}</td></tr>}
+                  {!visibleProducts.length && <tr><td colSpan="8" className="px-4 py-12 text-center text-xs text-[#82908B]">{showDeleted ? "No deleted products found." : "No products match these filters."}</td></tr>}
                 </tbody>
               </table>
             </div>

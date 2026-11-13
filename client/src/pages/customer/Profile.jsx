@@ -109,7 +109,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 pb-12">
+    <div className="mx-auto max-w-6xl space-y-4 pb-12">
       <BackButton fallback="/customer/dashboard" />
       <motion.div
         variants={sectionReveal}
@@ -134,8 +134,10 @@ export default function Profile() {
           <h2 className="truncate text-sm font-semibold text-gray-900">{form.name || user?.name || "Customer"}</h2>
           <p className="text-xs capitalize text-gray-500">{user?.role || "Customer"} account</p>
         </div>
-        {user?.status && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold capitalize text-emerald-700">{user.status}</span>}
-        {user?.createdAt && <span className="text-[10px] text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>}
+        <div className="ml-auto flex flex-col items-end gap-1">
+          {user?.status && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold capitalize text-emerald-700">{user.status}</span>}
+          {user?.createdAt && <span className="mt-1 text-[10px] text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>}
+        </div>
       </motion.section>
 
       <motion.nav

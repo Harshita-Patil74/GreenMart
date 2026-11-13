@@ -4,6 +4,7 @@ export default function Pagination({
   page,
   pageSize,
   totalRecords,
+  recordLabel = "item",
   onChange,
 }) {
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
@@ -13,6 +14,7 @@ export default function Pagination({
   const hasNext = currentPage < totalPages;
   const startRecord = totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endRecord = Math.min(currentPage * pageSize, totalRecords);
+  const recordsLabel = totalRecords === 1 ? recordLabel : `${recordLabel}s`;
 
   const pageNumbers = [];
   const maxVisible = 5;
@@ -74,13 +76,13 @@ export default function Pagination({
       </div>
 
       <div className="flex items-center gap-3 text-xs text-gray-600">
-        <span>Showing {startRecord}–{endRecord} of {totalRecords} items</span>
-<select
-  defaultValue={pageSize}
-  onChange={(e) => onChange(1, parseInt(e.target.value, 10))}
-  className="h-9 w-24 rounded-lg border border-gray-200 px-2 text-xs bg-[#FAF8F1] focus:outline-none focus:border-[#245C3A]"
-  aria-label="Page size"
->
+        <span>Showing {startRecord}–{endRecord} of {totalRecords} {recordsLabel}</span>
+        <select
+          value={pageSize}
+          onChange={(e) => onChange(1, parseInt(e.target.value, 10))}
+          className="h-9 w-24 rounded-lg border border-gray-200 px-2 text-xs bg-[#FAF8F1] focus:outline-none focus:border-[#245C3A]"
+          aria-label="Page size"
+        >
           {[10, 20, 50].map((size) => (
             <option key={size} value={size}>
               {size} per page
