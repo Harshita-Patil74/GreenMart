@@ -224,6 +224,8 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
       farmer: offer.farmer,
       effectiveStatus,
       originalPrice,
+      discountAmount: publicOffer?.discount / quantity ?? 0,
+      discountPercent: publicOffer ? roundPercent((publicOffer.discount / (originalPrice * quantity)) * 100) : 0,
       publicOfferPrice: publicOffer?.publicFinalUnitPrice ?? null,
       publicDiscountAmount: publicOffer?.discount / quantity ?? 0,
       publicDiscountPercent: publicOffer ? roundPercent((publicOffer.discount / (originalPrice * quantity)) * 100) : 0,

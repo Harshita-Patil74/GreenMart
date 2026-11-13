@@ -1,7 +1,9 @@
 import axios from "axios";
 import { tokenStorage } from "../utils/tokenStorage";
 import { showError, closeAlert } from "../utils/alertUtils";
-const instance = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api", withCredentials: true });
+const rawBaseURL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const baseURL = rawBaseURL.endsWith("/api") ? rawBaseURL : rawBaseURL.replace(/\/+$/, "") + "/api";
+const instance = axios.create({ baseURL, withCredentials: true });
 
 let refreshing = false;
 let queue = [];
@@ -40,7 +42,7 @@ instance.interceptors.response.use(
       original._retry = true;
       refreshing = true;
       try {
-        const { data } = await axios.post((import.meta.env.VITE_API_URL || "http://localhost:5000/api") + "/auth/refresh", {}, { withCredentials: true });
+        const { data } = await axios.post(baseURL + "/auth/refresh", {}, { withCredentials: true });
         if (data?.token) { tokenStorage.set(data.token); processQueue(null, data.token); original.headers.Authorization = `Bearer ${data.token}`; return instance(original); }
         throw new Error("refresh failed");
       } catch (e) {

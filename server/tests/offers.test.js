@@ -79,6 +79,7 @@ const offerDraft = (overrides = {}) => ({
   minimumQuantity: 1,
   minimumAmount: 200,
   maximumDiscount: 20,
+  audience: ["public"],
   ...overrides,
 });
 
@@ -419,7 +420,7 @@ describe("Farmer offers and server-priced order snapshots", () => {
       status: "Active",
       approvedAt: new Date(),
       approvedBy: admin._id,
-      isSubscriberExclusive: true,
+      audience: ["premium"],
       exclusiveDiscountType: "Fixed Amount",
       exclusiveDiscountValue: 5,
     }]);

@@ -350,7 +350,9 @@ function lineDiscount(item) {
 
 function linePremiumDiscount(item) {
   const isPremiumExclusive = item?.offer?.audience?.includes("premium") === true ||
-    item?.offerSnapshot?.audience?.includes("premium") === true;
+    item?.offer?.isSubscriberExclusive === true ||
+    item?.offerSnapshot?.audience?.includes("premium") === true ||
+    item?.offerSnapshot?.isSubscriberExclusive === true;
   if (isPremiumExclusive) return lineDiscount(item);
   const premium = Number(item?.offer?.premiumDiscount ?? item?.offerSnapshot?.premiumDiscount ?? 0);
   if (!Number.isFinite(premium) || premium <= 0) return 0;

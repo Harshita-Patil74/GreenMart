@@ -9,7 +9,14 @@ describe("getClientOrigins", () => {
     ]);
   });
 
-  it("keeps production origins restricted to the configured frontend", () => {
+  it("allows multiple comma-separated origins", () => {
+    expect(getClientOrigins("https://green-mart-three.vercel.app,http://localhost:5173", "production")).toEqual([
+      "https://green-mart-three.vercel.app",
+      "http://localhost:5173",
+    ]);
+  });
+
+  it("allows production origins restricted to the configured frontend", () => {
     expect(getClientOrigins("https://greenmart.example", "production")).toEqual([
       "https://greenmart.example",
     ]);
