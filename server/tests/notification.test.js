@@ -430,6 +430,7 @@ describe("Notification system", () => {
         minimumAmount: 0,
         status: "Pending",
         isActive: true,
+        audience: ["public"],
       });
 
       await request(app)

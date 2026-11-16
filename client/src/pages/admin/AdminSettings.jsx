@@ -13,7 +13,7 @@ const ICON_OPTIONS = ICON_ALLOWLIST.map(key => ({ key, label: key.replace(/([A-Z
 
 export default function AdminSettings(){
   const [tab,setTab]=useState("delivery");
-  const [charges,setCharges]=useState({deliveryCharge:"30",expressDeliveryCharge:"4",remoteAreaDeliveryCharge:"7"});
+  const [charges,setCharges]=useState({deliveryCharge:"30",expressDeliveryCharge:"60",remoteAreaDeliveryCharge:"120",maxRemoteDistanceKm:"50",expressMaxKm:"10"});
   const [categories,setCategories]=useState([]);
   const [newCategory,setNewCategory]=useState("");
   const [selectedIcon,setSelectedIcon]=useState(DEFAULT_ICON_KEY);
@@ -28,7 +28,7 @@ export default function AdminSettings(){
     setError(null);
     try{
       const [settings,cats]=await Promise.all([settingsApi.get(),categoryApi.list()]);
-      setCharges({deliveryCharge:String(settings.data?.deliveryCharge??30),expressDeliveryCharge:String(settings.data?.expressDeliveryCharge??4),remoteAreaDeliveryCharge:String(settings.data?.remoteAreaDeliveryCharge??7)});
+      setCharges({deliveryCharge:String(settings.data?.deliveryCharge??30),expressDeliveryCharge:String(settings.data?.expressDeliveryCharge??60),remoteAreaDeliveryCharge:String(settings.data?.remoteAreaDeliveryCharge??120),maxRemoteDistanceKm:String(settings.data?.maxRemoteDistanceKm??50),expressMaxKm:String(settings.data?.expressMaxKm??10)});
       setCategories(Array.isArray(cats.data)?cats.data:[]);
     }catch(e){
       setError(e?.message||"Couldn't load platform settings.");
@@ -39,11 +39,12 @@ export default function AdminSettings(){
   useEffect(()=>{load();},[]);
 
   const saveCharges=async()=>{
+    const fields=[["deliveryCharge","Standard delivery"],["expressDeliveryCharge","Express delivery"],["remoteAreaDeliveryCharge","Remote area delivery"],["maxRemoteDistanceKm","Max remote distance (km)"],["expressMaxKm","Express max distance (km)"]];
     const values={};
-    for(const [field,label] of [["deliveryCharge","Standard delivery"],["expressDeliveryCharge","Express delivery"],["remoteAreaDeliveryCharge","Remote area delivery"]]){
+    for(const [field,label] of fields){
       const amount=Number(charges[field]);
       if(charges[field].trim()===""||!Number.isFinite(amount)||amount<0){
-        setError(`${label} charge must be a valid non-negative amount.`);
+        setError(`${label} must be a valid non-negative amount.`);
         return;
       }
       values[field]=amount;
@@ -52,7 +53,7 @@ export default function AdminSettings(){
     setError(null);
     try{
       const {data}=await adminApi.updateSettings(values);
-      setCharges({deliveryCharge:String(data.deliveryCharge),expressDeliveryCharge:String(data.expressDeliveryCharge),remoteAreaDeliveryCharge:String(data.remoteAreaDeliveryCharge)});
+      setCharges({deliveryCharge:String(data.deliveryCharge),expressDeliveryCharge:String(data.expressDeliveryCharge),remoteAreaDeliveryCharge:String(data.remoteAreaDeliveryCharge),maxRemoteDistanceKm:String(data.maxRemoteDistanceKm),expressMaxKm:String(data.expressMaxKm)});
       toast.success("Delivery charges saved.");
     }catch(e){
       setError(e?.message||"Couldn't save delivery charges.");
@@ -180,6 +181,16 @@ export default function AdminSettings(){
               <div className="mt-1 flex h-9 items-center rounded-lg border border-gray-200 px-3">
                 <span className="mr-2 text-sm text-gray-500">₹</span>
                 <input aria-label="Remote area delivery charge" type="number" min="0" step="0.01" value={charges.remoteAreaDeliveryCharge} onChange={e=>setCharges({...charges,remoteAreaDeliveryCharge:e.target.value})} className="w-full text-sm outline-none"/>
+              </div>
+            </label>
+            <label className="block text-xs text-gray-600">Max Remote Delivery Distance (km)<span className="sr-only"> max distance</span>
+              <div className="mt-1 flex h-9 items-center rounded-lg border border-gray-200 px-3">
+                <input aria-label="Max remote distance" type="number" min="0" step="1" value={charges.maxRemoteDistanceKm} onChange={e=>setCharges({...charges,maxRemoteDistanceKm:e.target.value})} className="w-full text-sm outline-none"/>
+              </div>
+            </label>
+            <label className="block text-xs text-gray-600">Express Delivery Max Distance (km)<span className="sr-only"> max distance</span>
+              <div className="mt-1 flex h-9 items-center rounded-lg border border-gray-200 px-3">
+                <input aria-label="Express max distance" type="number" min="0" step="1" value={charges.expressMaxKm} onChange={e=>setCharges({...charges,expressMaxKm:e.target.value})} className="w-full text-sm outline-none"/>
               </div>
             </label>
           </div>

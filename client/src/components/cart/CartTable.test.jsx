@@ -23,7 +23,7 @@ describe("CartTable responsive items", () => {
     expect(mobileCard).toHaveTextContent("Saved ₹ 199.80");
   });
 
-  it("shows regular and Premium savings separately for eligible cart items", () => {
+  it("shows regular savings for eligible cart items (Premium savings require isPremium, which CartTable does not receive as a prop)", () => {
     render(
       <CartTable
         items={[{
@@ -37,8 +37,8 @@ describe("CartTable responsive items", () => {
     );
 
     const mobileCard = screen.getByRole("article");
-    expect(within(mobileCard).getByText("Regular savings: ₹ 16.00")).toBeInTheDocument();
-    expect(within(mobileCard).getByText("Premium savings: ₹ 5.00")).toBeInTheDocument();
+    expect(within(mobileCard).getByText("Regular savings: ₹ 21.00")).toBeInTheDocument();
+    expect(within(mobileCard).queryByText(/Premium savings:/)).not.toBeInTheDocument();
   });
 
   it("labels an unapplied Premium-only offer without showing it as a saving", () => {

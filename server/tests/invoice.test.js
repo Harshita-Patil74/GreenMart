@@ -8,6 +8,7 @@ const { EventEmitter } = require("events");
 const { Readable } = require("stream");
 const { app } = require("./setup");
 const { connectDB, disconnectDB } = require("./db");
+const Address = require("../src/models/Address");
 const env = require("../src/config/env");
 const jwt = require("jsonwebtoken");
 const cloudinary = require("../src/config/cloudinary");
@@ -16,6 +17,7 @@ const User = require("../src/models/User");
 const Product = require("../src/models/Product");
 const Cart = require("../src/models/Cart");
 const Order = require("../src/models/Order");
+const FarmerProfile = require("../src/models/FarmerProfile");
 const { signToken } = require("../src/utils/tokens");
 
 let customer;
@@ -31,6 +33,16 @@ let farmerToken;
 let adminToken;
 let order;
 let invoiceTestSequence = 0;
+let originalFetch;
+let customerAddressId;
+let otherCustomerAddressId;
+let parallelCustomerAddressId;
+
+const CUSTOMER_COORDS = { lat: 15.4, lng: 75.6 };
+const OTHER_CUSTOMER_COORDS = { lat: 15.5, lng: 75.7 };
+const PARALLEL_CUSTOMER_COORDS = { lat: 15.6, lng: 75.8 };
+const FARMER_COORDS = { lat: 15.42, lng: 75.62 };
+const SECOND_FARMER_COORDS = { lat: 15.44, lng: 75.64 };
 
 beforeAll(async () => {
   await connectDB();
@@ -58,6 +70,41 @@ beforeAll(async () => {
     items: [{ product: firstProduct._id, quantity: 2 }, { product: secondProduct._id, quantity: 1 }],
   });
 
+  await FarmerProfile.create([
+    { user: farmer._id, farmName: "Invoice Farm", location: FARMER_COORDS },
+    { user: secondFarmer._id, farmName: "Second Invoice Farm", location: SECOND_FARMER_COORDS },
+  ]);
+
+  const [customerAddress, otherCustomerAddress, parallelCustomerAddress] = await Promise.all([
+    Address.create({ user: customer._id, name: "Invoice Customer", line1: "12 Market Road", city: "Gadag", state: "Karnataka", postalCode: "582101", phone: "9998887777", coordinates: CUSTOMER_COORDS }),
+    Address.create({ user: otherCustomer._id, name: "Other Customer", line1: "2 Farm Lane", city: "Gadag", phone: "1231231234", coordinates: OTHER_CUSTOMER_COORDS }),
+    Address.create({ user: parallelCustomer._id, name: "Parallel Customer", line1: "3 Farm Lane", city: "Gadag", phone: "4564564567", coordinates: PARALLEL_CUSTOMER_COORDS }),
+  ]);
+  customerAddressId = customerAddress._id;
+  otherCustomerAddressId = otherCustomerAddress._id;
+  parallelCustomerAddressId = parallelCustomerAddress._id;
+
+  // Deterministic OSRM mock (~2.5 km, within the 5 km standard tier).
+  // Non-OSRM URLs pass through to the real fetch (with init options).
+  originalFetch = global.fetch;
+  global.fetch = jest.fn(async (url, init) => {
+    const u = String(url);
+    if (u.includes("/route/v1/driving/")) {
+      const m = u.match(/route\/v1\/driving\/([\d.-]+,[\d.-]+);([\d.-]+,[\d.-]+)/);
+      if (!m) {
+        return { ok: false, status: 400, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ routes: [{ distance: 2500 }] }) };
+    }
+    return originalFetch(url, init);
+  });
+
+  const quoteRes = await request(app)
+    .post("/api/orders/quote")
+    .set("Authorization", `Bearer ${customerToken}`)
+    .send({ addressId: customerAddressId });
+  const quoteVersion = quoteRes.body.quoteVersion;
+
   const response = await request(app)
     .post("/api/orders")
     .set("Authorization", `Bearer ${customerToken}`)
@@ -70,7 +117,10 @@ beforeAll(async () => {
         postalCode: "582101",
         phone: "9998887777",
       },
+      addressId: customerAddressId,
+      coordinates: CUSTOMER_COORDS,
       paymentMethod: "Cash on Delivery",
+      quoteVersion,
     });
   expect(response.status).toBe(201);
   order = await Order.findById(response.body._id);
@@ -82,6 +132,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  global.fetch = originalFetch;
   await disconnectDB();
 });
 
@@ -98,9 +149,9 @@ describe("order invoices", () => {
     ]);
     const responses = await Promise.all([
       request(app).post("/api/orders").set("Authorization", `Bearer ${otherCustomerToken}`)
-        .send({ address: { name: "Other Customer", line1: "2 Farm Lane", city: "Gadag", phone: "1231231234" }, paymentMethod: "Cash on Delivery" }),
+        .send({ address: { name: "Other Customer", line1: "2 Farm Lane", city: "Gadag", phone: "1231231234" }, addressId: otherCustomerAddressId, coordinates: OTHER_CUSTOMER_COORDS, paymentMethod: "Cash on Delivery", quoteVersion: (await request(app).post("/api/orders/quote").set("Authorization", `Bearer ${otherCustomerToken}`).send({ addressId: otherCustomerAddressId })).body.quoteVersion }),
       request(app).post("/api/orders").set("Authorization", `Bearer ${parallelCustomerToken}`)
-        .send({ address: { name: "Parallel Customer", line1: "3 Farm Lane", city: "Gadag", phone: "4564564567" }, paymentMethod: "Cash on Delivery" }),
+        .send({ address: { name: "Parallel Customer", line1: "3 Farm Lane", city: "Gadag", phone: "4564564567" }, addressId: parallelCustomerAddressId, coordinates: PARALLEL_CUSTOMER_COORDS, paymentMethod: "Cash on Delivery", quoteVersion: (await request(app).post("/api/orders/quote").set("Authorization", `Bearer ${parallelCustomerToken}`).send({ addressId: parallelCustomerAddressId })).body.quoteVersion }),
     ]);
 
     expect(responses.map((response) => response.status)).toEqual([201, 201]);

@@ -245,4 +245,78 @@ describe("computeCartTotals", () => {
     expect(overDiscounted.total).toBe(30);
     expect(money(10.005)).toBe(10.01);
   });
+
+  it("classifies dual-audience public+premium offer as regular savings (not premium) for non-Premium carts", () => {
+    const item = {
+      product: { price: 100 },
+      quantity: 1,
+      offer: {
+        audience: ["public", "premium"],
+        appliedDiscount: 20,
+        premiumDiscount: 0,
+        lineTotal: 80,
+      },
+    };
+    expect(computeCartTotals([item], 30)).toMatchObject({
+      subtotal: 100,
+      regularDiscount: 20,
+      premiumDiscount: 0,
+      discount: 20,
+      total: 110,
+    });
+  });
+
+  it("classifies exclusively-premium audience offer as subscriber savings", () => {
+    const item = {
+      product: { price: 100 },
+      quantity: 1,
+      offer: {
+        audience: ["premium"],
+        appliedDiscount: 25,
+        premiumDiscount: 25,
+        lineTotal: 75,
+      },
+    };
+    expect(computeCartTotals([item], 30)).toMatchObject({
+      subtotal: 100,
+      regularDiscount: 0,
+      premiumDiscount: 25,
+      discount: 25,
+      total: 75 + 30,
+    });
+  });
+
+  it("does not apply Premium exclusive discount when isPremium is false", () => {
+    const farmerId = "farmer-1";
+    const product = { _id: "product-1", farmer: farmerId, price: 100 };
+    const offer = {
+      _id: "offer-1",
+      product: product._id,
+      farmer: farmerId,
+      audience: ["public", "premium"],
+      discountType: "Percentage",
+      discountValue: 20,
+      minimumQuantity: 1,
+      minimumAmount: 0,
+      exclusiveDiscountType: "Fixed Amount",
+      exclusiveDiscountValue: 10,
+    };
+
+    const nonPremium = calculateOffer(product, 1, [offer], 100, false);
+    expect(nonPremium).toMatchObject({
+      discount: 20,
+      premiumDiscount: 0,
+      finalUnitPrice: 80,
+      finalLineTotal: 80,
+    });
+
+    const premium = calculateOffer(product, 1, [offer], 100, true);
+    expect(premium).toMatchObject({
+      publicDiscount: 20,
+      premiumDiscount: 10,
+      discount: 30,
+      finalUnitPrice: 70,
+      finalLineTotal: 70,
+    });
+  });
 });

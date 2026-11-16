@@ -46,5 +46,31 @@ const OrderSchema = new mongoose.Schema({
   invoiceStatus: { type: String },
   estimatedDelivery: Date,
   currentLocation: { lat: Number, lng: Number, updatedAt: Date },
+  deliverySnapshot: {
+    quoteVersion: String,
+    option: String,
+    distanceKm: Number,
+    dispatchLocations: [{
+      farmerId: mongoose.Schema.Types.ObjectId,
+      farmerName: String,
+      dispatchAddress: String,
+      location: { lat: Number, lng: Number },
+      distanceKm: Number,
+      tier: String,
+      serviceable: Boolean,
+      productIds: [mongoose.Schema.Types.ObjectId],
+    }],
+    destinationAddress: { name: String, line1: String, city: String, state: String, postalCode: String, phone: String },
+    destinationCoordinates: { lat: Number, lng: Number },
+    charge: Number,
+    settingsSnapshot: {
+      deliveryCharge: Number,
+      expressDeliveryCharge: Number,
+      remoteAreaDeliveryCharge: Number,
+      maxRemoteDistanceKm: Number,
+      expressMaxKm: Number,
+      standardMaxKm: Number,
+    },
+  },
   isDemo: { type: Boolean, default: false } }, { timestamps: true });
 module.exports = mongoose.model("Order", OrderSchema);

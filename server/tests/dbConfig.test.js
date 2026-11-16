@@ -1,18 +1,47 @@
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
+const path = require("path");
+const fs = require("fs");
 const User = require("../src/models/User");
 const Product = require("../src/models/Product");
 const { connectDB } = require("../src/config/db");
 
+const TEST_DB_ROOT = path.resolve(__dirname, "..", ".mongodb-test-data");
+
 let mongod;
+let dbPath;
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
+  fs.mkdirSync(TEST_DB_ROOT, { recursive: true });
+  dbPath = fs.mkdtempSync(path.join(TEST_DB_ROOT, "dbconfig-"));
+  mongod = await MongoMemoryServer.create({
+    instance: {
+      dbPath,
+      storageEngine: "wiredTiger",
+    },
+  });
 });
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  if (mongod) await mongod.stop();
+  let firstError;
+  try {
+    await mongoose.disconnect();
+    if (mongod) await mongod.stop();
+  } catch (error) {
+    firstError = error;
+  } finally {
+    // Clean up only the directory created by this MongoMemoryServer instance.
+    if (dbPath && fs.existsSync(dbPath)) {
+      try {
+        fs.rmSync(dbPath, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup; never mask stop/disconnect errors.
+      }
+    }
+    mongod = undefined;
+    dbPath = undefined;
+  }
+  if (firstError) throw firstError;
 });
 
 describe("MongoDB startup configuration", () => {

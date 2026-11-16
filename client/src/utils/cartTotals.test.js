@@ -65,7 +65,7 @@ describe("calculateCartTotals", () => {
       quantity: 1,
       offer: { appliedDiscount: 21, premiumDiscount: 5, lineTotal: 59 },
     };
-    expect(calculateCartTotals([item], 30)).toMatchObject({
+    expect(calculateCartTotals([item], 30, true)).toMatchObject({
       subtotal: 80,
       regularDiscount: 16,
       premiumDiscount: 5,
@@ -85,7 +85,7 @@ describe("calculateCartTotals", () => {
         lineTotal: 21.25,
       },
     };
-    expect(calculateCartTotals([item], 30)).toMatchObject({
+    expect(calculateCartTotals([item], 30, true)).toMatchObject({
       regularDiscount: 0,
       premiumDiscount: 28.75,
       discount: 28.75,
@@ -99,23 +99,23 @@ describe("calculateCartTotals", () => {
   });
 
   it("handles an empty cart without applying delivery", () => {
-    expect(calculateCartTotals([], 30)).toEqual({
+    expect(calculateCartTotals([], null)).toEqual({
       subtotal: 0,
       regularDiscount: 0,
       premiumDiscount: 0,
       discount: 0,
-      deliveryCharge: 0,
+      deliveryCharge: null,
       total: 0,
-      deliveryReady: true,
+      deliveryReady: false,
     });
   });
 
   it("prevents negative totals and caps discount at the line gross", () => {
     const totals = calculateCartTotals([
       tomatoes(1, { appliedDiscount: 999 }),
-    ], 30);
+    ], null);
     expect(totals.discount).toBe(40);
-    expect(totals.total).toBe(30);
+    expect(totals.total).toBe(0);
     expect(totals.total).toBeGreaterThanOrEqual(0);
   });
 
@@ -129,17 +129,57 @@ describe("calculateCartTotals", () => {
   });
 
   it("ignores invalid quantities and waits for a valid delivery amount", () => {
-    expect(calculateCartTotals([tomatoes(0), tomatoes(-1), tomatoes(1.5)], 30)).toMatchObject({
+    expect(calculateCartTotals([tomatoes(0), tomatoes(-1), tomatoes(1.5)], null)).toMatchObject({
       subtotal: 0,
-      deliveryCharge: 0,
+      deliveryCharge: null,
       total: 0,
-      deliveryReady: true,
+      deliveryReady: false,
     });
-    expect(calculateCartTotals([tomatoes(1)], -1)).toMatchObject({
+    expect(calculateCartTotals([tomatoes(1)], null)).toMatchObject({
       subtotal: 40,
-      deliveryCharge: 0,
+      deliveryCharge: null,
       total: 40,
       deliveryReady: false,
+    });
+  });
+
+  it("classifies dual-audience public+premium offer as regular savings (not premium)", () => {
+    const item = {
+      product: { price: 100 },
+      quantity: 1,
+      offer: {
+        audience: ["public", "premium"],
+        appliedDiscount: 20,
+        premiumDiscount: 0,
+        lineTotal: 80,
+      },
+    };
+    expect(calculateCartTotals([item], null)).toMatchObject({
+      subtotal: 100,
+      regularDiscount: 20,
+      premiumDiscount: 0,
+      discount: 20,
+      total: 80,
+    });
+  });
+
+  it("classifies exclusively-premium audience offer as subscriber savings", () => {
+    const item = {
+      product: { price: 100 },
+      quantity: 1,
+      offer: {
+        audience: ["premium"],
+        appliedDiscount: 25,
+        premiumDiscount: 25,
+        lineTotal: 75,
+      },
+    };
+    expect(calculateCartTotals([item], null, true)).toMatchObject({
+      subtotal: 100,
+      regularDiscount: 0,
+      premiumDiscount: 25,
+      discount: 25,
+      total: 75,
     });
   });
 });

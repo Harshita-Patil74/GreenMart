@@ -6,6 +6,8 @@ function errorHandler(err, req, res, next) {
   console.error(err);
   const status = err.status || (err.name === "MulterError" ? 400 : 500);
   const message = err.name === "MulterError" ? `Image upload failed: ${err.message}` : err.message || "Server error";
-  res.status(status).json({ message });
+  const body = { message };
+  if (err.code) body.code = err.code;
+  res.status(status).json(body);
 }
 module.exports = { notFound, errorHandler };

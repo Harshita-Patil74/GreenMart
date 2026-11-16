@@ -1,6 +1,7 @@
 const Order = require("../models/Order");
 const User = require("../models/User");
 const Product = require("../models/Product");
+const FarmerProfile = require("../models/FarmerProfile");
 const orderService = require("../services/orderService");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { getSearchTerms, createSearchRegex } = require("../utils/search");
@@ -16,6 +17,9 @@ function farmerOrderView(order, farmerId) {
     item.offerSnapshot?.finalLineTotal ?? Number(item.price || 0) * Number(item.quantity || 0)
   ), 0);
   const statuses = [...new Set(items.map((item) => orderService.getItemStatus(item, order.status)))];
+  const snapshot = order.deliverySnapshot || {};
+  const farmerShipment = snapshot.dispatchLocations?.find((dl) => String(dl.farmerId) === String(farmerId));
+  const address = order.address || {};
   return {
     _id: order._id,
     orderNumber: order.orderNumber,
@@ -36,8 +40,67 @@ function farmerOrderView(order, farmerId) {
     })),
     subtotal: total,
     total,
-    address: order.address?.name ? { name: order.address.name } : {},
+    address: {
+      name: address.name || "",
+      line1: address.line1 || "",
+      city: address.city || "",
+      state: address.state || "",
+      postalCode: address.postalCode || "",
+      phone: address.phone || "",
+    },
+    deliverySnapshot: (snapshot.option || snapshot.distanceKm != null || snapshot.charge != null) ? {
+      option: snapshot.option,
+      distanceKm: snapshot.distanceKm,
+      charge: snapshot.charge,
+      dispatchLocations: farmerShipment ? [{ farmerId, location: farmerShipment.location, distanceKm: farmerShipment.distanceKm }] : [],
+      destinationAddress: snapshot.destinationAddress || address,
+    } : null,
   };
+}
+
+async function enrichDispatchLocations(orders) {
+  const farmerIds = new Set();
+  orders.forEach((order) => {
+    const locations = order.deliverySnapshot?.dispatchLocations || [];
+    locations.forEach((dl) => {
+      if (dl.farmerId) farmerIds.add(dl.farmerId);
+    });
+  });
+  if (!farmerIds.size) return orders;
+  const farmerMap = {};
+  const profiles = await FarmerProfile.find({ user: { $in: [...farmerIds] } }).select("user fullName farmName farmAddress location").lean();
+  profiles.forEach((p) => {
+    farmerMap[String(p.user)] = {
+      name: p.fullName || p.farmName || "Farmer",
+      farmName: p.farmName || "",
+      farmAddress: p.farmAddress || "",
+      location: p.location || null,
+    };
+  });
+  // Also look up by User name if FarmerProfile not found
+  const missingIds = [...farmerIds].filter((id) => !farmerMap[id]);
+  if (missingIds.length) {
+    const users = await User.find({ _id: { $in: missingIds } }).select("name email").lean();
+    users.forEach((u) => {
+      farmerMap[String(u._id)] = { name: u.name || "Farmer", farmName: "", farmAddress: "", location: null };
+    });
+  }
+  orders.forEach((order) => {
+    if (order.deliverySnapshot?.dispatchLocations) {
+      order.deliverySnapshot.dispatchLocations.forEach((dl) => {
+        const info = farmerMap[String(dl.farmerId)];
+        if (info) {
+          dl.farmerName = info.name;
+          dl.farmName = info.farmName;
+          dl.farmAddress = info.farmAddress;
+          if (info.location && (!dl.location || (dl.location.lat == null && dl.location.lng == null))) {
+            dl.location = info.location;
+          }
+        }
+      });
+    }
+  });
+  return orders;
 }
 
 async function buildOrderSearchFilter(search, includeCustomer = false, farmerId = null) {
@@ -144,7 +207,15 @@ exports.create = asyncHandler(async (req,res) => {
   )) {
     return res.status(400).json({ message: "A valid delivery address is required." });
   }
-  const order = await orderService.createOrder(req.user._id, req.body);
+  const order = await orderService.createOrder(req.user._id, {
+    address, coordinates: req.body.coordinates,
+    paymentMethod: req.body.paymentMethod,
+    paymentConfirmed: req.body.paymentConfirmed,
+    paymentAmount: req.body.paymentAmount,
+    addressId: req.body.addressId,
+    deliveryOption: req.body.deliveryOption,
+    quoteVersion: req.body.quoteVersion,
+  });
   await createNotification({
     userId: req.user._id,
     type: "orderConfirmation",
@@ -204,7 +275,10 @@ exports.quote = asyncHandler(async (req, res) => {
   if (req.user.role !== "customer") {
     return res.status(403).json({ message: "Only customers can check out." });
   }
-  res.json(await orderService.getCheckoutQuote(req.user._id));
+  res.json(await orderService.getCheckoutQuote(req.user._id, {
+    addressId: req.body.addressId,
+    deliveryOption: req.body.deliveryOption,
+  }));
 });
 exports.mine = asyncHandler(async (req,res) => {
   const { search, page=1, limit=10, status, from, to, fromDate, toDate } = req.query;
@@ -270,6 +344,9 @@ exports.get = asyncHandler(async (req,res) => {
   const isOwner = String(order.user) === String(req.user._id);
   const isFarmer = order.items.some((i) => String(i.farmer) === String(req.user._id));
   if (req.user.role !== "admin" && !isOwner && !isFarmer) return res.status(403).json({ message: "Forbidden" });
+  if (req.user.role === "admin") {
+    await enrichDispatchLocations([order]);
+  }
   res.json(req.user.role === "farmer" ? farmerOrderView(order, req.user._id) : order);
 });
 exports.updateStatus = asyncHandler(async (req,res) => {
@@ -419,7 +496,8 @@ exports.adminAll = asyncHandler(async (req,res) => {
       .populate({ path: "items.product", select: "name category images unit", transform: (product, id) => product || id }),
     Order.countDocuments(query),
   ]);
-  res.json({ items: orders, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum, statusCounts });
+  const enrichedOrders = await enrichDispatchLocations(orders);
+  res.json({ items: enrichedOrders, total, page: pageNum, pages: Math.ceil(total / limitNum), limit: limitNum, statusCounts });
 });
 exports.analytics = asyncHandler(async (req, res) => {
   if (req.user.role !== "farmer") return res.status(403).json({ message: "Forbidden" });

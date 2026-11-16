@@ -7,8 +7,9 @@ import { showDeleteConfirm } from "../../utils/alertUtils";
 import addressApi from "../../api/addressApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
+import LocationPicker from "../../components/map/LocationPicker.jsx";
 
-const emptyAddress = { name: "", line1: "", city: "", phone: "" };
+const emptyAddress = { name: "", line1: "", city: "", phone: "", coordinates: null };
 
 export default function SavedAddresses({ embedded = false }) {
   const [addresses, setAddresses] = useState([]);
@@ -41,6 +42,7 @@ export default function SavedAddresses({ embedded = false }) {
       line1: address.line1 || "",
       city: address.city || "",
       phone: address.phone || "",
+      coordinates: address.coordinates || null,
     } : emptyAddress);
     setFormOpen(true);
   };
@@ -65,7 +67,7 @@ export default function SavedAddresses({ embedded = false }) {
       setEditingId(null);
       await load();
     } catch (requestError) {
-      setError(requestError?.message || "Couldn't save this address.");
+      setError(requestError?.response?.data?.message || "Couldn't save this address.");
     } finally {
       setSaving(false);
     }
@@ -149,6 +151,15 @@ export default function SavedAddresses({ embedded = false }) {
               <input required value={form[field]} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} className="mt-1 h-9 w-full rounded-lg border border-gray-200 px-3 text-sm text-gray-900 focus:border-primary focus:outline-none" />
             </label>
           ))}
+          <label className="block text-xs font-medium text-gray-600">
+            Location on map
+            <LocationPicker
+              value={form.coordinates}
+              onChange={(coords) => setForm({ ...form, coordinates: coords })}
+              street={form.line1}
+              city={form.city}
+            />
+          </label>
           <div className="flex gap-2 sm:col-span-2">
             <button disabled={saving} className="h-9 rounded-lg bg-primary px-4 text-xs font-semibold text-white disabled:opacity-60">{saving ? "Saving..." : "Save Address"}</button>
             <button type="button" onClick={() => setFormOpen(false)} className="h-9 rounded-lg border border-gray-200 px-4 text-xs font-medium text-gray-600">Cancel</button>

@@ -1,5 +1,6 @@
 const Address = require("../models/Address");
 const { asyncHandler } = require("../utils/asyncHandler");
+const { clearDeliveryCache } = require("../services/deliveryService");
 
 function normalizePhone(phone) {
   return String(phone || "").trim().replace(/\s+/g, " ");
@@ -21,7 +22,28 @@ function validateAddress(body) {
     error.status = 400;
     throw error;
   }
-  return { name, line1, city, phone };
+
+  let coordinates = null;
+  if (body.coordinates && typeof body.coordinates === "object") {
+    const lat = Number(body.coordinates.lat);
+    const lng = Number(body.coordinates.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      errors.push("Latitude must be between -90 and 90.");
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      errors.push("Longitude must be between -180 and 180.");
+    }
+    if (errors.length === 0 && Number.isFinite(lat) && Number.isFinite(lng)) {
+      coordinates = { lat, lng };
+    }
+  }
+
+  if (errors.length) {
+    const error = new Error(errors.join(" "));
+    error.status = 400;
+    throw error;
+  }
+  return { name, line1, city, phone, coordinates };
 }
 
 async function unsetOtherDefaults(userId, exceptId) {
@@ -44,7 +66,7 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 exports.create = asyncHandler(async (req, res) => {
-  const { name, line1, city, phone } = validateAddress(req.body);
+  const { name, line1, city, phone, coordinates } = validateAddress(req.body);
   const existingCount = await Address.countDocuments({ user: req.user._id });
   const isDefault = Boolean(req.body.isDefault) || existingCount === 0;
   if (isDefault) await unsetOtherDefaults(req.user._id, null);
@@ -54,8 +76,10 @@ exports.create = asyncHandler(async (req, res) => {
     line1,
     city,
     phone,
+    coordinates,
     isDefault,
   });
+  clearDeliveryCache();
   res.status(201).json(address);
 });
 
@@ -67,11 +91,13 @@ exports.update = asyncHandler(async (req, res) => {
   address.line1 = validated.line1;
   address.city = validated.city;
   address.phone = validated.phone;
+  if (validated.coordinates != null) address.coordinates = validated.coordinates;
   if (req.body.isDefault === true) {
     await unsetOtherDefaults(req.user._id, address._id);
     address.isDefault = true;
   }
   await address.save();
+  clearDeliveryCache();
   res.json(address);
 });
 
@@ -96,6 +122,7 @@ exports.setDefault = asyncHandler(async (req, res) => {
   await unsetOtherDefaults(req.user._id, address._id);
   address.isDefault = true;
   await address.save();
+  clearDeliveryCache();
   res.json(address);
 });
 

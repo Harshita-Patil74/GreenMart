@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ShieldCheck, Star } from "lucide-react";
+import { ShieldCheck, Star, CircleX } from "lucide-react";
 import farmerApi from "../../api/farmerApi";
 import productApi from "../../api/productApi";
 import ProductCard from "../../components/product/ProductCard.jsx";
@@ -47,6 +47,7 @@ export default function FarmerProfile() {
 
   const user = farmer.user || {};
   const isVerified = farmer.certification?.verifiedByAdmin === true;
+  const isRejected = farmer.certification?.rejectedByAdmin === true;
 
   return (
     <div className="gm-container py-6 space-y-6 pb-12">

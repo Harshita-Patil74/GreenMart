@@ -495,9 +495,9 @@ describe("Product availability and farmer data", () => {
     expect(response.body.items[0].items).toHaveLength(1);
     expect(response.body.items[0].items[0].name).toBe("Farmer One crop");
     expect(response.body.items[0].total).toBe(20);
-    expect(response.body.items[0].address).toEqual({ name: "Test Customer" });
+    expect(response.body.items[0].address).toEqual({ name: "Test Customer", line1: "Private road 1", city: "Test city", phone: "555-0100", postalCode: "", state: "" });
+    expect(JSON.stringify(response.body.items)).toContain("Test Customer");
     expect(JSON.stringify(response.body.items)).not.toContain("Farmer Two crop");
-    expect(JSON.stringify(response.body.items)).not.toContain("555-0100");
   });
 
   it("limits farmer order details to their own items", async () => {
@@ -508,7 +508,7 @@ describe("Product availability and farmer data", () => {
     expect(response.status).toBe(200);
     expect(response.body.items).toHaveLength(1);
     expect(response.body.total).toBe(20);
-    expect(response.body.address).toEqual({ name: "Test Customer" });
+    expect(response.body.address).toEqual({ name: "Test Customer", line1: "Private road 1", city: "Test city", phone: "555-0100", postalCode: "", state: "" });
   });
 
   it("prevents a farmer with no items in an order from viewing or updating it", async () => {

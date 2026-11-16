@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import adminApi from "../../api/adminApi";
 import BackButton from "../../components/common/BackButton.jsx";
 import ErrorState from "../../components/common/ErrorState.jsx";
@@ -25,6 +26,7 @@ export default function AdminFarmers() {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
 
   const load = async () => {
     setLoading(true);
@@ -215,7 +217,7 @@ export default function AdminFarmers() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setViewFarmer(f)} className="rounded border px-3 py-1.5 text-[10px] font-semibold text-gray-700">View Details</button>
+                        <button onClick={() => navigate(`/farmers/${userId}`)} className="rounded border px-3 py-1.5 text-[10px] font-semibold text-gray-700">View Details</button>
                         {!decisionRecorded && (
                           <>
                             <button disabled={saving === userId} onClick={() => verify(f)} className="rounded bg-primary px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{saving === userId ? "Saving..." : "Verify"}</button>

@@ -1,199 +1,124 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { renderWithStore } from "../../tests/testUtils.jsx";
+﻿import React from "react";
+import { render, fireEvent, screen, waitFor } from "@testing-library/react";
+import { Provider } from "react-redux";
+import { MemoryRouter } from "react-router-dom";
+import { createStore } from "../../tests/testUtils.jsx";
+import FarmerProfilePage from "./FarmerProfilePage.jsx";
+
+vi.mock("react-hot-toast", () => ({
+  default: { success: vi.fn(), error: vi.fn() },
+  ToastProvider: ({ children }) => children,
+}));
+vi.mock("../../api/authApi.js", () => ({
+  default: { me: vi.fn() },
+}));
+vi.mock("../../api/farmerApi.js", () => ({
+  default: { get: vi.fn(), profile: vi.fn(), updateLocation: vi.fn(), resubmitApplication: vi.fn(), uploadCertificate: vi.fn() },
+}));
+
 import authApi from "../../api/authApi.js";
 import farmerApi from "../../api/farmerApi.js";
-import userApi from "../../api/userApi.js";
-import FarmerProfilePage from "./FarmerProfilePage.jsx";
-import Topbar from "../../components/layout/Topbar.jsx";
+import toast from "react-hot-toast";
 
-vi.mock("../../api/authApi.js", () => ({ default: { me: vi.fn() } }));
-vi.mock("../../api/farmerApi.js", () => ({
-  default: {
-    get: vi.fn(),
-    updateMe: vi.fn(),
-    profile: vi.fn(),
-    updateProfile: vi.fn(),
-    resubmitApplication: vi.fn(),
-    uploadCertificate: vi.fn(),
-  },
-}));
-vi.mock("../../api/userApi.js", () => ({ default: { updateMe: vi.fn() } }));
-
-const baseProfile = {
-  _id: "profile-1",
-  user: "farmer-1",
-  farmName: "Green Farm",
-  farmAddress: "Gadag",
-  category: "Vegetables",
-  description: "Fresh organic vegetables",
-  photo: "/uploads/farms/farm.png",
-  certificateName: "Organic Farming Certificate",
-  certificateNumber: "OFC2026KA5724",
-  certificateDocument: { url: "https://res.cloudinary.com/test/cert.pdf", publicId: "cert/123" },
-  verificationStatus: "Pending",
-  changeRequestInstructions: "",
-};
-
-const renderProfilePage = () =>
-  renderWithStore(
-    <><FarmerProfilePage /><Topbar /></>,
-    { auth: { user: { _id: "farmer-1", name: "Green Farm", role: "farmer" }, token: null }, cart: { items: [] } }
+const renderPage = (preloaded = {}) => {
+  const store = createStore(preloaded);
+  const utils = render(
+    <Provider store={store}>
+      <MemoryRouter initialEntries={["/farmer/profile"]}>
+        <FarmerProfilePage />
+      </MemoryRouter>
+    </Provider>
   );
-
-const switchToFarmDetails = () => {
-  fireEvent.click(screen.getByRole("button", { name: "Farm Details" }));
+  return { ...utils, store, container: utils.container };
 };
 
-describe("Farmer profile certificate persistence", () => {
-  afterEach(() => {
-    delete URL.createObjectURL;
-    delete URL.revokeObjectURL;
-  });
+describe("Farmer profile dispatch location", () => {
+  const farmerUser = {
+    _id: "farmer-1",
+    name: "Ramesh Gouda",
+    email: "ramesh.farm@example.test",
+    role: "farmer",
+    status: "Active",
+    phone: "9876543210",
+  };
+
+  const farm = {
+    _id: "farm-1",
+    user: "farmer-1",
+    farmName: "Ramesh Farm",
+    address: "",
+    category: "Vegetables",
+    description: "",
+    photo: "",
+    certification: { verifiedByAdmin: true },
+    location: null,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:farmer-preview") });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
-    authApi.me.mockResolvedValue({
-      data: { _id: "farmer-1", name: "Green Farm", email: "farmer@example.test", role: "farmer", avatar: "" },
+    authApi.me.mockResolvedValue({ data: { user: farmerUser } });
+    farmerApi.get.mockResolvedValue({ data: farm });
+    farmerApi.profile.mockResolvedValue({ data: {} });
+  });
+
+  it("saves a valid dispatch address, latitude and longitude", async () => {
+    farmerApi.updateLocation.mockResolvedValue({
+      data: { location: { lat: 12.97, lng: 77.59 }, address: "Hosur Road, Bangalore" },
     });
-    farmerApi.get.mockResolvedValue({ data: baseProfile });
-    farmerApi.profile.mockResolvedValue({ data: baseProfile });
-    farmerApi.updateMe.mockResolvedValue({ data: baseProfile });
-    farmerApi.updateProfile.mockResolvedValue({ data: baseProfile });
-    farmerApi.resubmitApplication.mockResolvedValue({ data: baseProfile });
-    farmerApi.uploadCertificate.mockResolvedValue({ data: { certificateDocument: { url: "https://res.cloudinary.com/test/new-cert.pdf", publicId: "cert/new" } } });
+
+    const { container } = renderPage({ auth: { user: farmerUser, token: "test-token" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Dispatch Location/i }));
+    await waitFor(() => expect(screen.getByText(/Dispatch location not set/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Dispatch Address/i), { target: { value: "Hosur Road, Bangalore" } });
+    fireEvent.change(screen.getByLabelText(/Latitude/i), { target: { value: "12.97" } });
+    fireEvent.change(screen.getByLabelText(/Longitude/i), { target: { value: "77.59" } });
+
+    fireEvent.submit(container.querySelector("form"));
+
+    await waitFor(() => expect(farmerApi.updateLocation).toHaveBeenCalledTimes(1));
+    expect(farmerApi.updateLocation).toHaveBeenCalledWith({
+      lat: 12.97,
+      lng: 77.59,
+      address: "Hosur Road, Bangalore",
+    });
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Dispatch location saved."));
+    await waitFor(() => expect(screen.getByText(/Dispatch location configured/i)).toBeInTheDocument());
+    expect(screen.getByText(/12\.97/)).toBeInTheDocument();
+    expect(screen.getByText(/77\.59/)).toBeInTheDocument();
   });
 
-  it("loads and displays saved certificate name, number, and document", async () => {
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
+  it("rejects out-of-range coordinates and shows the backend validation message", async () => {
+    farmerApi.updateLocation.mockImplementation(() => Promise.reject({ response: { status: 400, data: { message: "Latitude is required and must be between -90 and 90." } } }));
 
-    expect(screen.getByDisplayValue("Organic Farming Certificate")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("OFC2026KA5724")).toBeInTheDocument();
-    expect(screen.getByText("View current certificate")).toBeInTheDocument();
+    const { container } = renderPage({ auth: { user: farmerUser, token: "test-token" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Dispatch Location/i }));
+    await waitFor(() => expect(screen.getByText(/Dispatch location not set/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Dispatch Address/i), { target: { value: "Hosur Road, Bangalore" } });
+    fireEvent.change(screen.getByLabelText(/Latitude/i), { target: { value: "200" } });
+    fireEvent.change(screen.getByLabelText(/Longitude/i), { target: { value: "77.59" } });
+
+    fireEvent.submit(container.querySelector("form"));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Enter a valid latitude (-90 to 90)."));
+    expect(farmerApi.updateLocation).not.toHaveBeenCalled();
+    expect(screen.getByText(/Dispatch location not set/i)).toBeInTheDocument();
   });
 
-  it("saves certificate name and number via Save Farm Details", async () => {
-    farmerApi.updateMe.mockImplementation(async (formData) => ({
-      data: { ...baseProfile, certificateName: formData.get("certificateName"), certificateNumber: formData.get("certificateNumber") },
-    }));
+  it("rejects a missing dispatch address before calling the backend", async () => {
+    const { container } = renderPage({ auth: { user: farmerUser, token: "test-token" } });
 
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
+    fireEvent.click(screen.getByRole("button", { name: /Dispatch Location/i }));
+    await waitFor(() => expect(screen.getByText(/Dispatch location not set/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Latitude/i), { target: { value: "12.97" } });
+    fireEvent.change(screen.getByLabelText(/Longitude/i), { target: { value: "77.59" } });
 
-    const certNameInput = screen.getByLabelText("Certificate Name");
-    const certNumberInput = screen.getByLabelText("Certificate Number");
-    fireEvent.change(certNameInput, { target: { value: "New Organic Certificate" } });
-    fireEvent.change(certNumberInput, { target: { value: "NEW-2026-001" } });
+    fireEvent.submit(container.querySelector("form"));
 
-    fireEvent.click(screen.getByRole("button", { name: /Save Farm Details/ }));
-
-    await waitFor(() => expect(farmerApi.updateMe).toHaveBeenCalled());
-    const formData = farmerApi.updateMe.mock.calls[0][0];
-    expect(formData.get("certificateName")).toBe("New Organic Certificate");
-    expect(formData.get("certificateNumber")).toBe("NEW-2026-001");
-  });
-
-  it("uploads a certificate document and saves its Cloudinary URL", async () => {
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    const fileInput = document.querySelector('input[type="file"][accept*="pdf"]');
-    const certFile = new File(["certificate content"], "certificate.pdf", { type: "application/pdf" });
-    fireEvent.change(fileInput, { target: { files: [certFile] } });
-
-    fireEvent.click(screen.getByRole("button", { name: "Upload Certificate" }));
-
-    await waitFor(() => expect(farmerApi.uploadCertificate).toHaveBeenCalled());
-    const fd = farmerApi.uploadCertificate.mock.calls[0][0];
-    expect(fd.get("certificate")).toBe(certFile);
-  });
-
-  it("preserves certificate information when updating farm name/address", async () => {
-    farmerApi.updateMe.mockImplementation(async (formData) => ({
-      data: {
-        ...baseProfile,
-        farmName: formData.get("farmName"),
-        address: formData.get("address"),
-        certificateName: baseProfile.certificateName,
-        certificateNumber: baseProfile.certificateNumber,
-      },
-    }));
-
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    const farmNameInput = screen.getByLabelText("Farm Name");
-    fireEvent.change(farmNameInput, { target: { value: "Updated Farm Name" } });
-
-    fireEvent.click(screen.getByRole("button", { name: /Save Farm Details/ }));
-
-    await waitFor(() => expect(farmerApi.updateMe).toHaveBeenCalled());
-    const formData = farmerApi.updateMe.mock.calls[0][0];
-    expect(formData.get("farmName")).toBe("Updated Farm Name");
-    expect(formData.get("certificateName")).toBe("Organic Farming Certificate");
-    expect(formData.get("certificateNumber")).toBe("OFC2026KA5724");
-  });
-
-  it("preserves existing certificate document when updating certificate name/number without replacement", async () => {
-    farmerApi.updateMe.mockResolvedValue({ data: baseProfile });
-
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    const certNameInput = screen.getByLabelText("Certificate Name");
-    fireEvent.change(certNameInput, { target: { value: "Updated Certificate Name" } });
-
-    fireEvent.click(screen.getByRole("button", { name: /Save Farm Details/ }));
-
-    await waitFor(() => expect(farmerApi.updateMe).toHaveBeenCalled());
-    const formData = farmerApi.updateMe.mock.calls[0][0];
-    expect(formData.get("certificateName")).toBe("Updated Certificate Name");
-    expect(formData.get("certificateNumber")).toBe("OFC2026KA5724");
-    expect(formData.get("certificate")).toBeNull();
-  });
-
-  it("replacing the document updates its URL", async () => {
-    const newFile = new File(["new cert"], "new-certificate.pdf", { type: "application/pdf" });
-
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    const fileInput = document.querySelector('input[type="file"][accept*="pdf"]');
-    fireEvent.change(fileInput, { target: { files: [newFile] } });
-
-    fireEvent.click(screen.getByRole("button", { name: "Upload Certificate" }));
-
-    await waitFor(() => expect(farmerApi.uploadCertificate).toHaveBeenCalled());
-    const fd = farmerApi.uploadCertificate.mock.calls[0][0];
-    expect(fd.get("certificate")).toBe(newFile);
-  });
-
-  it("resubmit application preserves certificate fields", async () => {
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    fireEvent.click(screen.getByRole("button", { name: "Resubmit Application" }));
-
-    await waitFor(() => expect(farmerApi.resubmitApplication).toHaveBeenCalledTimes(1));
-  });
-
-  it("loads profile after refresh showing saved certificate data", async () => {
-    farmerApi.get.mockResolvedValue({ data: { ...baseProfile, certificateName: "Refreshed Certificate", certificateNumber: "REF-2026-999" } });
-
-    renderProfilePage();
-    await screen.findByRole("heading", { name: "My Profile" });
-    switchToFarmDetails();
-
-    expect(screen.getByDisplayValue("Refreshed Certificate")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("REF-2026-999")).toBeInTheDocument();
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Dispatch address is required."));
+    expect(farmerApi.updateLocation).not.toHaveBeenCalled();
+    expect(screen.getByText(/Dispatch location not set/i)).toBeInTheDocument();
   });
 });

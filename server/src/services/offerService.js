@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Offer = require("../models/Offer");
+const { isPremiumAudience } = require("./premiumService");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const User = require("../models/User");
@@ -316,7 +317,7 @@ async function enrichCart(cart, isPremium = false) {
       type: applied.offer.type,
       discountType: applied.offer.discountType,
       discountValue: applied.offer.discountValue,
-      isSubscriberExclusive: applied.offer.audience?.includes("premium") === true,
+      isSubscriberExclusive: isPremiumAudience(applied.offer.audience),
       appliedDiscount: applied.discount,
       premiumDiscount: applied.premiumDiscount,
       finalUnitPrice: applied.finalUnitPrice,
@@ -349,13 +350,26 @@ function lineDiscount(item) {
 }
 
 function linePremiumDiscount(item) {
-  const isPremiumExclusive = item?.offer?.audience?.includes("premium") === true ||
+  const offerAudience =
+    item?.offer?.audience ?? item?.offerSnapshot?.audience;
+
+  const isPremiumExclusive =
+    isPremiumAudience(offerAudience) ||
+    item?.offer?.isPremiumExclusive === true ||
     item?.offer?.isSubscriberExclusive === true ||
-    item?.offerSnapshot?.audience?.includes("premium") === true ||
+    item?.offerSnapshot?.isPremiumExclusive === true ||
     item?.offerSnapshot?.isSubscriberExclusive === true;
+
   if (isPremiumExclusive) return lineDiscount(item);
-  const premium = Number(item?.offer?.premiumDiscount ?? item?.offerSnapshot?.premiumDiscount ?? 0);
+
+  const premium = Number(
+    item?.offer?.premiumDiscount ??
+    item?.offerSnapshot?.premiumDiscount ??
+    0
+  );
+
   if (!Number.isFinite(premium) || premium <= 0) return 0;
+
   return money(Math.min(premium, lineDiscount(item)));
 }
 

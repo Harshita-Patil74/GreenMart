@@ -30,7 +30,7 @@ export default function ProductIdentifier({ productId, className = "", compact =
 
   return (
     <span className={`inline-flex max-w-full items-center gap-1 text-[10px] text-gray-500 ${className}`}>
-      <span className={compact ? "font-mono" : "break-all"} title={identifier}>Product ID: {displayId}</span>
+      <span className={compact ? "font-mono" : "overflow-hidden text-ellipsis whitespace-nowrap max-w-[140px]"} title={identifier}>Product ID: {displayId}</span>
       <button
         type="button"
         onClick={(event) => {

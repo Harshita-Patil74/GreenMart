@@ -1,5 +1,6 @@
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
+const mongoose = require("mongoose");
 const { app } = require("./setup");
 const { connectDB, disconnectDB } = require("./db");
 const User = require("../src/models/User");
@@ -25,6 +26,9 @@ const pastEnd = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
 
 const activeDates = { startDate: pastStart, endDate: futureEnd };
 const upcomingDates = { startDate: futureStart, endDate: futureEnd };
+
+const defaultAudience = ["public"];
+const premiumAudience = ["premium"];
 
 beforeAll(async () => {
   await connectDB();
@@ -70,6 +74,7 @@ async function createOffer(overrides = {}) {
     minimumAmount: 0,
     maximumDiscount: 50,
     farmer: farmerId,
+    audience: defaultAudience,
     ...overrides,
   });
 }
@@ -178,7 +183,7 @@ describe("Customer offers API", () => {
     expect(res.status).toBe(200);
     const offer = res.body.active.find((item) => item.title === "Public Offer With Premium Extra");
     expect(offer).toMatchObject({
-      isSubscriberExclusive: false,
+      isPremiumExclusive: false,
       originalPrice: 100,
       offerPrice: 80,
       discountAmount: 20,
@@ -247,6 +252,7 @@ describe("Customer offers API", () => {
       status: "active",
       startDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      lastPaymentId: new mongoose.Types.ObjectId(),
     });
     await createOffer({
       ...activeDates,
@@ -257,6 +263,7 @@ describe("Customer offers API", () => {
       approvedBy: (await User.findOne({ role: "admin" }))._id,
       discountValue: 20,
       isSubscriberExclusive: true,
+      audience: premiumAudience,
       exclusiveDiscountType: "Percentage",
       exclusiveDiscountValue: 10,
     });
@@ -269,6 +276,7 @@ describe("Customer offers API", () => {
       approvedBy: (await User.findOne({ role: "admin" }))._id,
       discountValue: 10,
       isSubscriberExclusive: true,
+      audience: premiumAudience,
       exclusiveDiscountType: "Percentage",
       exclusiveDiscountValue: 5,
     });
@@ -363,25 +371,27 @@ describe("Customer offers API", () => {
       }),
     ]);
 
-    const regularOffersResponse = await request(app).get("/api/offers/customer");
+    const regularOffersResponse = await request(app)
+      .get("/api/offers/customer")
+      .set("Authorization", `Bearer ${customerToken}`);
     expect(regularOffersResponse.status).toBe(200);
     const exclusiveTeaser = regularOffersResponse.body.active.find(
-      (item) => String(item.product._id) === String(exclusiveProduct._id) && item.regularDiscountAmount === 20
+      (item) => String(item.product._id) === String(exclusiveProduct._id) && item.premiumDiscountAmount === 8
     );
     expect(exclusiveTeaser).toMatchObject({
-      title: "Subscriber Exclusive",
-      isSubscriberExclusive: true,
-      subscriberExclusiveTeaser: true,
+      title: "Premium Exclusive",
+      isPremiumExclusive: true,
+      premiumExclusiveTeaser: true,
       originalPrice: 100,
       offerPrice: 100,
       discountAmount: 0,
       discountPercent: 0,
       discountType: null,
       discountValue: null,
-      regularDiscountType: "Percentage",
-      regularDiscountValue: 20,
-      regularDiscountAmount: 20,
-      regularDiscountPercent: 20,
+      regularDiscountType: null,
+      regularDiscountValue: null,
+      regularDiscountAmount: null,
+      regularDiscountPercent: null,
       premiumDiscountAmount: 8,
     });
     expect(exclusiveTeaser).not.toHaveProperty("exclusivePrice");
@@ -393,7 +403,7 @@ describe("Customer offers API", () => {
     ];
     for (const [title, offerPrice, premiumDiscountAmount] of activePriceExamples) {
       expect(regularOffersResponse.body.active.find((item) => item.title === title)).toMatchObject({
-        isSubscriberExclusive: false,
+        isPremiumExclusive: false,
         offerPrice,
         premiumDiscountAmount,
       });
@@ -412,7 +422,7 @@ describe("Customer offers API", () => {
     const offer = response.body.items.find((item) => String(item.product._id) === String(exclusiveProduct._id));
     expect(offer).toMatchObject({
       title: "Subscriber Price Test",
-      isSubscriberExclusive: true,
+      isPremiumExclusive: true,
       originalPrice: 100,
       publicPrice: 80,
       exclusivePrice: 72,

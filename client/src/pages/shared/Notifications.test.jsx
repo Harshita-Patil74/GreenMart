@@ -121,7 +121,11 @@ describe("Customer Notification Centre", () => {
 
   it("supports pagination with total, current page and prev/next controls", async () => {
     const many = Array.from({ length: 45 }, (_, i) => ({ _id: `n${i}`, type: "orderConfirmation", category: "orders", title: `Order ${i}`, message: `msg ${i}`, orderNumber: `GM${String(i).padStart(6,"0")}`, createdAt: today, isRead: false }));
-    notificationApi.list.mockResolvedValue(makeData({ items: many.slice(0, 20), total: 45, page: 1, pages: 3, limit: 20 }));
+    notificationApi.list.mockImplementation(async (params = {}) => {
+      const { page = 1, limit = 20 } = params;
+      const start = (page - 1) * limit;
+      return makeData({ items: many.slice(start, start + limit), total: 45, page, pages: 3, limit });
+    });
     renderPage();
     await screen.findByText("Order 0");
     await waitFor(() => expect(screen.getByText("Total Notifications: 45")).toBeInTheDocument());

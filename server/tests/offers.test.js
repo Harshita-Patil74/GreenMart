@@ -2,6 +2,7 @@ const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const { app } = require("./setup");
 const { connectDB, disconnectDB } = require("./db");
+const Address = require("../src/models/Address");
 const User = require("../src/models/User");
 const FarmerProfile = require("../src/models/FarmerProfile");
 const Product = require("../src/models/Product");
@@ -15,15 +16,23 @@ let otherFarmerToken;
 let customerToken;
 let adminToken;
 let farmerId;
+let otherFarmerId;
+let customerId;
 let productId;
 let otherProductId;
 let offerId;
 let orderId;
+let customerAddressId;
 
 const dates = {
   startDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
 };
+
+const CUSTOMER_COORDS = { lat: 15.4, lng: 75.6 };
+const FARMER_COORDS = { lat: 15.42, lng: 75.62 };
+const STANDARD_DISTANCE_KM = 2.5;
+let originalFetch;
 
 beforeAll(async () => {
   await connectDB();
@@ -36,8 +45,9 @@ beforeAll(async () => {
   ]);
   farmerId = farmer._id;
   otherFarmerId = otherFarmer._id;
+  customerId = customer._id;
   await FarmerProfile.create([
-    { user: farmer._id, farmName: "Offer Farm", certification: { verifiedByAdmin: true } },
+    { user: farmer._id, farmName: "Offer Farm", location: FARMER_COORDS, certification: { verifiedByAdmin: true } },
     { user: otherFarmer._id, farmName: "Other Offer Farm", certification: { verifiedByAdmin: true } },
   ]);
   const [product, otherProduct] = await Promise.all([
@@ -62,9 +72,35 @@ beforeAll(async () => {
   otherFarmerToken = otherFarmerLogin.body.token;
   customerToken = customerLogin.body.token;
   adminToken = adminLogin.body.token;
+
+  const address = await Address.create({
+    user: customer._id,
+    name: "Offer Customer",
+    line1: "1 Market Road",
+    city: "Gadag",
+    phone: "555-0101",
+    coordinates: CUSTOMER_COORDS,
+  });
+  customerAddressId = address._id;
+
+  // Deterministic OSRM mock (~2.5 km, within the 5 km standard tier).
+  // Non-OSRM URLs pass through to the real fetch (with init options).
+  originalFetch = global.fetch;
+  global.fetch = jest.fn(async (url, init) => {
+    const u = String(url);
+    if (u.includes("/route/v1/driving/")) {
+      const m = u.match(/route\/v1\/driving\/([\d.-]+,[\d.-]+);([\d.-]+,[\d.-]+)/);
+      if (!m) {
+        return { ok: false, status: 400, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ routes: [{ distance: STANDARD_DISTANCE_KM * 1000 }] }) };
+    }
+    return originalFetch(url, init);
+  });
 });
 
 afterAll(async () => {
+  global.fetch = originalFetch;
   await disconnectDB();
 });
 
@@ -658,8 +694,10 @@ describe("Farmer offers and server-priced order snapshots", () => {
 
     const checkoutQuote = await request(app)
       .post("/api/orders/quote")
-      .set("Authorization", `Bearer ${customerToken}`);
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ addressId: customerAddressId });
     expect(checkoutQuote.body).toMatchObject({ subtotal: 300, discount: 20, deliveryCharge: 30, total: 310 });
+    const quoteVersion = checkoutQuote.body.quoteVersion;
     expect(checkoutQuote.body.items[0].offerSnapshot).toMatchObject({
       appliedDiscount: 20,
       finalUnitPrice: 93.33,
@@ -670,12 +708,15 @@ describe("Farmer offers and server-priced order snapshots", () => {
       .set("Authorization", `Bearer ${customerToken}`)
       .send({
         address: { name: "Offer Customer", line1: "1 Market Road", city: "Gadag", phone: "555-0101" },
+        addressId: customerAddressId,
+        coordinates: CUSTOMER_COORDS,
         paymentMethod: "UPI",
         paymentConfirmed: true,
         paymentAmount: 1,
         subtotal: 1,
         discount: 0,
         total: 1,
+        quoteVersion,
       });
     expect(manipulatedOrder.status).toBe(409);
 
@@ -684,7 +725,10 @@ describe("Farmer offers and server-priced order snapshots", () => {
       .set("Authorization", `Bearer ${customerToken}`)
       .send({
         address: { name: "Offer Customer", line1: "1 Market Road", city: "Gadag", phone: "555-0101" },
+        addressId: customerAddressId,
+        coordinates: CUSTOMER_COORDS,
         paymentMethod: "Cash on Delivery",
+        quoteVersion,
       });
     expect(order.status).toBe(201);
     expect(order.body.subtotal).toBe(300);

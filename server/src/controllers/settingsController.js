@@ -2,10 +2,15 @@ const Setting = require("../models/Setting");
 const { asyncHandler } = require("../utils/asyncHandler");
 const DEFAULT_SETTINGS = {
   deliveryCharge: 30,
-  expressDeliveryCharge: 4,
-  remoteAreaDeliveryCharge: 7,
+  expressDeliveryCharge: 60,
+  remoteAreaDeliveryCharge: 120,
+  maxRemoteDistanceKm: 50,
+  expressMaxKm: 10,
+  standardMaxKm: 5,
 };
 const DELIVERY_CHARGE_FIELDS = Object.keys(DEFAULT_SETTINGS);
+
+module.exports = { ...exports, DEFAULT_SETTINGS };
 
 exports.get = asyncHandler(async (req, res) => {
   const settings = await Setting.findOne();

@@ -119,6 +119,30 @@ export default function FarmerOrders() {
     return ownItems.length > 0;
   }), [orders, farmerId]);
 
+  const farmerShipmentKm = useMemo(() => {
+    if (!expandedOrder) return null;
+    const order = orders.find((o) => o._id === expandedOrder);
+    if (!order?.deliverySnapshot?.dispatchLocations) return null;
+    const ownShipment = order.deliverySnapshot.dispatchLocations.find((dl) => String(dl.farmerId) === String(farmerId));
+    return ownShipment?.distanceKm ?? null;
+  }, [orders, expandedOrder, farmerId]);
+
+  const farmerDispatchLat = useMemo(() => {
+    if (!expandedOrder) return null;
+    const order = orders.find((o) => o._id === expandedOrder);
+    if (!order?.deliverySnapshot?.dispatchLocations) return null;
+    const ownShipment = order.deliverySnapshot.dispatchLocations.find((dl) => String(dl.farmerId) === String(farmerId));
+    return ownShipment?.location?.lat ?? null;
+  }, [orders, expandedOrder, farmerId]);
+
+  const farmerDispatchLng = useMemo(() => {
+    if (!expandedOrder) return null;
+    const order = orders.find((o) => o._id === expandedOrder);
+    if (!order?.deliverySnapshot?.dispatchLocations) return null;
+    const ownShipment = order.deliverySnapshot.dispatchLocations.find((dl) => String(dl.farmerId) === String(farmerId));
+    return ownShipment?.location?.lng ?? null;
+  }, [orders, expandedOrder, farmerId]);
+
   return (
     <section className="space-y-4 pb-5 text-[13px] text-[#20312E]">
       <BackButton fallback="/farmer/dashboard" />
@@ -251,6 +275,43 @@ export default function FarmerOrders() {
                               </form>
                             )}
                           </div>
+                          {order.deliverySnapshot ? (
+                            <div className="mt-3 rounded-lg border border-[#DDE6E2] bg-[#F8FBF9] p-3">
+                              <h3 className="text-[10px] font-bold text-[#52615D] uppercase tracking-wide mb-2">Delivery & Shipment Information</h3>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[10px]">
+                                <div>
+                                  <p className="text-[#71817D] font-semibold mb-0.5">Customer Address</p>
+                                  <p className="text-[#344640]">{[order.deliverySnapshot.destinationAddress?.line1, order.deliverySnapshot.destinationAddress?.city].filter(Boolean).join(", ") || "—"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[#71817D] font-semibold mb-0.5">Shipment Distance</p>
+                                  <p className="text-[#344640]">{farmerShipmentKm != null ? farmerShipmentKm.toFixed(2) + " km" : "—"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[#71817D] font-semibold mb-0.5">Delivery Option</p>
+                                  <p className="text-[#344640]">{order.deliverySnapshot.option || "—"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[#71817D] font-semibold mb-0.5">Delivery Charge</p>
+                                  <p className="text-[#344640] font-semibold text-[#087449]">{order.deliverySnapshot.charge != null ? formatCurrency(order.deliverySnapshot.charge) : "₹0.00"}</p>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <p className="text-[#71817D] font-semibold mb-0.5">Dispatch Location</p>
+                                  <p className="text-[#344640]">{farmerDispatchLat != null && farmerDispatchLng != null ? farmerDispatchLat + ", " + farmerDispatchLng : "Not configured"}</p>
+                                </div>
+                              </div>
+                              {order.deliverySnapshot.destinationAddress?.phone && (
+                                <div className="mt-2 flex items-center gap-1 text-[9px] text-[#71817D]">
+                                  <span className="mr-1">📞</span>
+                                  {order.deliverySnapshot.destinationAddress.phone}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-lg border border-[#DDE6E2] bg-[#F8FBF9] p-3">
+                              <p className="text-[10px] text-[#71817D]">Delivery information unavailable for this order.</p>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     )}

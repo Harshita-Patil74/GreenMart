@@ -23,9 +23,10 @@ export function orderItemDiscount(item) {
 }
 
 export function orderItemPremiumDiscount(item) {
+  const audience = item?.offerSnapshot?.audience;
   const isPremiumExclusive = item?.offerSnapshot?.isPremiumExclusive === true ||
     item?.offerSnapshot?.isSubscriberExclusive === true ||
-    item?.offerSnapshot?.audience?.includes("premium") === true;
+    (Array.isArray(audience) ? audience.length === 1 && audience.includes("premium") : audience?.includes("premium") === true);
   if (isPremiumExclusive) return orderItemDiscount(item);
   const premium = Number(item?.offerSnapshot?.premiumDiscount);
   if (!Number.isFinite(premium) || premium <= 0) return 0;
@@ -33,10 +34,12 @@ export function orderItemPremiumDiscount(item) {
 }
 
 export function hasOrderItemDiscountBreakdown(item) {
-  return item?.offerSnapshot?.premiumDiscount != null ||
-    item?.offerSnapshot?.isPremiumExclusive === true ||
+  const audience = item?.offerSnapshot?.audience;
+  const isPremiumExclusive = item?.offerSnapshot?.isPremiumExclusive === true ||
     item?.offerSnapshot?.isSubscriberExclusive === true ||
-    item?.offerSnapshot?.audience?.includes("premium") === true;
+    (Array.isArray(audience) ? audience.length === 1 && audience.includes("premium") : audience?.includes("premium") === true);
+  return item?.offerSnapshot?.premiumDiscount != null ||
+    isPremiumExclusive;
 }
 
 export function orderItemRegularDiscount(item) {
@@ -64,7 +67,7 @@ export function orderTotals(order = {}) {
       ? money(Math.max(0, discount - premiumDiscount))
       : money(Math.max(0, Math.min(discount - premiumDiscount, Number(order.regularDiscount) || 0)))
     : null;
-  const deliveryCharge = order.deliveryCharge == null ? 0 : money(order.deliveryCharge);
+  const deliveryCharge = order.deliveryCharge == null ? null : money(order.deliveryCharge);
   const total = order.total == null
     ? money(Math.max(0, subtotal - discount + deliveryCharge))
     : money(order.total);

@@ -31,3 +31,7 @@ tools/
 
 # Private farmer document uploads
 /server/private/
+
+# Local MongoDB test database files
+server/mongodb-test-data/
+server/.mongodb-test-data/

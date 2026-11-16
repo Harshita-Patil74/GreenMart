@@ -5,6 +5,11 @@ const { io: ioClient } = require("socket.io-client");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const { MongoMemoryServer } = require("mongodb-memory-server");
+const path = require("path");
+const fs = require("fs");
+const Address = require("../src/models/Address");
+const Setting = require("../src/models/Setting");
+const { DEFAULT_SETTINGS } = require("../src/controllers/settingsController");
 const app = require("../src/app");
 const jwt = require("jsonwebtoken");
 const env = require("../src/config/env");
@@ -14,11 +19,31 @@ const FarmerProfile = require("../src/models/FarmerProfile");
 const Product = require("../src/models/Product");
 const Order = require("../src/models/Order");
 
+const TEST_DB_ROOT = path.resolve(__dirname, "..", ".mongodb-test-data");
+
 let mongod, server, io, socketClient, customerToken, farmerToken, orderId, productId, customerId, farmerId;
+let dbPath;
+let originalFetch;
+let customerAddressId;
+
+const CUSTOMER_COORDS = { lat: 15.5, lng: 75.7 };
+const FARMER_COORDS = { lat: 15.52, lng: 75.72 };
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
+  fs.mkdirSync(TEST_DB_ROOT, { recursive: true });
+  dbPath = fs.mkdtempSync(path.join(TEST_DB_ROOT, "socket-"));
+  mongod = await MongoMemoryServer.create({
+    instance: {
+      dbPath,
+      storageEngine: "wiredTiger",
+    },
+  });
   await mongoose.connect(mongod.getUri());
+
+  // Seed default delivery settings so order creation via the API succeeds
+  // on the fresh per-suite test database. Reuses the application's own
+  // DEFAULT_SETTINGS; never weakens delivery validation.
+  await Setting.updateOne({}, { $setOnInsert: DEFAULT_SETTINGS }, { upsert: true, setDefaultsOnInsert: true });
 
   // Create users
   const customer = await User.create({
@@ -36,10 +61,37 @@ beforeAll(async () => {
   await FarmerProfile.create({
     user: farmer._id,
     farmName: "Socket Farm",
+    location: FARMER_COORDS,
     certification: { verifiedByAdmin: true },
   });
   customerId = customer._id;
   farmerId = farmer._id;
+
+  const address = await Address.create({
+    user: customer._id,
+    name: "Socket Customer",
+    line1: "1 Test St",
+    city: "Gadag",
+    phone: "1234567890",
+    coordinates: CUSTOMER_COORDS,
+  });
+  customerAddressId = address._id;
+
+  // Deterministic OSRM mock (~2.5 km, within the 5 km standard tier).
+  // Non-OSRM URLs are passed through to the real fetch (with init options)
+  // so the test's own API requests still work.
+  originalFetch = global.fetch;
+  global.fetch = jest.fn(async (url, init) => {
+    const u = String(url);
+    if (u.includes("/route/v1/driving/")) {
+      const m = u.match(/route\/v1\/driving\/([\d.-]+,[\d.-]+);([\d.-]+,[\d.-]+)/);
+      if (!m) {
+        return { ok: false, status: 400, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ routes: [{ distance: 2500 }] }) };
+    }
+    return originalFetch(url, init);
+  });
 
   // Generate JWT tokens
   customerToken = jwt.sign({ id: customerId, role: "customer" }, env.jwtSecret, { expiresIn: "7d" });
@@ -92,11 +144,29 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  global.fetch = originalFetch;
   if (socketClient) socketClient.disconnect();
   if (io) io.close();
   if (server) server.close();
-  await mongoose.disconnect();
-  if (mongod) await mongod.stop();
+  let firstError;
+  try {
+    await mongoose.disconnect();
+    if (mongod) await mongod.stop();
+  } catch (error) {
+    firstError = error;
+  } finally {
+    // Clean up only the directory created by this MongoMemoryServer instance.
+    if (dbPath && fs.existsSync(dbPath)) {
+      try {
+        fs.rmSync(dbPath, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup; never mask stop/disconnect errors.
+      }
+    }
+    mongod = undefined;
+    dbPath = undefined;
+  }
+  if (firstError) throw firstError;
 });
 
 function connectSocket(token) {
@@ -185,6 +255,18 @@ describe("Socket.io real-time updates", () => {
       body: JSON.stringify({ productId, quantity: 1 }),
     });
 
+    // Get a current delivery quote, then place the order with its quoteVersion.
+    const quoteRes = await fetch(`http://localhost:${server.address().port}/api/orders/quote`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${customerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ addressId: customerAddressId }),
+    });
+    const quoteBody = await quoteRes.json();
+    const quoteVersion = quoteBody.quoteVersion;
+
     // Create a new order via API as customer
     const res = await fetch(`http://localhost:${server.address().port}/api/orders`, {
       method: "POST",
@@ -194,8 +276,10 @@ describe("Socket.io real-time updates", () => {
       },
       body: JSON.stringify({
         address: { name: "Socket Customer", line1: "2 Test St", city: "Gadag", phone: "1234567890" },
-        coordinates: { lat: 15.5, lng: 75.7 },
+        addressId: customerAddressId,
+        coordinates: CUSTOMER_COORDS,
         paymentMethod: "UPI",
+        quoteVersion,
       }),
     });
     expect(res.status).toBe(201);

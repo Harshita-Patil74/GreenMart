@@ -1,6 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import cartApi from "../../api/cartApi";
-import settingsApi from "../../api/settingsApi";
 
 const unwrapCart = (data) => ({
   items: Array.isArray(data) ? data : data?.items || [],
@@ -27,23 +26,23 @@ const snapshotItems = (items) => (items || []).map((item) => ({
 const ensurePending = (state) => { if (!state.itemPending) state.itemPending = {}; };
 const ensureSeq = (state) => { if (!state.updateSequence) state.updateSequence = {}; };
 
-export const fetchDeliveryCharge = createAsyncThunk("cart/fetchDeliveryCharge", async (_, { rejectWithValue }) => {
-  try {
-    const { data } = await settingsApi.get();
-    const charge = Number(data?.deliveryCharge);
-    if (!Number.isFinite(charge) || charge < 0) throw new Error("Delivery charge is unavailable.");
-    return charge;
-  } catch (error) {
-    return rejectWithValue(error);
-  }
-}, {
-  condition: (_, { getState }) => !getState().cart.deliveryLoading,
-});
-
 export const fetchCart = createAsyncThunk("cart/fetch", async (_, { rejectWithValue }) => {
   try {
     const { data } = await cartApi.get();
     return unwrapCart(data);
+  } catch (error) {
+    return rejectWithValue(error);
+  }
+}, {
+  condition: (_, { getState }) => !getState().cart.loading && (!getState().cart.loaded || Boolean(getState().cart.error)),
+});
+
+export const fetchDeliveryCharge = createAsyncThunk("cart/fetchDeliveryCharge", async (_, { getState, rejectWithValue }) => {
+  try {
+    const { data } = await cartApi.get();
+    const charge = data?.deliveryCharge == null ? null : Number(data.deliveryCharge);
+    if (!Number.isFinite(charge)) return { deliveryCharge: null };
+    return { deliveryCharge: charge };
   } catch (error) {
     return rejectWithValue(error);
   }
@@ -105,7 +104,7 @@ export const removeItem = createAsyncThunk("cart/removeItem", async (productId, 
 
 const slice = createSlice({
   name: "cart",
-  initialState: { items: [], deliveryCharge: null, totals: null, deliveryLoading: false, deliveryError: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
+  initialState: { items: [], deliveryCharge: null, totals: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
   reducers: {
     setCart: (state, action) => {
       const cart = unwrapCart(action.payload);
@@ -148,9 +147,6 @@ const slice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchDeliveryCharge.pending, (state) => { state.deliveryLoading = true; state.deliveryError = null; })
-      .addCase(fetchDeliveryCharge.fulfilled, (state, action) => { state.deliveryLoading = false; state.deliveryCharge = action.payload; })
-      .addCase(fetchDeliveryCharge.rejected, (state, action) => { state.deliveryLoading = false; state.deliveryError = action.payload?.message || "Couldn't load the delivery charge."; })
       .addCase(fetchCart.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchCart.fulfilled, (state, action) => {
         state.loading = false;
@@ -163,6 +159,13 @@ const slice = createSlice({
         state.loading = false;
         state.loaded = true;
         state.error = action.payload?.message || "Couldn't load your cart.";
+      })
+      .addCase(fetchDeliveryCharge.pending, (state) => { state.error = null; })
+      .addCase(fetchDeliveryCharge.fulfilled, (state, action) => {
+        if (action.payload.deliveryCharge !== null) state.deliveryCharge = action.payload.deliveryCharge;
+      })
+      .addCase(fetchDeliveryCharge.rejected, (state, action) => {
+        state.error = action.payload?.message || "Couldn't fetch delivery charge.";
       })
       .addCase(addItem.pending, (state) => { ensurePending(state); state.itemPending.addItem = true; state.error = null; })
       .addCase(addItem.fulfilled, (state, action) => {

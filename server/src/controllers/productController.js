@@ -218,6 +218,10 @@ exports.storefrontOffers = asyncHandler(async (req, res) => {
     const isPremiumOffer = offer.audience?.includes("premium") === true && !offer.audience?.includes("public");
     const isPublicOffer = offer.audience?.includes("public") === true;
 
+    // Premium-exclusive offers are restricted to eligible Premium subscribers;
+    // they must not appear in the public storefront offers feed for others.
+    if (isPremiumOffer && !isPremium) return [];
+
     return [{
       ...offer.toObject(),
       product: product.toObject(),

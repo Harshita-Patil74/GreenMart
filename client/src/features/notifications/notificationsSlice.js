@@ -21,7 +21,7 @@ export const fetchUnreadCount = createAsyncThunk("notifications/fetchUnread", as
 
 const s = createSlice({
   name: "notifications",
-  initialState: { items: [], unread: 0, loading: false, error: null, pagination: null },
+  initialState: { items: [], unread: 0, loading: false, error: null, pagination: null, fetchingPage: null },
   reducers: {
     setNotifications: (st, a) => { st.items = a.payload; st.unread = a.payload.filter((n) => !n.isRead).length; },
     setUnread: (st, a) => { st.unread = a.payload; },
@@ -42,13 +42,21 @@ const s = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchNotifications.pending, (st) => { st.loading = true; st.error = null; })
+      .addCase(fetchNotifications.pending, (st, a) => {
+        st.loading = true;
+        st.error = null;
+        const requestedPage = a.meta.arg?.page;
+        st.fetchingPage = typeof requestedPage === "number" ? requestedPage : null;
+      })
       .addCase(fetchNotifications.fulfilled, (st, a) => {
         st.loading = false;
         const payload = a.payload || [];
         if (payload && payload.items) {
-          st.items = payload.items;
-          st.pagination = { total: payload.total, page: payload.page, pages: payload.pages, limit: payload.limit };
+          const responsePage = typeof payload.page === "number" ? payload.page : 1;
+          if (st.fetchingPage == null || responsePage === st.fetchingPage) {
+            st.items = payload.items;
+            st.pagination = { total: payload.total, page: payload.page, pages: payload.pages, limit: payload.limit };
+          }
         } else {
           st.items = Array.isArray(payload) ? payload : [];
           st.pagination = null;

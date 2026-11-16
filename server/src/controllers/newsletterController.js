@@ -15,6 +15,7 @@ const { sendNewsletterEmail, isConfigured, getConfigError } = require("../servic
 const { sendMockEmail } = require("../services/mockNewsletterEmailService");
 const { generateToken, verifyToken } = require("../utils/unsubscribeToken");
 const { money, roundPercent, calculateOffer, getEffectiveStatus } = require("../services/offerService");
+const { isPremiumCustomer, isPremiumAudience } = require("../services/premiumService");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -872,26 +873,13 @@ exports.markNewsletterRead = asyncHandler(async (req, res) => {
 
 exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
   if (!req.user || req.user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
-  const email = String(req.user.email || "").trim().toLowerCase();
 
   // Require an active paid premium subscription (not just free newsletter signup).
-  const subscription = await NewsletterSubscription.findOne({ user: req.user._id }).sort({ createdAt: -1 });
-  const now = new Date();
-  const user = await User.findById(req.user._id).select("status email");
-  let newsletter = null;
-  if (user?.email) newsletter = await Newsletter.findOne({ email: String(user.email).toLowerCase() });
-  const hasActivePaidSubscription = Boolean(
-    subscription &&
-    subscription.status === "active" &&
-    subscription.endDate &&
-    now <= subscription.endDate &&
-    (!user?.status || user.status === "active") &&
-    newsletter && newsletter.isActive
-  );
-
-  if (!hasActivePaidSubscription) {
+  const eligible = await isPremiumCustomer(req.user._id);
+  if (!eligible) {
     return res.json({ items: [], subscribed: false, message: "Active premium subscription required." });
   }
+  const now = new Date();
   const offers = await Offer.find({
     status: "Active",
     isActive: { $ne: false },
@@ -956,7 +944,7 @@ exports.customerExclusiveOffers = asyncHandler(async (req, res) => {
       title: offer.title,
       description: offer.description,
       type: offer.type,
-      isPremiumExclusive: Boolean(offer.audience?.includes("premium") || offer.exclusiveDiscountValue > 0),
+      isPremiumExclusive: Boolean(isPremiumAudience(offer.audience) || offer.exclusiveDiscountValue > 0),
       discountType: offer.discountType,
       discountValue: offer.discountValue,
       minimumQuantity: offer.minimumQuantity,

@@ -1,5 +1,5 @@
 import React from "react";
-import { Package } from "lucide-react";
+import { Package, Truck, MapPin } from "lucide-react";
 import getImageUrl from "../../utils/imageUrl";
 import {
   formatINR,
@@ -35,15 +35,20 @@ export default function OrderSummary({
   premiumDiscount,
   total = 0,
   deliveryReady = true,
+  deliveryLoading = false,
+  deliveryPending = false,
   items = [],
   showItems = false,
   buttonLabel = "Proceed to Checkout",
   onAction,
   loading = false,
   disabled = false,
+  distanceKm,
+  deliveryOption,
+  deliveryOptions = [],
 }) {
-  const deliveryDisplay = deliveryReady ? formatINR(delivery) : "—";
-  const totalDisplay = deliveryReady ? formatINR(total) : "—";
+  const deliveryDisplay = deliveryLoading ? "Calculating..." : deliveryPending ? "Calculated at checkout" : deliveryReady && delivery != null ? formatINR(delivery) : "To be calculated";
+  const totalDisplay = deliveryLoading ? "Calculating..." : deliveryPending ? "—" : deliveryReady ? formatINR(total) : "—";
   const savings = Number(discount) || 0;
   const itemPremiumSavings = money(items.reduce((sum, item) => sum + itemPremiumDiscount(item), 0));
   const premiumSavings = premiumDiscount == null
@@ -52,6 +57,7 @@ export default function OrderSummary({
   const regularSavings = regularDiscount == null
     ? money(Math.max(0, savings - premiumSavings))
     : money(Math.max(0, Math.min(savings - premiumSavings, Number(regularDiscount) || 0)));
+  const selectedOption = deliveryOptions.find((o) => o.option === deliveryOption);
 
   return (
     <aside className="space-y-4 rounded-[14px] border border-gray-100 bg-white p-4 shadow-card sm:p-5 lg:sticky lg:top-24">
@@ -97,12 +103,26 @@ export default function OrderSummary({
         </div>
       )}
 
+      {distanceKm != null && (
+        <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
+          <span><MapPin className="h-3 w-3 mr-1" />Delivery distance</span>
+          <span>{distanceKm.toFixed(2)} km</span>
+        </div>
+      )}
+
+      {deliveryOption && selectedOption && (
+        <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
+          <span><Truck className="h-3 w-3 mr-1" />Delivery option</span>
+          <span className="font-semibold text-gray-900">{selectedOption.label}</span>
+        </div>
+      )}
+
       <div className="space-y-2.5">
         <SummaryRow label="Original Product Subtotal" value={formatINR(subtotal)} />
         <SummaryRow label="Regular Offer Savings" value={`− ${formatINR(regularSavings)}`} tone={regularSavings > 0 ? "savings" : "muted"} />
         <SummaryRow label="Exclusive Subscriber Savings" value={`− ${formatINR(premiumSavings)}`} tone={premiumSavings > 0 ? "savings" : "muted"} />
         <SummaryRow label="Total Discount" value={savings > 0 ? `− ${formatINR(savings)}` : formatINR(0)} tone={savings > 0 ? "savings" : "muted"} strong={savings > 0} />
-        <SummaryRow label="Delivery Charge" value={deliveryDisplay} />
+        <SummaryRow label={delivery == null ? "Delivery Charge" : "Delivery Charge"} value={deliveryDisplay} />
       </div>
 
       <hr className="border-gray-100" />

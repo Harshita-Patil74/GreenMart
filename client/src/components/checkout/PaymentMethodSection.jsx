@@ -200,6 +200,7 @@ export default function PaymentMethodSection({
   onPlaceOrder,
   placingOrder = false,
   orderButtonDisabled = false,
+  allServiceable = true,
 }) {
   const uid = useId().replace(/:/g, "");
   const [fieldErrors, setFieldErrors] = useState({});
@@ -285,10 +286,10 @@ export default function PaymentMethodSection({
     if (fieldErrors[key]) clearFieldError(key);
   };
 
-  const onlineDisabled = paymentConfirmed || paymentProcessing;
+  const onlineDisabled = paymentConfirmed || paymentProcessing || !allServiceable;
   const upiDisabled = !upiValid || onlineDisabled;
   const cardDisabled = !cardNumberValid || !expiryValid || !cvvValid || onlineDisabled;
-  const codDisabled = orderButtonDisabled || placingOrder;
+  const codDisabled = orderButtonDisabled || placingOrder || !allServiceable;
 
   return (
     <section
@@ -308,7 +309,14 @@ export default function PaymentMethodSection({
         </span>
       </div>
 
-      <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3 sm:items-stretch">
+      {!allServiceable && (
+        <div className="mb-3 rounded-lg border border-red-100 bg-red-50 p-3.5">
+          <p className="text-xs text-red-700">Delivery is not available for products supplied by one or more farmers because the delivery address is outside our current service area.</p>
+          <p className="mt-1 text-[10px] text-gray-600">UPI, card, and COD are disabled until you change your delivery address or remove the affected products.</p>
+        </div>
+      )}
+
+      <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 sm:items-stretch">
         {PAYMENT_OPTIONS.map((option) => (
           <PaymentOptionCard
             key={option.id}
@@ -350,12 +358,14 @@ export default function PaymentMethodSection({
               />
             </Field>
             <PayButton loading={paymentProcessing} disabled={upiDisabled} onClick={handleUpiPay}>
-              {paymentProcessing ? "Processing…" : paymentConfirmed ? "Payment completed" : "Pay via UPI"}
+              {paymentProcessing ? "Processing…" : paymentConfirmed && allServiceable ? "Payment completed" : "Pay via UPI"}
             </PayButton>
-            <PaymentFeedback confirmed={paymentConfirmed} failed={paymentFailed} methodLabel="UPI" />
-            <SimulationNote>
-              This is a simulated payment — no real money will be deducted.
-            </SimulationNote>
+            {allServiceable && <PaymentFeedback confirmed={paymentConfirmed} failed={paymentFailed} methodLabel="UPI" />}
+            {allServiceable && (
+              <SimulationNote>
+                This is a simulated payment — no real money will be deducted.
+              </SimulationNote>
+            )}
           </Panel>
         )}
 
@@ -429,12 +439,14 @@ export default function PaymentMethodSection({
               </Field>
             </div>
             <PayButton loading={paymentProcessing} disabled={cardDisabled} onClick={handleCardPay}>
-              {paymentProcessing ? "Processing…" : paymentConfirmed ? "Payment completed" : "Pay via Card"}
+              {paymentProcessing ? "Processing…" : paymentConfirmed && allServiceable ? "Payment completed" : "Pay via Card"}
             </PayButton>
-            <PaymentFeedback confirmed={paymentConfirmed} failed={paymentFailed} methodLabel="Card" />
-            <SimulationNote>
-              This is a simulated payment — no real money will be deducted. Do not enter a real card PIN.
-            </SimulationNote>
+            {allServiceable && <PaymentFeedback confirmed={paymentConfirmed} failed={paymentFailed} methodLabel="Card" />}
+            {allServiceable && (
+              <SimulationNote>
+                This is a simulated payment — no real money will be deducted. Do not enter a real card PIN.
+              </SimulationNote>
+            )}
           </Panel>
         )}
 
@@ -455,9 +467,6 @@ export default function PaymentMethodSection({
                 </li>
               ))}
             </ul>
-            <PayButton loading={placingOrder} disabled={codDisabled} onClick={handleCodPlaceOrder}>
-              {placingOrder ? "Processing…" : "Place COD Order"}
-            </PayButton>
             <p className="mt-2 text-center text-xs leading-4 text-[#6B7280]">
               You can review the final payable amount in the checkout summary before placing this order.
             </p>

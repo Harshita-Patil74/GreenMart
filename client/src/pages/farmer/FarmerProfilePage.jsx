@@ -13,7 +13,7 @@ import IndianPhoneInput from "../../components/common/IndianPhoneInput.jsx";
 import { formatIndianPhoneNumber, getIndianPhoneDigits, isValidIndianPhoneDigits } from "../../utils/indianPhone.js";
 import { formatDate } from "./farmerUtils";
 
-const tabs = ["Personal Information", "Farm Details", "Change Password"];
+const tabs = ["Personal Information", "Farm Details", "Dispatch Location", "Change Password"];
 
 function Field({ label, value, onChange, type = "text", disabled = false, required = false }) {
   return (
@@ -29,20 +29,22 @@ export default function FarmerProfilePage() {
   const { user } = useSelector((state) => state.auth);
   const userId = user?._id || user?.id;
   const [activeTab, setActiveTab] = useState(tabs[0]);
-  const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "", certificateName: "", certificateNumber: "", certificateDocument: null, verificationStatus: "", changeRequestInstructions: "" });
-  const [personal, setPersonal] = useState({ name: user?.name || "", email: user?.email || "", phone: getIndianPhoneDigits(user?.phone), avatar: user?.avatar || "" });
-  const [avatarFile, setAvatarFile] = useState(null);
-  const [farmPhotoFile, setFarmPhotoFile] = useState(null);
+const [farm, setFarm] = useState({ farmName: "", address: "", category: "", description: "", photo: "", certificateName: "", certificateNumber: "", certificateDocument: null, verificationStatus: "", changeRequestInstructions: "", location: null });
+const [personal, setPersonal] = useState({ name: user?.name || "", email: user?.email || "", phone: getIndianPhoneDigits(user?.phone), avatar: user?.avatar || "" });
+const [avatarFile, setAvatarFile] = useState(null);
+const [farmPhotoFile, setFarmPhotoFile] = useState(null);
 const [certificateFile, setCertificateFile] = useState(null);
-  const [avatarPreview, setAvatarPreview] = useState("");
-  const [farmPhotoPreview, setFarmPhotoPreview] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [savingAvatar, setSavingAvatar] = useState(false);
-  const [extended, setExtended] = useState({});
-  const [savingFarm, setSavingFarm] = useState(false);
-  const [editingPhoto, setEditingPhoto] = useState(false);
+const [avatarPreview, setAvatarPreview] = useState("");
+const [farmPhotoPreview, setFarmPhotoPreview] = useState("");
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
+const [saving, setSaving] = useState(false);
+const [savingAvatar, setSavingAvatar] = useState(false);
+const [extended, setExtended] = useState({});
+const [savingFarm, setSavingFarm] = useState(false);
+const [editingPhoto, setEditingPhoto] = useState(false);
+const [dispatchLocation, setDispatchLocation] = useState({ lat: "", lng: "", address: "" });
+const [savingDispatch, setSavingDispatch] = useState(false);
 
   useEffect(() => {
     setPersonal({ name: user?.name || "", email: user?.email || "", phone: getIndianPhoneDigits(user?.phone), avatar: user?.avatar || "" });
@@ -96,6 +98,12 @@ const [certificateFile, setCertificateFile] = useState(null);
           certificateDocument: data.certificateDocument || null,
           verificationStatus: data.verificationStatus || "",
           changeRequestInstructions: data.changeRequestInstructions || "",
+          location: data.location || null,
+        });
+        setDispatchLocation({
+          lat: data.location?.lat ?? "",
+          lng: data.location?.lng ?? "",
+          address: data.address || "",
         });
       }
     } catch (requestError) {
@@ -165,6 +173,35 @@ const [certificateFile, setCertificateFile] = useState(null);
       toast.error(requestError?.response?.data?.message || "Couldn't update farm details.");
     } finally {
       setSavingFarm(false);
+    }
+  };
+
+  const saveDispatchLocation = async (event) => {
+    event.preventDefault();
+    const lat = Number(dispatchLocation.lat);
+    const lng = Number(dispatchLocation.lng);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      toast.error("Enter a valid latitude (-90 to 90).");
+      return;
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      toast.error("Enter a valid longitude (-180 to 180).");
+      return;
+    }
+    if (!dispatchLocation.address.trim()) {
+      toast.error("Dispatch address is required.");
+      return;
+    }
+    setSavingDispatch(true);
+    try {
+      const { data } = await farmerApi.updateLocation({ lat, lng, address: dispatchLocation.address });
+      setFarm((current) => ({ ...current, location: data.location, address: data.address }));
+      setDispatchLocation({ lat: String(data.location.lat), lng: String(data.location.lng), address: data.address });
+      toast.success("Dispatch location saved.");
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || "Couldn't save dispatch location.");
+    } finally {
+      setSavingDispatch(false);
     }
   };
 
@@ -262,6 +299,33 @@ const [certificateFile, setCertificateFile] = useState(null);
               <button type="submit" disabled={savingFarm} className="h-8 w-full rounded-md bg-[#07814E] text-xs font-semibold text-white hover:bg-[#066B42] disabled:opacity-60">{savingFarm ? "Saving…" : "Save Farm Details"}</button>
               <button type="button" onClick={async () => { try { await farmerApi.resubmitApplication(); toast.success("Application resubmitted."); loadProfile(); } catch (e) { toast.error("Resubmit failed."); } }} className="h-8 w-full rounded-md border border-[#07814E] text-xs font-semibold text-[#07814E] hover:bg-[#E8F5EE]">Resubmit Application</button>
             </form>
+          )}
+
+          {activeTab === "Dispatch Location" && (
+            <div className="max-w-xl rounded-lg border border-[#E7EEEC] bg-white p-5 shadow-[0_2px_8px_rgba(25,55,47,0.04)]">
+              <h2 className="text-xs font-semibold text-[#344640]">Dispatch Location</h2>
+              <p className="mt-2 text-xs leading-relaxed text-[#71817D]">Set your product dispatch coordinates so customers can see accurate delivery distances and fees.</p>
+              {farm.location && (
+                <div className="mt-3 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                  <p className="font-semibold">Dispatch location configured</p>
+                  <p className="mt-1 text-[10px]">Latitude: {farm.location.lat} · Longitude: {farm.location.lng}</p>
+                </div>
+              )}
+              {!farm.location && (
+                <div className="mt-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <p className="font-semibold">Dispatch location not set</p>
+                  <p className="mt-1 text-[10px]">Your products will not have delivery distance calculated until you configure dispatch coordinates.</p>
+                </div>
+              )}
+              <form onSubmit={saveDispatchLocation} className="mt-4 space-y-3">
+                <Field label="Dispatch Address" value={dispatchLocation.address} onChange={(event) => setDispatchLocation({ ...dispatchLocation, address: event.target.value })} required />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label="Latitude" value={dispatchLocation.lat} onChange={(event) => setDispatchLocation({ ...dispatchLocation, lat: event.target.value })} type="number" step="0.000001" required />
+                  <Field label="Longitude" value={dispatchLocation.lng} onChange={(event) => setDispatchLocation({ ...dispatchLocation, lng: event.target.value })} type="number" step="0.000001" required />
+                </div>
+                <button type="submit" disabled={savingDispatch} className="h-8 rounded-md bg-[#07814E] text-xs font-semibold text-white hover:bg-[#066B42] disabled:opacity-60">{savingDispatch ? "Saving…" : "Save Dispatch Location"}</button>
+              </form>
+            </div>
           )}
 
           {activeTab === "Change Password" && (

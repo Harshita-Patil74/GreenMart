@@ -104,9 +104,50 @@ export default function OrderDetails() {
           ) : totals.discount > 0 ? (
             <div className="flex justify-between text-emerald-700"><span>Discount</span><span>− {formatINR(totals.discount)}</span></div>
           ) : null}
-          <div className="flex justify-between"><span>Delivery Charge</span><span>{formatINR(totals.deliveryCharge)}</span></div>
+          {order.deliveryCharge != null && (
+            <div className="flex justify-between"><span>Delivery Charge</span><span>{formatINR(totals.deliveryCharge)}</span></div>
+          )}
           <div className="flex justify-between border-t border-gray-100 pt-2 font-bold"><span>Final Payable Amount</span><span>{formatINR(totals.total)}</span></div>
         </div>
+        {order.deliverySnapshot ? (
+          <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
+            <h3 className="text-xs font-semibold text-gray-700 mb-2">Delivery Information</h3>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-gray-600"><span>Delivery Option</span><span className="font-medium text-gray-900">{order.deliverySnapshot.option || "—"}</span></div>
+              {order.deliverySnapshot.distanceKm != null && <div className="flex justify-between text-gray-600"><span>Distance</span><span className="font-medium text-gray-900">{order.deliverySnapshot.distanceKm.toFixed(2)} km</span></div>}
+              <div className="flex justify-between text-gray-600"><span>Delivery Charge</span><span className="font-medium text-gray-900">{order.deliverySnapshot?.charge != null ? formatINR(order.deliverySnapshot.charge) : (order.deliveryCharge != null ? formatINR(order.deliveryCharge) : "—")}</span></div>
+              {order.deliverySnapshot.dispatchLocations && order.deliverySnapshot.dispatchLocations.length > 0 ? (
+                <div>
+                  <p className="text-[10px] text-gray-500 mb-1">Dispatch Locations</p>
+                  {order.deliverySnapshot.dispatchLocations.map((dl, i) => (
+                    <div key={i} className="flex justify-between text-[10px] text-gray-600 mb-1">
+                      <span className="flex flex-col gap-0.5">
+                        <span className="font-medium text-gray-900">{dl.farmerName || `Shipment ${i + 1}`}</span>
+                        {dl.farmName && <span className="text-[9px] text-gray-500">{dl.farmName}</span>}
+                        {dl.farmAddress && <span className="text-[9px] text-gray-500">{dl.farmAddress}</span>}
+                        {dl.location?.lat != null && dl.location?.lng != null && <span className="text-[9px] text-gray-500">{dl.location.lat}, {dl.location.lng}</span>}
+                      </span>
+                      <span className="font-medium">{dl.distanceKm != null ? dl.distanceKm.toFixed(2) + " km" : "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-[9px] text-[#71817D]">No dispatch locations recorded.</p>
+              )}
+              {order.deliverySnapshot.settingsSnapshot && (
+                <div className="mt-1 pt-1 border-t border-gray-50">
+                  <p className="text-[10px] text-gray-500">Settings at time of order</p>
+                  <div className="flex justify-between text-[10px] text-gray-600"><span>Max Remote Distance</span><span>{order.deliverySnapshot.settingsSnapshot.maxRemoteDistanceKm} km</span></div>
+                  <div className="flex justify-between text-[10px] text-gray-600"><span>Express Max Distance</span><span>{order.deliverySnapshot.settingsSnapshot.expressMaxKm} km</span></div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
+            <p className="text-[10px] text-[#71817D]">Delivery information unavailable for this order.</p>
+          </div>
+        )}
       </div>
       <div className="text-sm text-muted">{order.address?.line1}, {order.address?.city}</div>
       <Button className="mt-3" onClick={() => navigate(`/track-order/${id}`)}>Track Order</Button>

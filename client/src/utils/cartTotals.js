@@ -38,21 +38,25 @@ export function itemDiscount(item) {
   return money(Math.min(applied, gross));
 }
 
-export function itemPremiumDiscount(item) {
-  const isPremiumExclusive = item?.offer?.audience?.includes("premium") === true ||
-    item?.offer?.isPremiumExclusive === true ||
-    item?.offer?.isSubscriberExclusive === true ||
-    item?.offerSnapshot?.audience?.includes("premium") === true ||
-    item?.offerSnapshot?.isPremiumExclusive === true ||
-    item?.offerSnapshot?.isSubscriberExclusive === true;
-  if (isPremiumExclusive) return itemDiscount(item);
+export function itemPremiumDiscount(item, isPremium = false) {
+  if (!isPremium) return 0;
+  const isPremiumExclusive = item?.offer?.audience
+    ? item.offer.audience.length === 1 && item.offer.audience.includes("premium")
+    : item?.offer?.isPremiumExclusive === true ||
+      item?.offer?.isSubscriberExclusive === true;
+  const snapshotAudience = item?.offerSnapshot?.audience;
+  const isSnapshotPremiumExclusive = snapshotAudience
+    ? snapshotAudience.length === 1 && snapshotAudience.includes("premium")
+    : item?.offerSnapshot?.isPremiumExclusive === true ||
+      item?.offerSnapshot?.isSubscriberExclusive === true;
+  if (isPremiumExclusive || isSnapshotPremiumExclusive) return itemDiscount(item);
   const premium = Number(item?.offer?.premiumDiscount ?? item?.offerSnapshot?.premiumDiscount ?? 0);
   if (!Number.isFinite(premium) || premium <= 0) return 0;
   return money(Math.min(premium, itemDiscount(item)));
 }
 
-export function itemRegularDiscount(item) {
-  return money(Math.max(0, itemDiscount(item) - itemPremiumDiscount(item)));
+export function itemRegularDiscount(item, isPremium = false) {
+  return money(Math.max(0, itemDiscount(item) - itemPremiumDiscount(item, isPremium)));
 }
 
 export function itemLineTotal(item) {
@@ -65,16 +69,16 @@ export function itemLineTotal(item) {
   return money(Math.max(0, gross - itemDiscount(item)));
 }
 
-export function calculateCartTotals(items = [], deliveryCharge = 0) {
+export function calculateCartTotals(items = [], deliveryCharge = null, isPremium = false) {
   const list = Array.isArray(items) ? items : [];
   const subtotal = money(list.reduce((sum, item) => sum + itemLineGross(item), 0));
   const discount = money(Math.min(subtotal, list.reduce((sum, item) => sum + itemDiscount(item), 0)));
-  const premiumDiscount = money(Math.min(discount, list.reduce((sum, item) => sum + itemPremiumDiscount(item), 0)));
+  const premiumDiscount = money(Math.min(discount, list.reduce((sum, item) => sum + itemPremiumDiscount(item, isPremium), 0)));
   const regularDiscount = money(discount - premiumDiscount);
   const hasItems = subtotal > 0;
-  const charge = Number(deliveryCharge);
-  const deliveryReady = !hasItems || (deliveryCharge != null && Number.isFinite(charge) && charge >= 0);
-  const delivery = hasItems && deliveryReady ? money(charge) : 0;
-  const total = money(Math.max(0, subtotal - discount + delivery));
+  const charge = deliveryCharge == null ? null : Number(deliveryCharge);
+  const deliveryReady = charge != null && Number.isFinite(charge) && charge >= 0;
+  const delivery = hasItems && deliveryReady ? money(charge) : null;
+  const total = money(Math.max(0, subtotal - discount + (delivery || 0)));
   return { subtotal, regularDiscount, premiumDiscount, discount, deliveryCharge: delivery, total, deliveryReady };
 }

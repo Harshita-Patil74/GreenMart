@@ -26,6 +26,7 @@ const contact = require("./contactRoutes");
 const newsletter = require("./newsletterRoutes");
 const admin = require("./adminRoutes");
 const settings = require("./settingsRoutes");
+const delivery = require("./deliveryRoutes");
 const category = require("./categoryRoutes");
 const user = require("./userRoutes");
 
@@ -55,4 +56,5 @@ router.use("/admin/offers", require("./adminOfferRoutes"));
 router.use("/offers/customer", require("./customerOfferRoutes"));
 router.use("/admin", admin);
 router.use("/settings", settings);
+router.use("/delivery", delivery);
 module.exports = router;

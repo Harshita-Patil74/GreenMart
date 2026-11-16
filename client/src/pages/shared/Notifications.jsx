@@ -72,7 +72,12 @@ export default function Notifications() {
 
   const total = pagination?.total ?? filtered.length;
   const totalPages = pagination?.pages ?? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // The server already paginates (see notificationsSlice: fetchNotifications sends
+  // { category, page, limit } and returns items for that page plus pagination.meta).
+  // Do not re-slice the already-paginated items client-side, otherwise page 2+ would
+  // show an empty list ("You're all caught up") because items only holds the current
+  // server page.
+  const currentPageItems = filtered;
   const unreadCount = items.filter((n) => !n.isRead).length;
 
   if (error) return <ErrorState message={error} onRetry={load} />;
@@ -205,7 +210,7 @@ export default function Notifications() {
         )}
       </motion.div>
 
-      {total > PAGE_SIZE && (
+      {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 text-xs text-[#475852]">
           <span>Total Notifications: {total}</span>
           <div className="flex items-center gap-1">

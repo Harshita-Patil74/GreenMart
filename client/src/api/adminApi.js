@@ -16,4 +16,5 @@ export default {
   rejectFarmer: (id, reason) => api.patch(`/admin/farmers/${id}/reject`, { reason }),
   requestFarmerChanges: (id, instructions) => api.patch(`/admin/farmers/${id}/request-changes`, { instructions }),
   updateSettings: (data) => api.put("/settings", data),
+  updateUser: (id, data) => api.patch(`/admin/users/${id}`, data),
 };

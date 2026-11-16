@@ -2,6 +2,10 @@ const NewsletterSubscription = require("../models/NewsletterSubscription");
 const Newsletter = require("../models/Newsletter");
 const User = require("../models/User");
 
+function isPremiumAudience(audience) {
+  return Array.isArray(audience) && audience.length === 1 && audience.includes("premium");
+}
+
 async function isPremiumCustomer(userId) {
   if (!userId) return false;
   const user = await User.findById(userId).select("role status email");
@@ -9,6 +13,7 @@ async function isPremiumCustomer(userId) {
   const subscription = await NewsletterSubscription.findOne({ user: userId }).sort({ createdAt: -1 });
   const now = new Date();
   if (!subscription || subscription.status !== "active" || !subscription.endDate || now > subscription.endDate) return false;
+  if (!subscription.lastPaymentId) return false;
   const email = String(user.email || "").trim().toLowerCase();
   if (!email) return false;
   const newsletter = await Newsletter.findOne({ email });
@@ -16,4 +21,9 @@ async function isPremiumCustomer(userId) {
   return true;
 }
 
-module.exports = { isPremiumCustomer };
+async function getPremiumEligibility(userId) {
+  const eligible = await isPremiumCustomer(userId);
+  return { isPremium: eligible, eligible };
+}
+
+module.exports = { isPremiumCustomer, getPremiumEligibility, isPremiumAudience };

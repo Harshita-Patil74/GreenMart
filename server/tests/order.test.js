@@ -2,14 +2,25 @@
 const request = require("supertest");
 const { app } = require("./setup");
 const { connectDB, disconnectDB } = require("./db");
+const Address = require("../src/models/Address");
 
 const User = require("../src/models/User");
 const FarmerProfile = require("../src/models/FarmerProfile");
 const Product = require("../src/models/Product");
 const Order = require("../src/models/Order");
 
+const CUSTOMER_COORDS = { lat: 15.4, lng: 75.6 };
+const FARMER_COORDS = { lat: 15.42, lng: 75.62 };
+const STANDARD_DISTANCE_KM = 2.5;
+
+let originalFetch;
+let customerAddressId;
+
 beforeAll(async () => await connectDB());
-afterAll(async () => await disconnectDB());
+afterAll(async () => {
+  global.fetch = originalFetch;
+  await disconnectDB();
+});
 
 let customerToken, farmerToken, customerId, farmerId, productId, orderId;
 let otherCustomerToken;
@@ -37,10 +48,37 @@ beforeAll(async () => {
   await FarmerProfile.create({
     user: farmer._id,
     farmName: "Ramesh Farm",
+    location: FARMER_COORDS,
     certification: { verifiedByAdmin: true },
   });
   customerId = customer._id;
   farmerId = farmer._id;
+
+  const address = await Address.create({
+    user: customer._id,
+    name: "Harshita Patil",
+    line1: "123 Farm Road",
+    city: "Gadag",
+    phone: "9876543210",
+    coordinates: CUSTOMER_COORDS,
+  });
+  customerAddressId = address._id;
+
+  // Deterministic OSRM mock: farmer dispatch is ~2.5 km from the customer
+  // (within the 5 km standard tier), so delivery is serviceable with charge 30.
+  // Non-OSRM URLs pass through to the real fetch (with init options).
+  originalFetch = global.fetch;
+  global.fetch = jest.fn(async (url, init) => {
+    const u = String(url);
+    if (u.includes("/route/v1/driving/")) {
+      const m = u.match(/route\/v1\/driving\/([\d.-]+,[\d.-]+);([\d.-]+,[\d.-]+)/);
+      if (!m) {
+        return { ok: false, status: 400, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ routes: [{ distance: STANDARD_DISTANCE_KM * 1000 }] }) };
+    }
+    return originalFetch(url, init);
+  });
 
   // Login as customer
   const cRes = await request(app)
@@ -84,18 +122,22 @@ describe("End-to-end order workflow", () => {
   it("customer creates an order", async () => {
     const quote = await request(app)
       .post("/api/orders/quote")
-      .set("Authorization", `Bearer ${customerToken}`
+      .set("Authorization", `Bearer ${customerToken}`)
+      .send({ addressId: customerAddressId });
     expect(quote.status).toBe(200);
     expect(quote.body).toMatchObject({ subtotal: 80, deliveryCharge: 30, total: 110 });
+    const quoteVersion = quote.body.quoteVersion;
 
     const mismatchedPayment = await request(app)
       .post("/api/orders")
-      .set("Authorization", `Bearer ${customerToken}`
+      .set("Authorization", `Bearer ${customerToken}`)
       .send({
         address: { name: "Harshita Patil", line1: "123 Farm Road", city: "Gadag", phone: "9876543210" },
+        coordinates: CUSTOMER_COORDS,
         paymentMethod: "UPI",
         paymentConfirmed: true,
         paymentAmount: 0,
+        quoteVersion,
       });
     expect(mismatchedPayment.status).toBe(409);
 
@@ -104,7 +146,8 @@ describe("End-to-end order workflow", () => {
       .set("Authorization", `Bearer ${customerToken}`)
       .send({
         address: { name: "Harshita Patil", line1: "123 Farm Road", city: "Gadag", phone: "9876543210" },
-        coordinates: { lat: 15.4, lng: 75.6 },
+        addressId: customerAddressId,
+        coordinates: CUSTOMER_COORDS,
         paymentMethod: "UPI",
         items: [{ product: productId, quantity: 500, price: 0.01 }],
         subtotal: 0.01,
@@ -112,6 +155,7 @@ describe("End-to-end order workflow", () => {
         deliveryCharge: 0,
         total: 0,
         paymentConfirmed: false,
+        quoteVersion,
       });
     expect(res.status).toBe(201);
     expect(res.body.orderNumber).toBeDefined();
@@ -170,7 +214,7 @@ describe("End-to-end order workflow", () => {
   it("customer cannot update order status (forbidden)", async () => {
     const res = await request(app)
       .patch(`/api/orders/${orderId}/status`)
-      .set("Authorization", `Bearer ${farmerToken}`)
+      .set("Authorization", `Bearer ${customerToken}`)
       .send({ status: "Delivered" });
     expect(res.status).toBe(403);
   });
@@ -308,13 +352,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const res = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(res.status).toBe(201);
       const notifRes = await request(app)
@@ -331,13 +382,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const res = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(res.status).toBe(201);
       const notifRes = await request(app)
@@ -354,13 +412,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const orderRes = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(orderRes.status).toBe(201);
       const orderId2 = orderRes.body._id;
@@ -384,13 +449,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const orderRes = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(orderRes.status).toBe(201);
       const orderId2 = orderRes.body._id;
@@ -413,13 +485,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const orderRes = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(orderRes.status).toBe(201);
       const orderId2 = orderRes.body._id;
@@ -451,13 +530,20 @@ describe("End-to-end order workflow", () => {
         .post("/api/cart/items")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({ productId, quantity: 1 });
+      const quoteRes = await request(app)
+        .post("/api/orders/quote")
+        .set("Authorization", `Bearer ${customerToken}`)
+        .send({ addressId: customerAddressId });
+      const quoteVersion = quoteRes.body.quoteVersion;
       const res1 = await request(app)
         .post("/api/orders")
         .set("Authorization", `Bearer ${customerToken}`)
         .send({
           address: { name: "Test Customer", line1: "1 Test St", city: "Gadag", phone: "1234567890" },
-          coordinates: { lat: 15.4, lng: 75.6 },
+          addressId: customerAddressId,
+          coordinates: CUSTOMER_COORDS,
           paymentMethod: "UPI",
+          quoteVersion,
         });
       expect(res1.status).toBe(201);
       const orderId2 = res1.body._id;

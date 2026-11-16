@@ -5,6 +5,7 @@ const User = require("../models/User");
 const { asyncHandler } = require("../utils/asyncHandler");
 const { haversine } = require("../utils/haversine");
 const { createNotification } = require("../services/notificationService");
+const { clearDeliveryCache } = require("../services/deliveryService");
 
 exports.list = asyncHandler(async (req,res) => {
   const { page=1, limit=10 } = req.query;
@@ -31,7 +32,26 @@ exports.get = asyncHandler(async (req,res) => {
   res.json(p);
 });
 exports.updateLocation = asyncHandler(async (req,res) => {
-  const p = await FarmerProfile.findOneAndUpdate({ user: req.user._id }, { location: { lat: req.body.lat, lng: req.body.lng }, address: req.body.address }, { new: true, upsert: true });
+  const { lat, lng, address } = req.body;
+  const latitude = Number(lat);
+  const longitude = Number(lng);
+  const dispatchAddress = typeof address === "string" ? address.trim() : "";
+
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    return res.status(400).json({ message: "Latitude is required and must be between -90 and 90." });
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ message: "Longitude is required and must be between -180 and 180." });
+  }
+  if (!dispatchAddress) {
+    return res.status(400).json({ message: "Dispatch address is required and must match the saved coordinates." });
+  }
+  const p = await FarmerProfile.findOneAndUpdate(
+    { user: req.user._id },
+    { $set: { location: { lat: latitude, lng: longitude }, address: dispatchAddress }, $inc: { locationVersion: 1 } },
+    { new: true, upsert: true },
+  );
+  clearDeliveryCache();
   res.json(p);
 });
 exports.updateMe = asyncHandler(async (req,res) => {
