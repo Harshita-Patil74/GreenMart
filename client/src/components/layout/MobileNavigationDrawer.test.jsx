@@ -1,7 +1,9 @@
 import React from "react";
-import { screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { vi } from "vitest";
-import { renderWithStore } from "../../tests/testUtils.jsx";
+import { Provider } from "react-redux";
+import { MemoryRouter } from "react-router-dom";
+import { createStore, renderWithStore } from "../../tests/testUtils.jsx";
 import MobileNavigationDrawer from "./MobileNavigationDrawer.jsx";
 
 describe("MobileNavigationDrawer", () => {
@@ -127,5 +129,66 @@ describe("MobileNavigationDrawer", () => {
     fireEvent.click(closeButton);
 
     expect(onCloseMock).toHaveBeenCalledTimes(1);
+  });
+
+  function renderDrawerAt(path, preloadedState = {}) {
+    const store = createStore(preloadedState);
+    return render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={[path]}>
+          <MobileNavigationDrawer open onClose={() => {}} id="test-drawer" label="Test drawer" drawerRef={null} />
+        </MemoryRouter>
+      </Provider>
+    );
+  }
+
+  describe("active navigation highlighting", () => {
+    const authState = { auth: { user: { _id: "c-1", name: "Customer", role: "customer" }, token: "abc123" }, cart: { items: [] } };
+
+    it("highlights Offers but not Shop on /shop?offers=true", () => {
+      renderDrawerAt("/shop?offers=true", authState);
+
+      const shop = screen.getByRole("link", { name: "Shop" });
+      const offers = screen.getByRole("link", { name: "Offers" });
+      expect(offers).toHaveAttribute("aria-current", "page");
+      expect(shop).not.toHaveAttribute("aria-current", "page");
+      expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    });
+
+    it("highlights Shop but not Offers on /shop", () => {
+      renderDrawerAt("/shop", authState);
+
+      const shop = screen.getByRole("link", { name: "Shop" });
+      const offers = screen.getByRole("link", { name: "Offers" });
+      expect(shop).toHaveAttribute("aria-current", "page");
+      expect(offers).not.toHaveAttribute("aria-current", "page");
+      expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    });
+
+    it("highlights only Add Product on /farmer/products/new", () => {
+      renderDrawerAt("/farmer/products/new", {
+        auth: { user: { _id: "f-1", name: "Farmer", role: "farmer" }, token: "abc123" },
+        cart: { items: [] },
+      });
+
+      const addProduct = screen.getByRole("link", { name: "Add Product" });
+      const myProducts = screen.getByRole("link", { name: "My Products" });
+      expect(addProduct).toHaveAttribute("aria-current", "page");
+      expect(myProducts).not.toHaveAttribute("aria-current", "page");
+      expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    });
+
+    it("highlights only My Products on /farmer/products", () => {
+      renderDrawerAt("/farmer/products", {
+        auth: { user: { _id: "f-1", name: "Farmer", role: "farmer" }, token: "abc123" },
+        cart: { items: [] },
+      });
+
+      const addProduct = screen.getByRole("link", { name: "Add Product" });
+      const myProducts = screen.getByRole("link", { name: "My Products" });
+      expect(myProducts).toHaveAttribute("aria-current", "page");
+      expect(addProduct).not.toHaveAttribute("aria-current", "page");
+      expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    });
   });
 });

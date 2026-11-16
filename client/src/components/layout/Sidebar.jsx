@@ -23,7 +23,7 @@ export default function Sidebar() {
         type="button"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         onClick={toggleSidebar}
-        className="fixed top-4 left-4 z-50 h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        className="fixed top-4 left-4 z-50 h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-white hover:bg-white/10 hidden lg:flex focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
       >
         {collapsed ? (
           <ChevronRight className="h-5 w-5" />

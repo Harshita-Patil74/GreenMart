@@ -156,3 +156,61 @@ describe("Farmer delivery information", () => {
     expect(screen.queryByText("8.50 km")).not.toBeInTheDocument();
   });
 });
+
+describe("global update lock", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("disables every status action while any update is in flight", async () => {
+    const orderA = { ...order, _id: "order-a", orderNumber: "GM-A", status: "Order Placed" };
+    let resolveUpdate;
+    vi.spyOn(orderApi, "farmer").mockResolvedValue({ data: [orderA] });
+    const update = vi.spyOn(orderApi, "updateStatus").mockReturnValue(
+      new Promise((resolve) => { resolveUpdate = resolve; }),
+    );
+
+    renderOrders();
+
+    fireEvent.click(await screen.findByRole("button", { name: /View/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as Packed" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith("order-a", { status: "Packed", reason: "" }));
+
+    const packedButton = screen.getByRole("button", { name: "Mark as Packed" });
+    const cancelButton = screen.getByRole("button", { name: "Cancel Order" });
+    expect(packedButton).toBeDisabled();
+    expect(cancelButton).toBeDisabled();
+    expect(packedButton.querySelector("svg")).not.toBeNull();
+    expect(update).toHaveBeenCalledTimes(1);
+
+    resolveUpdate({ data: { ...orderA, status: "Packed" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Mark as Out for Delivery" })).not.toBeDisabled());
+    await waitFor(() => expect(screen.getAllByText("Packed")).toHaveLength(2));
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables failure-form controls while the delivery-failure update runs", async () => {
+    const failing = { ...order, _id: "order-fail", status: "Out for Delivery" };
+    let resolveUpdate;
+    vi.spyOn(orderApi, "farmer").mockResolvedValue({ data: [failing] });
+    const update = vi.spyOn(orderApi, "updateStatus").mockReturnValue(
+      new Promise((resolve) => { resolveUpdate = resolve; }),
+    );
+
+    renderOrders();
+
+    fireEvent.click(await screen.findByRole("button", { name: /View/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark as Delivery Failed" }));
+
+    const reason = screen.getByLabelText("Reason for failed delivery");
+    fireEvent.change(reason, { target: { value: "Customer unavailable" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm failure" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith("order-fail", { status: "Delivery Failed", reason: "Customer unavailable" }));
+
+    expect(screen.getByRole("button", { name: /Saving/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeDisabled();
+
+    resolveUpdate({ data: { ...failing, status: "Delivery Failed" } });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Dismiss" })).not.toBeInTheDocument());
+  });
+});

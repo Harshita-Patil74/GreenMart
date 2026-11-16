@@ -44,7 +44,7 @@ export default function FarmerOrders() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [expandedOrder, setExpandedOrder] = useState("");
-  const [updatingOrder, setUpdatingOrder] = useState("");
+  const [updatingAction, setUpdatingAction] = useState(""); // "orderId:status"
   const [failureOrder, setFailureOrder] = useState("");
   const [failureReason, setFailureReason] = useState("");
   const [statusError, setStatusError] = useState("");
@@ -56,7 +56,8 @@ export default function FarmerOrders() {
   }, [routedSearch]);
 
   const updateStatus = async (order, status, reason = "") => {
-    if (updatingOrder) return;
+    const actionKey = `${order._id}:${status}`;
+    if (updatingAction) return;
     const action = (nextActions[order.status] || []).find((item) => item.status === status);
     if (!action) return;
     if (action.confirm) {
@@ -67,7 +68,7 @@ export default function FarmerOrders() {
       setStatusError("Enter a reason for the failed delivery.");
       return;
     }
-    setUpdatingOrder(order._id);
+    setUpdatingAction(actionKey);
     setStatusError("");
     try {
       const { data } = await orderApi.updateStatus(order._id, { status, reason });
@@ -79,7 +80,7 @@ export default function FarmerOrders() {
       setStatusError(requestError?.message || "Couldn't update the order status.");
       showError("Update failed", requestError?.message || "Couldn't update the order status.");
     } finally {
-      setUpdatingOrder("");
+      setUpdatingAction("");
     }
   };
 
@@ -242,13 +243,13 @@ export default function FarmerOrders() {
                               <button
                                 key={action.status}
                                 type="button"
-                                disabled={Boolean(updatingOrder)}
+                                disabled={Boolean(updatingAction)}
                                 onClick={() => action.status === "Delivery Failed"
                                   ? (setFailureOrder(order._id), setStatusError(""))
                                   : updateStatus(order, action.status)}
                                 className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-3 py-1.5 text-[10px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${action.status === "Cancelled" ? "border border-red-200 text-red-700 hover:bg-red-50" : "bg-[#087449] text-white hover:bg-[#06653F]"}`}
                               >
-                                {updatingOrder === order._id && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+                                {updatingAction === `${order._id}:${action.status}` && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
                                 {action.label}
                               </button>
                             ))}
@@ -268,10 +269,10 @@ export default function FarmerOrders() {
                                     placeholder="Describe why delivery could not be completed"
                                   />
                                 </label>
-                                <button type="submit" disabled={Boolean(updatingOrder) || !failureReason.trim()} className="mt-4 min-h-8 rounded-md bg-red-700 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">
-                                  {updatingOrder === order._id ? "Saving…" : "Confirm failure"}
+                                <button type="submit" disabled={Boolean(updatingAction) || !failureReason.trim()} className="mt-4 min-h-8 rounded-md bg-red-700 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">
+                                  {updatingAction === `${order._id}:Delivery Failed` ? "Saving…" : "Confirm failure"}
                                 </button>
-                                <button type="button" disabled={Boolean(updatingOrder)} onClick={() => { setFailureOrder(""); setFailureReason(""); }} className="mt-4 min-h-8 rounded-md border px-3 py-1.5 text-[10px] text-gray-600 disabled:opacity-50">Dismiss</button>
+                                <button type="button" disabled={Boolean(updatingAction)} onClick={() => { setFailureOrder(""); setFailureReason(""); }} className="mt-4 min-h-8 rounded-md border px-3 py-1.5 text-[10px] text-gray-600 disabled:opacity-50">Dismiss</button>
                               </form>
                             )}
                           </div>

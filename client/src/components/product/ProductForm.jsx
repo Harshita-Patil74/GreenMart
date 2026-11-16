@@ -79,7 +79,13 @@ export default function ProductForm({ initial, onSubmit, isSubmitting = false })
     if (!trimmed) { setError("Description is required"); return; }
     if (trimmed.length > 1000) { setError("Description must be 1000 characters or fewer"); return; }
     const fd = new FormData();
-    Object.entries({ ...form, description: trimmed }).forEach(([k, v]) => {
+    const payload = { ...form, description: trimmed };
+    if (payload.lowStockThreshold !== undefined && payload.lowStockThreshold !== null && String(payload.lowStockThreshold).trim() !== "") {
+      const threshold = Number(payload.lowStockThreshold);
+      if (!Number.isFinite(threshold) || threshold < 0) { setError("Minimum stock must be a non-negative number."); return; }
+      payload.lowStockThreshold = threshold;
+    }
+    Object.entries(payload).forEach(([k, v]) => {
       if (!["_id", "id", "productId"].includes(k) && v !== undefined && v !== null && v !== "") fd.append(k, v);
     });
     if (existingToRemove.size > 0) fd.append("removeImages", JSON.stringify([...existingToRemove]));
@@ -116,6 +122,7 @@ export default function ProductForm({ initial, onSubmit, isSubmitting = false })
       <Input label="Price (₹)" type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required disabled={isSubmitting} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input label="Stock Quantity" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} disabled={isSubmitting} />
+        <Input label="Minimum Stock" type="number" min="0" value={form.lowStockThreshold ?? 5} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} disabled={isSubmitting} />
         <div>
           <label className="mb-1 block text-sm font-medium">Unit of Measurement</label>
           <select className="h-11 w-full rounded-btn border border-border bg-[#F7F8F8] px-3 text-sm" value={form.unit || "kg"} onChange={(e) => setForm({ ...form, unit: e.target.value })} required disabled={isSubmitting}>

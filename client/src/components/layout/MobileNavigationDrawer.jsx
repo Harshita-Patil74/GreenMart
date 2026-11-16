@@ -102,10 +102,24 @@ export default function MobileNavigationDrawer({
 }) {
   const { user, token } = useSelector((s) => s.auth);
   const dispatch = useDispatch();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const role = user?.role || "guest";
   const items = navigationByRole[role] || navigationByRole.guest;
   const isAuthenticated = Boolean(user && token && token !== "demo-token");
+
+  const currentFullPath = pathname + search;
+  const fullMatchPath = items.find(({ path }) => {
+    const [targetPath] = path.split("?");
+    if (targetPath === "/") return pathname === "/";
+    return currentFullPath === path;
+  })?.path;
+  const exactPath = !fullMatchPath
+    ? items.find(({ path }) => {
+        const [targetPath] = path.split("?");
+        if (targetPath === "/") return false;
+        return pathname === targetPath;
+      })?.path
+    : null;
 
   const handleLogout = () => {
     dispatch(logout());
@@ -192,7 +206,21 @@ export default function MobileNavigationDrawer({
 
         <nav aria-label={`${role === "guest" ? "Guest" : role} navigation`} className="flex-1 overflow-y-auto">
           {items.map(({ label, path, icon: Icon }) => {
-            const active = isCurrentPath(pathname, window.location.search, path);
+            const [targetPath, targetSearch] = path.split("?");
+            let active;
+            if (fullMatchPath) {
+              if (targetPath === "/") {
+                active = pathname === "/";
+              } else if (targetSearch) {
+                active = currentFullPath === path;
+              } else {
+                active = currentFullPath === targetPath;
+              }
+            } else if (exactPath) {
+              active = targetPath === "/" ? pathname === "/" : pathname === targetPath;
+            } else {
+              active = isCurrentPath(pathname, search, path);
+            }
             return (
               <Link
                 key={`${label}:${path}`}
