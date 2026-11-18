@@ -52,11 +52,8 @@ export default function MyProducts() {
       const data = response.data;
       if (requestId !== productsRequest.current) return;
       const results = Array.isArray(data?.items) ? data.items : [];
-      const normalizedResults = showDeleted
-        ? results.filter((product) => product && product.isDeleted === true)
-        : results.filter((product) => !(product && product.isDeleted === true));
-      setProducts(normalizedResults);
-      setTotal(Number(data?.total) || normalizedResults.length);
+      setProducts(results);
+      setTotal(Number(data?.total) || results.length);
       setServerPages(Number(data?.pages) || 1);
       if (page > Number(data?.pages || 1)) setPage(Number(data?.pages || 1));
     } catch (requestError) {
@@ -224,7 +221,14 @@ export default function MyProducts() {
                       <td className="px-4 py-3 text-xs font-medium text-[#32443F]">{formatCurrency(product.price)} <span className="text-[10px] font-normal text-[#899691]">/ {product.unit || "unit"}</span></td>
                       <td className="px-4 py-3 text-xs text-[#52615D]">{product.stock ?? 0} {product.unit || ""}</td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={availability(product)} />
+                        {product.isDeleted ? (
+                          <span className="inline-flex items-center gap-1 rounded border border-[#FBCFC8] bg-[#FDF3F2] px-2 py-0.5 text-[10px] font-semibold text-[#9C1C1C]">
+                            <span className="w-1 h-1 rounded-full bg-[#9C1C1C]" />
+                            Deleted
+                          </span>
+                        ) : (
+                          <StatusBadge status={availability(product)} />
+                        )}
                       </td>
                       <td className="relative px-4 py-3 text-right">
                         <button type="button" aria-label={`Actions for ${product.name}`} onClick={() => setOpenActions(openActions === product._id ? "" : product._id)} className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#DDE6E2] text-[#61716C] hover:bg-[#F0F5F2]">

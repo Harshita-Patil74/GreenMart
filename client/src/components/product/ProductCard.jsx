@@ -118,7 +118,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
           </motion.button>
         )}
       </motion.div>
-      <div className={`flex flex-1 flex-col ${compact ? "mt-1.5" : "mt-2.5"}`}>
+      <div className={`flex flex-1 flex-col min-h-0 ${compact ? "mt-1.5" : "mt-2.5"}`}>
         <h3 className={`line-clamp-1 font-medium leading-snug text-[#1F2937] ${compact ? "text-[11px]" : "text-[15px]"}`}>{product.name}</h3>
         <div className={`font-bold text-[#0F3D2E] ${compact ? "mt-0.5 text-[11px]" : "mt-1 text-[16px]"}`}>
           {offer ? (
@@ -148,7 +148,7 @@ export default function ProductCard({ product, showWishlist = true, compact = fa
           whileTap={reducedMotion ? undefined : addToCartButtonVariants.tap}
           onClick={handleAdd}
           disabled={outOfStock || adding}
-          className={`w-full rounded-[8px] font-medium ${compact ? "mt-1.5 h-7 text-[10px]" : "mt-3 h-9 text-[13px]"} ${
+          className={`w-full rounded-[8px] font-medium ${compact ? "mt-auto h-7 text-[10px]" : "mt-auto h-9 text-[13px]"} ${
             outOfStock ? "bg-gray-200 text-gray-500" : "bg-primary hover:bg-primary-hover text-white"
           }`}
         >

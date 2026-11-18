@@ -165,10 +165,10 @@ export default function Shop() {
           </motion.div>
           <motion.div variants={sectionReveal} initial="hidden" animate="visible" className="mb-3 text-[11px] text-gray-500">{loading ? "Loading products..." : `Showing ${total ? (page - 1) * PAGE_SIZE + 1 : 0}–${Math.min(page * PAGE_SIZE, total)} of ${total} products`}</motion.div>
           {error ? <ErrorState message={error} onRetry={() => setRetryCount((count) => count + 1)} /> : loading ? (
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">{[1, 2, 3, 4, 5, 6].map((n) => <div key={n} className="h-64 animate-pulse rounded-xl bg-white" />)}</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">{[1, 2, 3, 4, 5, 6].map((n) => <div key={n} className="h-64 animate-pulse rounded-xl bg-white" />)}</div>
           ) : items.length ? (
             <>
-              <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-2 gap-3 lg:grid-cols-3">{items.map((product) => <motion.div key={product._id} variants={staggerItem} initial="hidden" animate="visible"><ProductCard key={product._id} product={product} /></motion.div>)}</motion.div>
+              <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">{items.map((product) => <motion.div key={product._id} variants={staggerItem} initial="hidden" animate="visible"><ProductCard key={product._id} product={product} /></motion.div>)}</motion.div>
               {pages > 1 && <div className="mt-5 flex items-center justify-center gap-2">
                 <button disabled={page <= 1} onClick={() => setParam("page", String(page - 1), false)} className="h-8 rounded-lg border border-gray-200 px-3 text-xs disabled:opacity-40">Previous</button>
                 {Array.from({ length: Math.min(5, pages) }, (_, index) => Math.min(Math.max(1, page - 2), Math.max(1, pages - 4)) + index).map((number) => <button key={number} onClick={() => setParam("page", String(number), false)} className={`h-8 min-w-8 rounded-lg px-2 text-xs ${page === number ? "bg-primary text-white" : "border border-gray-200 bg-white text-gray-700"}`}>{number}</button>)}

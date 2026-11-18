@@ -25,6 +25,7 @@ let unapprovedFarmerToken;
 let customerToken;
 let adminToken;
 let farmerId;
+let otherFarmerId;
 let orderId;
 let productId;
 let deletedProductId;
@@ -70,7 +71,7 @@ beforeAll(async () => {
     role: "customer",
   });
   farmerId = farmer._id;
-  const otherFarmerId = otherFarmer._id;
+  otherFarmerId = otherFarmer._id;
   const outsiderFarmerId = outsiderFarmer._id;
   await FarmerProfile.create([
     { user: farmer._id, farmName: "Farmer One Farm", certification: { verifiedByAdmin: true } },
@@ -285,6 +286,61 @@ describe("Product availability and farmer data", () => {
     expect(response.status).toBe(200);
     expect(response.body.total).toBe(2);
     expect(response.body.items.map((item) => item.name)).toContain("Farmer One deleted crop");
+  });
+
+  it("restore-all restores only the authenticated farmer's deleted products", async () => {
+    const d1 = await Product.create({
+      name: "Restore All Me One",
+      description: "d",
+      category: "Vegetables",
+      price: 1,
+      farmer: farmerId,
+      isDeleted: true,
+    });
+    const d2 = await Product.create({
+      name: "Restore All Me Two",
+      description: "d",
+      category: "Vegetables",
+      price: 1,
+      farmer: farmerId,
+      isDeleted: true,
+    });
+    const otherDeleted = await Product.create({
+      name: "Restore All Other Farmer",
+      description: "d",
+      category: "Vegetables",
+      price: 1,
+      farmer: otherFarmerId,
+      isDeleted: true,
+    });
+
+    try {
+      const before = await request(app)
+        .get("/api/products/mine?showDeleted=true")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      const farmerDeletedBefore = before.body.items.filter((item) => String(item.farmer) === String(farmerId)).length;
+
+      const response = await request(app)
+        .patch("/api/products/restore-all")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(response.status).toBe(200);
+      expect(response.body.restoredCount).toBe(farmerDeletedBefore);
+
+      const normalView = await request(app)
+        .get("/api/products/mine")
+        .set("Authorization", `Bearer ${farmerToken}`);
+      expect(normalView.body.items.map((item) => item.name)).toContain("Restore All Me One");
+      expect(normalView.body.items.map((item) => item.name)).toContain("Restore All Me Two");
+
+      const otherDeletedView = await request(app)
+        .get("/api/products/mine?showDeleted=true")
+        .set("Authorization", `Bearer ${otherFarmerToken}`);
+      expect(otherDeletedView.body.items.map((item) => item.name)).toContain("Restore All Other Farmer");
+    } finally {
+      await Product.deleteMany({
+        name: { $in: ["Restore All Me One", "Restore All Me Two", "Restore All Other Farmer"] },
+      });
+    }
   });
 
   it("lets an admin view and restore deleted products", async () => {

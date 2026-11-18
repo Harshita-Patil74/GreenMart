@@ -80,8 +80,20 @@ npm run dev      # http://127.0.0.1:5173
 | Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion (useMotionValue-driven ContinuousMarquee infinite horizontal carousels with responsive clamp() card widths, hover/focus pause, touch swipe pause/resume, and prefers-reduced-motion support) |
 | Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
 | AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
-| Image Storage | Multer handles incoming multipart/form-data file uploads and stores them temporarily on the local server (`server/uploads/`). Cloudinary (via its Node.js SDK) provides cloud-based image storage and delivery — uploaded files are streamed from local temp storage to Cloudinary, and Cloudinary URLs are persisted in MongoDB. |
+| Image Storage | Multer handles incoming multipart/form-data file uploads and stores them temporarily on the local server (`server/uploads/`). Cloudinary (via its Node.js SDK) provides cloud-based image storage and delivery — uploaded files are streamed from local temp storage to Cloudinary, and Cloudinary URLs are persisted in MongoDB. ImageKit is used for newsletter campaign banner uploads. |
 | Testing | Vitest (client), Jest (server), including Socket.io integration tests |
+
+### Development Workflow
+
+1. **Feature branch** — Create a branch from `main` for each feature/bug fix.
+2. **Backend** — Work in `server/`: implement controllers, models, routes, middleware, services, and sockets. Add Jest tests under `server/src/**/*.test.js`.
+3. **Frontend** — Work in `client/`: add/update components, pages, slices, hooks, and API services. Add Vitest tests under `client/src/**/*.test.jsx`.
+4. **Environment** — Copy `server/.env.example` → `server/.env` and `client/.env.example` → `client/.env`. Fill in `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optional `CLOUDINARY_*` / `IMAGEKIT_*` / `GEMINI_API_KEY` / `SMTP_*`.
+5. **Seed** — Run `npm run seed:admin` (and `npm run seed` for demo data in development only) from `server/`.
+6. **Run locally** — Backend: `npm run dev` (port 5000). Frontend: `npm run dev` (port 5173).
+7. **Verify** — Run backend tests (`npm test` in `server/`) and frontend tests (`npm run test` in `client/`). Run `npm run build` in `client/` for production build verification.
+8. **Commit** — Stage only intended files; never commit `.env` files or secrets.
+9. **Review / Merge** — Open a pull request; maintainers review and merge to `main`.
 
 ---
 
@@ -243,6 +255,47 @@ greenmart/
 - **PDF Invoices**: Generate and download order invoices as PDF
 - **Contact Form**: Customers submit support requests; admins are notified
 - **Admin Audit Log**: Track admin actions for accountability
+
+---
+
+## Features Workflow
+
+### Customer Purchase Flow
+
+1. **Browse** — Customer lands on Home, views Featured Products and Special Offers carousels, or browses Shop with category/price filters.
+2. **Product Detail** — Customer opens a product page, reviews images, price, reviews, and eligible offer countdown.
+3. **Cart** — Customer adds items to cart (DB-persisted, survives across sessions/devices). Offers are revalidated server-side using server time.
+4. **Checkout** — Customer selects delivery address, chooses payment (UPI / Card / Cash on Delivery), delivery charge applied, offer discounts calculated and snapshotted on order items.
+5. **Order Confirmation** — Order placed; status `Order Placed`. Customer and farmer notified via Socket.io + MongoDB persistence.
+6. **Tracking** — Customer tracks live status (`Order Placed → Packed → Out for Delivery → Delivered`) with farmer delivery location updates.
+7. **Post-purchase** — Customer can review the product after delivery and is notified if a wishlisted product comes back in stock.
+
+### Farmer Order & Offer Flow
+
+1. **Register** — Farmer registers; account requires admin approval before product actions (`approvedFarmer` middleware checks `farmerApproved` flag).
+2. **Product CRUD** — Farmer creates/updates/deletes products with Multer image uploads streamed to Cloudinary.
+3. **Inventory** — Farmer tracks stock, receives low-stock alerts, records inventory adjustments.
+4. **Offers** — Farmer creates/edits offers with scheduled start/end date/time; new or materially edited offers require admin approval.
+5. **Orders** — Farmer views orders containing their products, updates order status and delivery location; notified of new orders via Socket.io.
+6. **Earnings** — Farmer views earnings and stats dashboard; offer units/sales attributed from delivered order-item snapshots.
+7. **Certification** — Farmer maintains certification text; admin verifies/revokes with reason; farmer notified.
+
+### Admin Oversight Flow
+
+1. **Provisioning** — Admin created server-side only (`npm run seed:admin`); public registration supports customers and farmers only.
+2. **User/Farmer Management** — Admin views all users/farmers; blocks/unblocks, changes roles (cannot modify self); verifies/revokes farmer certifications.
+3. **Offer Approvals** — Admin reviews pending farmer offers, approves/rejects (with reason), or independently creates/edits offers for any farmer (approved directly after backend validation).
+4. **Product & Inventory** — Admin manages all products across farmers; notified of new products, low-stock, out-of-stock.
+5. **Orders & Reports** — Admin views all orders, exports CSV reports, configures delivery charge and product categories, generates PDF invoices.
+6. **Notifications** — Admin Notifications page shows orders, farmers, products, inventory, support, reviews, security alerts with real-time Socket.io delivery.
+7. **Audit** — Admin Audit Log tracks admin actions for accountability.
+
+### Newsletter Campaign Flow (Admin)
+
+1. **Subscribe** — Customer subscribes via Home page form (no auth required, rate-limited); stored in dedicated `newsletters` collection separate from user accounts.
+2. **Campaign** — Admin creates/edits campaign with eligible-recipient count, uploads banner image to ImageKit (JPG/PNG/WebP, max 5 MB), previews Desktop/Mobile.
+3. **Process** — Admin processes campaign (mock email mode; no SMTP required); campaign history tracks Processed/Sent/Cancelled/Duplicate actions.
+4. **Unsubscribe** — Customer unsubscribes; admin notified via in-app notification; no duplicate notifications on repeat unsubscribe.
 
 ---
 
