@@ -25,7 +25,7 @@ Admins are provisioned server-side only and can manage users and farmers, verify
 - **Account:** Register/login as a customer; manage profile and saved addresses.
 - **Shopping:** Browse products with search and category/price filters; view product detail pages with images, price, reviews, and eligible offer countdown.
 - **Home Page Offers:** "Special Offers & Discounts" section below the hero displays approved, active offers with real prices, images, dates, discount badges, and live `HH:MM:SS` countdown timers in an infinite horizontal marquee carousel (pauses on hover/focus; supports touch swipe on mobile). Includes a **View All Offers** link.
-- **Cart:** DB-persisted cart that survives across sessions/devices; optimistic quantity updates with rollback on failure; stock validation.
+- **Cart:** DB-persisted cart that survives across sessions/devices; optimistic quantity updates with rollback on failure; stock validation; guest-to-customer cart merge after login with server-side concurrency locking and idempotent merge operations.
 - **Checkout:** Demo checkout with UPI/Card/Cash on Delivery; delivery charge applied; offers revalidated and calculated server-side using server time; discounts snapshotted on order items at checkout.
 - **Featured Products:** Products with eligible active offers show original price (strikethrough), discounted price, and a discount badge; rendered in a continuous horizontal marquee carousel.
 - **Customer Dashboard:** Recommended products and Active/Coming Soon offers scroll in independent infinite marquee carousels.
@@ -35,7 +35,7 @@ Admins are provisioned server-side only and can manage users and farmers, verify
 - **Messaging:** Message farmers directly about products.
 - **Notifications:** View notifications for orders, offers, wishlist, messages, support, and account; mark-as-read/delete; category filters; pagination; loading/empty/error states.
 - **AI Assistant:** Chat with the Google Gemini-powered shopping assistant for product recommendations.
-- **Newsletter:** Subscribe/unsubscribe to newsletters (no auth required, rate-limited).
+- **Premium Newsletter:** Customer-only paid subscription (₹199/month INR, monthly billing, 30-day duration, mock payment flow) with subscription checkout, payment confirmation, cancellation, and payment history. Authenticated customers manage their own subscription and preferences; admins manage campaigns and subscriber lists.
 
 ### Farmer Features
 
@@ -121,6 +121,7 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 | PDF invoices | own orders | no | all |
 | Contact/support form | yes | yes | notified |
 | Admin audit log | no | no | yes |
+| Premium newsletter subscription | yes (paid) | no | manage subscribers |
 
 ### Important Security Notes
 
@@ -241,9 +242,9 @@ greenmart/
 │   │   ├── scripts/        # Migration/backfill scripts
 │   │   └── utils/          # asyncHandler, authValidation, generateOrderNumber, haversine,
 │   │                     # tokens, invoice, invoiceNumbers, offerValidation
-│   ├── .env
-│   ├── .env.example
-│   └── package.json
+│   ├── .env.example        # Template for server environment variables (copy to .env locally)
+│   ├── package.json
+│   └── .gitignore
 ├── README.md
 └── .gitignore
 ```
@@ -294,12 +295,9 @@ npm run dev      # http://127.0.0.1:5173
 | `NODE_ENV` | Application environment | No (default: development) |
 | `MONGO_URI` | MongoDB connection string | Yes |
 | `JWT_SECRET` | Access token signing secret | Yes |
-| `JWT_EXPIRES_IN` | Access token expiry | No (default: 15m) |
-| `JWT_REFRESH_SECRET` | Refresh token signing secret | No (falls back to `JWT_SECRET`) |
-| `JWT_REFRESH_EXPIRES_IN` | Refresh token expiry | No (default: 7d) |
+| `JWT_EXPIRES_IN` | Access token expiry | No (default: 7d) |
 | `CLIENT_URL` | Allowed frontend origin(s) for CORS | No (default: http://localhost:5173) |
 | `DELIVERY_CHARGE` | Flat standard delivery charge | No (default: 30) |
-| `EMAIL_ENABLED` | Enable email delivery | No (default: false) |
 | `SMTP_HOST` | SMTP host | Conditional (required when `EMAIL_ENABLED=true`) |
 | `SMTP_PORT` | SMTP port | No (default: 587) |
 | `SMTP_USER` | SMTP username | Conditional (required when `EMAIL_ENABLED=true`) |
@@ -307,15 +305,16 @@ npm run dev      # http://127.0.0.1:5173
 | `EMAIL_FROM` | Sender email address | Conditional (required when `EMAIL_ENABLED=true`) |
 | `ADMIN_EMAIL` | Admin email for `seed:admin` script | Conditional (required for `npm run seed:admin`) |
 | `ADMIN_PASSWORD` | Admin password for `seed:admin` script | Conditional (required for `npm run seed:admin`; server-only secret) |
+| `GEMINI_API_KEY` | Google Gemini API key | Conditional (required for AI assistant; server-only secret) |
+| `GEMINI_MODEL` | Gemini AI model | No (default: gemini-flash-lite-latest) |
 | `SEED_PASSWORD` | Demo seeder password | Conditional (required for `npm run seed` without `--categories`; server-only secret) |
+| `EMAIL_ENABLED` | Enable email delivery | No (default: false) |
 | `RESEND_API_KEY` | Resend API key for email delivery | Conditional (required for Resend/newsletter email) |
 | `NEWSLETTER_FROM_EMAIL` | Newsletter sender email address | Conditional (required for newsletter/resend email) |
 | `NEWSLETTER_FROM_NAME` | Newsletter sender display name | No (default: GreenMart) |
 | `NEWSLETTER_REPLY_TO` | Reply-to email header for newsletters | Conditional (optional for newsletters) |
 | `NEWSLETTER_UNSUBSCRIBE_SECRET` | Secret for unsubscribe link signatures | Conditional (optional for newsletters; server-only secret) |
 | `NEWSLETTER_EMAIL_MODE` | Newsletter email sending mode | No (default: mock) |
-| `GEMINI_API_KEY` | Google Gemini API key | Conditional (required for AI assistant; server-only secret) |
-| `GEMINI_MODEL` | Gemini AI model | No (default: gemini-flash-lite-latest) |
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | Conditional (required for product/media uploads) |
 | `CLOUDINARY_API_KEY` | Cloudinary API key | Conditional (required for product/media uploads; server-only secret) |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret | Conditional (required for product/media uploads; server-only secret) |
@@ -324,7 +323,7 @@ npm run dev      # http://127.0.0.1:5173
 | `IMAGEKIT_URL_ENDPOINT` | ImageKit URL endpoint | Conditional (required for newsletter banner uploads) |
 | `OSRM_BASE_URL` | Delivery routing service URL | No (default: https://router.project-osrm.org) |
 
-> All variables above are server-side only. Never commit `.env` files (covered by `.gitignore`). Server-only secrets must never be exposed to the frontend.
+> All variables above are server-side only. Never commit `.env` files (covered by `.gitignore`). Server-only secrets must never be exposed to the frontend. `server/.env` is a local file and is not part of the public project tree; use `server/.env.example` as the template.
 
 Seed-only variables (`SEED_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) are used by the `seed` and `seed:admin` scripts, not by normal server operation.
 
@@ -336,6 +335,8 @@ Seed-only variables (`SEED_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) are used 
 | `VITE_SOCKET_URL` | Socket.io server URL | No (default: http://localhost:5000) |
 
 > Only variables prefixed with `VITE_` are exposed to the client build. No server secrets (JWT, MongoDB, SMTP, Gemini, Cloudinary, ImageKit) belong in the client environment.
+
+---
 
 ## API Overview
 
@@ -364,15 +365,16 @@ All API routes are mounted under `/api`. Routes are organized by domain and prot
 | Sales | `/sales/*` | Yes | Sales reports |
 | Location | `/location/*` | Partial | Farm locations, map |
 | Settings | `/settings/*` | Admin | Delivery charge, categories config |
-| Newsletter | `/newsletter/*` | Partial | Subscribe/unsubscribe; admin campaigns |
+| Newsletter | `/newsletter/*` | Partial | Customer preferences and premium subscription; admin campaigns |
 | Assistant | `/assistant/*` | Yes | AI shopping assistant (Gemini) |
 | Delivery | `/delivery/*` | Yes | Delivery tracking/location updates |
 
 Key public endpoints:
 - `GET /products/storefront/offers` — active offers for home page
 - `GET /products/storefront/server-time` — server time for countdown accuracy
-- `POST /newsletter/subscribe` — newsletter subscription (no auth)
-- `POST /newsletter/unsubscribe` — unsubscribe (no auth)
+- `GET /newsletter/subscription/plan` — premium newsletter plan config (no auth)
+- `POST /newsletter/subscription/checkout` — create mock payment (authenticated customer)
+- `POST /newsletter/subscription/confirm-payment` — confirm mock payment (authenticated customer)
 
 ---
 
@@ -386,6 +388,8 @@ GreenMart uses MongoDB with Mongoose. Schemas live in `server/src/models/`.
 | `Product` | Product catalog (name, price, stock, category, farmer, images, offers) |
 | `Order` | Orders, items, status flow, payment, delivery, snapshots |
 | `Cart` | DB-persisted cart per user |
+| `CartLock` | Distributed lock for concurrent cart operations; prevents race conditions during guest-cart synchronization |
+| `MergeOperation` | Tracks guest-to-customer cart merge operations; supports idempotent, reliable merge processing |
 | `Wishlist` | Wishlisted products per user |
 | `Category` | Product categories |
 | `Address` | Saved addresses |
@@ -401,11 +405,11 @@ GreenMart uses MongoDB with Mongoose. Schemas live in `server/src/models/`.
 | `InvoiceCounter` | Invoice number sequencing |
 | `RefreshToken` | JWT refresh tokens |
 | `AdminAuditLog` | Admin action audit trail |
-| `Newsletter` | Newsletter subscriptions |
+| `Newsletter` | Newsletter subscriptions (legacy guest/customer records) |
 | `NewsletterCampaign` | Admin newsletter campaigns |
-| `NewsletterPayment` | Newsletter payment records |
+| `NewsletterPayment` | Premium newsletter payment records |
 | `NewsletterRecipient` | Campaign recipients |
-| `NewsletterSubscription` | Subscription management |
+| `NewsletterSubscription` | Premium newsletter subscription management |
 
 ---
 
@@ -427,6 +431,7 @@ GreenMart uses MongoDB with Mongoose. Schemas live in `server/src/models/`.
 - Backend enforces ownership: users access only their own data; farmers access only their own products/orders; admins access all.
 - Offer approval status is set by the backend only; frontend cannot decide approval.
 - Admin-created/edited offers are approved directly after backend validation and recorded with creator/approver IDs and timestamps.
+- Premium newsletter subscription and preferences are customer-only and require authentication.
 
 ---
 
@@ -450,9 +455,9 @@ Server tests run with `mongodb-memory-server` and include Socket.io integration 
 
 ### Latest Results
 
-- Backend: 41 test suites passed, 419 tests passed.
-- Frontend: 63 test files passed, 515 tests passed.
-- Frontend production build: Successful.
+- Backend: 42 test suites passed, 472 tests passed. Full test suite runs without `--forceExit`; no Jest open-handle warning in the reported successful run.
+- Frontend: 63 test files passed, 527 tests passed.
+- Frontend production build: Successful. Vite 5.4.21; 2,294 modules transformed; build completed in 10.47 seconds.
 
 ---
 
@@ -495,5 +500,3 @@ GreenMart is an organic e-commerce platform developed to connect customers direc
 Customers can browse and purchase products, farmers can manage their products and orders, and administrators can manage and monitor the overall platform.
 
 GreenMart aims to make organic shopping simple, convenient, and reliable while supporting local farming communities.
-
----
