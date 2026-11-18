@@ -9,7 +9,6 @@ import {
   Bell,
   Boxes,
   Heart,
-  Home,
   LayoutDashboard,
   LogOut,
   LogIn,
@@ -22,7 +21,6 @@ import {
   Store,
   Tag,
   Tractor,
-  Truck,
   User,
   Users,
   X,
@@ -30,55 +28,49 @@ import {
 import getImageUrl from "../../utils/imageUrl.js";
 
 const navigationByRole = {
-  customer: [
+  guest: [
     { label: "Home", path: "/", icon: Store },
-    { label: "Shop", path: "/shop", icon: Store },
+    { label: "Shop", path: "/shop", icon: ShoppingBag },
     { label: "Offers", path: "/shop?offers=true", icon: Tag },
-    { label: "About", path: "/about", icon: MessageCircle },
     { label: "Farmers", path: "/farmers", icon: Tractor },
+    { label: "About", path: "/about", icon: MessageCircle },
     { label: "Contact", path: "/contact", icon: MessageCircle },
+  ],
+  customer: [
     { label: "Customer Dashboard", path: "/customer/dashboard", icon: LayoutDashboard },
-    { label: "My Orders", path: "/customer/orders", icon: Package },
+    { label: "Home", path: "/", icon: Store },
+    { label: "Shop", path: "/shop", icon: ShoppingBag },
+    { label: "Categories", path: "/shop", icon: Store },
+    { label: "Offers", path: "/customer/offers", icon: Tag },
     { label: "Cart", path: "/cart", icon: ShoppingCart },
     { label: "Wishlist", path: "/customer/wishlist", icon: Heart },
-    { label: "Track Orders", path: "/track-order", icon: Truck },
-    { label: "My Newsletters", path: "/customer/newsletters", icon: Mail },
-    { label: "Profile", path: "/customer/profile", icon: User },
+    { label: "My Orders", path: "/customer/orders", icon: Package },
     { label: "Notifications", path: "/notifications", icon: Bell },
-    { label: "Settings", path: "/customer/settings", icon: Settings },
+    { label: "My Profile", path: "/customer/profile", icon: User },
+    { label: "My Newsletters", path: "/customer/newsletters", icon: Mail },
   ],
   farmer: [
-    { label: "Customer Home", path: "/", icon: Home },
     { label: "Farmer Dashboard", path: "/farmer/dashboard", icon: LayoutDashboard },
     { label: "My Products", path: "/farmer/products", icon: Package },
     { label: "Add Product", path: "/farmer/products/new", icon: Package },
+    { label: "Orders", path: "/farmer/orders", icon: ShoppingBag },
     { label: "Inventory", path: "/farmer/inventory-management", icon: Boxes },
-    { label: "My Orders", path: "/farmer/orders", icon: ShoppingBag },
-    { label: "My Offers", path: "/farmer/offers", icon: Tag },
-    { label: "Farm Details", path: "/farmer/profile", icon: User },
+    { label: "Offers", path: "/farmer/offers", icon: Tag },
     { label: "Notifications", path: "/farmer/notifications", icon: Bell },
     { label: "Profile", path: "/farmer/profile", icon: User },
   ],
   admin: [
-    { label: "Customer Home", path: "/", icon: Home },
     { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "Products Management", path: "/admin/products", icon: Package },
-    { label: "Orders Management", path: "/admin/orders", icon: ShoppingBag },
-    { label: "Users Management", path: "/admin/users", icon: Users },
-    { label: "Farmer Management", path: "/admin/farmers", icon: Tractor },
-    { label: "Inventory Management", path: "/admin/inventory", icon: Boxes },
-    { label: "Offers Management", path: "/admin/offers", icon: Tag },
-    { label: "Newsletter Management", path: "/admin/newsletter", icon: Mail },
-    { label: "Reports and Analytics", path: "/admin/reports", icon: BarChart3 },
-    { label: "Analytics", path: "/admin/analytics", icon: BarChart3 },
+    { label: "Products", path: "/admin/products", icon: Package },
+    { label: "Users", path: "/admin/users", icon: Users },
+    { label: "Farmers", path: "/admin/farmers", icon: Tractor },
+    { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
+    { label: "Inventory", path: "/admin/inventory", icon: Boxes },
+    { label: "Reports", path: "/admin/reports", icon: BarChart3 },
+    { label: "Offers", path: "/admin/offers", icon: Tag },
+    { label: "Newsletter / Premium Subscriptions", path: "/admin/newsletter", icon: Mail },
     { label: "Notifications", path: "/admin/notifications", icon: Bell },
     { label: "Settings", path: "/admin/settings", icon: Settings },
-  ],
-  guest: [
-    { label: "Home", path: "/", icon: Store },
-    { label: "Shop", path: "/shop", icon: ShoppingBag },
-    { label: "About", path: "/about", icon: MessageCircle },
-    { label: "Contact", path: "/contact", icon: MessageCircle },
   ],
 };
 
@@ -108,18 +100,21 @@ export default function MobileNavigationDrawer({
   const isAuthenticated = Boolean(user && token && token !== "demo-token");
 
   const currentFullPath = pathname + search;
-  const fullMatchPath = items.find(({ path }) => {
+  const fullMatchIndex = items.findIndex(({ path }) => {
     const [targetPath] = path.split("?");
     if (targetPath === "/") return pathname === "/";
     return currentFullPath === path;
-  })?.path;
-  const exactPath = !fullMatchPath
-    ? items.find(({ path }) => {
+  });
+  const fullMatchPath = fullMatchIndex >= 0 ? items[fullMatchIndex].path : undefined;
+
+  const exactPathIndex = fullMatchIndex < 0
+    ? items.findIndex(({ path }) => {
         const [targetPath] = path.split("?");
         if (targetPath === "/") return false;
         return pathname === targetPath;
-      })?.path
-    : null;
+      })
+    : -1;
+  const exactPath = exactPathIndex >= 0 ? items[exactPathIndex].path : null;
 
   const handleLogout = () => {
     dispatch(logout());
@@ -205,19 +200,13 @@ export default function MobileNavigationDrawer({
         )}
 
         <nav aria-label={`${role === "guest" ? "Guest" : role} navigation`} className="flex-1 overflow-y-auto">
-          {items.map(({ label, path, icon: Icon }) => {
+          {items.map(({ label, path, icon: Icon }, index) => {
             const [targetPath, targetSearch] = path.split("?");
             let active;
-            if (fullMatchPath) {
-              if (targetPath === "/") {
-                active = pathname === "/";
-              } else if (targetSearch) {
-                active = currentFullPath === path;
-              } else {
-                active = currentFullPath === targetPath;
-              }
-            } else if (exactPath) {
-              active = targetPath === "/" ? pathname === "/" : pathname === targetPath;
+            if (fullMatchIndex >= 0) {
+              active = index === fullMatchIndex;
+            } else if (exactPathIndex >= 0) {
+              active = index === exactPathIndex;
             } else {
               active = isCurrentPath(pathname, search, path);
             }

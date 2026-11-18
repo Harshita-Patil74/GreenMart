@@ -175,9 +175,19 @@ function connectSocket(token) {
       auth: { token },
       transports: ["websocket", "polling"],
     });
-    client.on("connect", () => resolve(client));
-    client.on("connect_error", (err) => reject(err));
-    setTimeout(() => reject(new Error("Socket connection timeout")), 10000);
+    const timeoutId = setTimeout(() => {
+      client.disconnect();
+      reject(new Error("Socket connection timeout"));
+    }, 10000);
+    client.on("connect", () => {
+      clearTimeout(timeoutId);
+      resolve(client);
+    });
+    client.on("connect_error", (err) => {
+      clearTimeout(timeoutId);
+      client.disconnect();
+      reject(err);
+    });
   });
 }
 

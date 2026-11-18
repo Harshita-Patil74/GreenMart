@@ -1,591 +1,100 @@
 # GreenMart – Organic Products E-Commerce Platform
 
+**Tagline:** Fresh. Organic. Direct from Farmers.
+
 GreenMart connects customers with local farmers to buy organic produce. Customers browse products, add to cart, checkout, and track orders live. Farmers manage their product catalog, inventory, and fulfill orders. Admins oversee users, farmers, products, orders, offers, and certifications.
-
-Tagline: **Fresh. Organic. Direct from Farmers.**
-
----
-
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [Quick Start](#quick-start)
-- [Tech Stack](#tech-stack)
-- [Project Folder Structure](#project-folder-structure)
-- [Features](#features)
-  - [Customer Features](#customer-features)
-  - [Farmer Features](#farmer-features)
-  - [Admin Features](#admin-features)
-  - [Shared Features](#shared-features)
-- [Admin Offer Management](#admin-offer-management)
-- [Home Page Offers](#home-page-offers)
-- [Continuous Horizontal Carousel Animations](#continuous-horizontal-carousel-animations)
-- [Time-Based Offers & Scheduling](#time-based-offers--scheduling)
-- [Notification System](#notification-system)
-- [Roles & Permissions](#roles--permissions)
-- [Environment Variables](#environment-variables)
-- [Run Locally](#run-locally)
-- [Development Workflow](#development-workflow)
-- [Database and First Admin](#database-and-first-admin)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
-- [Recent Changes](#recent-changes)
 
 ---
 
 ## Project Overview
 
-GreenMart connects customers with local farmers to buy organic produce. Customers browse products, add to cart, checkout, and track orders live. Farmers manage their product catalog, inventory, and fulfill orders. Admins oversee users, farmers, products, orders, offers, and certifications.
+GreenMart is a full-stack organic e-commerce platform that bridges local farmers and customers. It enables farmers to sell produce directly to consumers while giving customers a modern shopping experience with live order tracking, time-based offers, real-time notifications, and an AI shopping assistant.
+
+Customers can browse organic products, search/filter by category and price, view detailed product pages with reviews, maintain a DB-persisted cart, checkout with demo payment options (UPI/Card/Cash on Delivery), track orders live with farmer delivery location, save wishlists, message farmers, and chat with a Google Gemini-powered assistant.
+
+Farmers can register (pending admin approval), manage product CRUD with Cloudinary image uploads, track inventory with low-stock alerts, create scheduled time-based offers (subject to admin approval), view and update orders for their products, monitor earnings, and maintain certification records.
+
+Admins are provisioned server-side only and can manage users and farmers, verify/revoke certifications, approve/reject offers, independently create and edit offers for any farmer, manage all products and orders, export CSV reports, generate PDF invoices, configure delivery charges and categories, manage newsletter campaigns, and review an admin audit log.
 
 ---
 
-## Quick Start
-
-### Prerequisites
-- Node.js installed
-- MongoDB (Atlas cluster URI or local instance)
-
-### Backend
-
-```bash
-cd server
-cp .env.example .env
-# fill .env: MONGO_URI, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, SEED_PASSWORD, GEMINI_API_KEY
-npm install
-npm run seed:admin
-npm run dev      # http://127.0.0.1:5000
-```
-
-### Frontend
-
-```bash
-cd client
-cp .env.example .env
-# VITE_API_URL=http://127.0.0.1:5000/api
-# VITE_SOCKET_URL=http://127.0.0.1:5000
-npm install
-npm run dev      # http://127.0.0.1:5173
-```
-
-> The root `server/.env.example` exists and should be copied to `.env` before starting the backend.
-> The client ships with `client/.env.example`. Copy it to `client/.env` and adjust `VITE_API_URL` / `VITE_SOCKET_URL` as needed.
-
----
-
-## Tech Stack
-
-| Layer | Technologies |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion (useMotionValue-driven ContinuousMarquee infinite horizontal carousels with responsive clamp() card widths, hover/focus pause, touch swipe pause/resume, and prefers-reduced-motion support) |
-| Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
-| AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
-| Image Storage | Multer handles incoming multipart/form-data file uploads and stores them temporarily on the local server (`server/uploads/`). Cloudinary (via its Node.js SDK) provides cloud-based image storage and delivery — uploaded files are streamed from local temp storage to Cloudinary, and Cloudinary URLs are persisted in MongoDB. ImageKit is used for newsletter campaign banner uploads. |
-| Testing | Vitest (client), Jest (server), including Socket.io integration tests |
-
-### Development Workflow
-
-1. **Feature branch** — Create a branch from `main` for each feature/bug fix.
-2. **Backend** — Work in `server/`: implement controllers, models, routes, middleware, services, and sockets. Add Jest tests under `server/src/**/*.test.js`.
-3. **Frontend** — Work in `client/`: add/update components, pages, slices, hooks, and API services. Add Vitest tests under `client/src/**/*.test.jsx`.
-4. **Environment** — Copy `server/.env.example` → `server/.env` and `client/.env.example` → `client/.env`. Fill in `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and optional `CLOUDINARY_*` / `IMAGEKIT_*` / `GEMINI_API_KEY` / `SMTP_*`.
-5. **Seed** — Run `npm run seed:admin` (and `npm run seed` for demo data in development only) from `server/`.
-6. **Run locally** — Backend: `npm run dev` (port 5000). Frontend: `npm run dev` (port 5173).
-7. **Verify** — Run backend tests (`npm test` in `server/`) and frontend tests (`npm run test` in `client/`). Run `npm run build` in `client/` for production build verification.
-8. **Commit** — Stage only intended files; never commit `.env` files or secrets.
-9. **Review / Merge** — Open a pull request; maintainers review and merge to `main`.
-
----
-
-## Project Folder Structure
-
-```
-greenmart/
-  client/   (React + Vite frontend)
-  server/   (Node + Express backend)
-  README.md
-```
-
-### Server (`server/src`)
-
-| Path | Purpose |
-|---|---|
-| `server.js` | Entry point: connects DB, runs defaults, creates HTTP + Socket.io server, listens on port |
-| `app.js` | Express app setup: helmet, CORS, JSON body parser, rate limiting, static uploads, route mounting, error handling |
-| `config/env.js` | Loads server environment variables; validates MongoDB at startup |
-| `config/db.js` | Mongoose database connection |
-| `config/cloudinary.js` | Cloudinary SDK configuration |
-| `config/gemini.js` | Lazy-initialized Google GenAI client |
-| `config/mailer.js` | Nodemailer SMTP transporter + `sendMail` helper |
-| `config/clientOrigins.js` | Computes allowed CORS origins based on environment |
-| `constants/categories.js` | Product categories list |
-| `constants/orderStatus.js` | Order status constants and valid status flow |
-| `constants/roles.js` | Role constants: `customer`, `farmer`, `admin` |
-| `controllers/*.js` | Request handlers for each domain (auth, user, product, order, cart, admin, farmer, offer, notification, etc.) |
-| `middleware/auth.js` | JWT authentication middleware |
-| `middleware/role.js` | Role-based access control middleware (`role(...roles)`) |
-| `middleware/approvedFarmer.js` | Ensures farmer account is admin-approved before product actions |
-| `middleware/upload.js` | Multer configuration for product, avatar, and farm-photo uploads |
-| `middleware/validate.js` | Zod request validation middleware |
-| `middleware/errorHandler.js` | Global `notFound` and `errorHandler` middleware |
-| `models/*.js` | Mongoose schemas: User, Product, Order, Cart, Wishlist, Category, Address, FarmerProfile, Review, Notification, Message, Setting, Offer, Crop, Harvest, InventoryAdjustment, InvoiceCounter, RefreshToken, AdminAuditLog |
-| `routes/*.js` | Express route definitions for each domain (auth, product, order, cart, farmer, admin, contact, message, offer, review, settings, notification, crop, harvest, inventory, sales, location, adminOffer, etc.) |
-| `routes/index.js` | Aggregates all route modules |
-| `services/*.js` | Business logic layer: cartService, orderService, offerService, emailService, notificationService, assistantService, statsService, cloudinaryUpload, reportPdfService |
-| `sockets/index.js` | Socket.io connection setup |
-| `sockets/emitters.js` | Socket emitters for real-time events (new order, status update, location update, notification) |
-| `bootstrap/ensureDefaults.js` | Seed default categories and settings on startup |
-| `seed/seed.js` | Development demo data seeder |
-| `seed/createAdmin.js` | First admin account creation |
-| `seed/images/*.jpg` | Sample product images for seeding |
-| `utils/asyncHandler.js` | Async route handler wrapper |
-| `utils/authValidation.js` | Shared auth validation helpers |
-| `utils/generateOrderNumber.js` | Order number generator |
-| `utils/haversine.js` | Distance calculation for farm locations |
-| `utils/tokens.js` | JWT token utilities |
-| `utils/invoice.js` | PDF invoice generation |
-| `utils/invoiceNumbers.js` | Invoice number sequencing |
-| `utils/offerValidation.js` | Offer discount validation helpers |
-
-### Client (`client/src`)
-
-| Path | Purpose |
-|---|---|
-| `main.jsx` | React entry point |
-| `App.jsx` | Root app component with provider and router |
-| `api/axiosInstance.js` | Axios instance with base URL, auth token injection, and response normalization |
-| `api/*.js` | API service modules per domain (authApi, productApi, orderApi, cartApi, userApi, adminApi, farmerApi, notificationApi, contactApi, messageApi, assistantApi, adminOffersApi, etc.) |
-| `app/store.js` | Redux Toolkit store configuration |
-| `features/*/slice.js` | Redux slices: auth, cart, products, orders, wishlist, notifications, assistant |
-| `components/common/*.jsx` | Shared UI components: Button, Input, Modal, Pagination, EmptyState, ErrorState, ImageWithFallback, Loader, Rating, ContinuousMarquee (infinite horizontal carousel), etc. |
-| `components/layout/*.jsx` | Layout shells: Navbar, Topbar, Sidebar, Footer, PublicNavigation, RoleNavigation, MobileNavigationDrawer |
-| `components/notifications/*.jsx` | NotificationBell |
-| `components/offers/*.jsx` | OfferCountdown (live countdown timers for scheduled offers) |
-| `components/product/*.jsx` | ProductCard, ProductGrid, ProductForm, FilterPanel, ReviewList |
-| `components/cart/*.jsx` | CartTable, OrderSummary, QuantityControl |
-| `components/checkout/*.jsx` | AddressCard, CheckoutStepper |
-| `components/orders/*.jsx` | OrderStepper |
-| `components/map/*.jsx` | MapView, LocationPicker (Leaflet-based farm/customer map) |
-| `components/messages/*.jsx` | MessageFarmerModal |
-| `components/assistant/*.jsx` | ChatAssistant (AI chat UI) |
-| `components/dashboard/*.jsx` | StatCard, SalesLineChart |
-| `components/routing/*.jsx` | ProtectedRoute (role-gated routes) |
-| `layouts/*.jsx` | AuthLayout, PublicLayout, DashboardLayout |
-| `pages/public/*.jsx` | Public pages: Home, Shop, ProductDetail, About, Contact, Farmers, FarmerProfile, FarmLocations, NotFound |
-| `pages/auth/*.jsx` | Auth pages: Login, Register, ForgotPassword, ResetPassword |
-| `pages/customer/*.jsx` | Customer pages: CustomerDashboard, MyOrders, Profile, SavedAddresses, Settings, Wishlist |
-| `pages/farmer/*.jsx` | Farmer pages: FarmerDashboard, MyProducts, ProductAddEdit, Inventory, FarmerOrders, FarmerProfilePage, FarmerNotifications |
-| `pages/admin/*.jsx` | Admin pages: AdminDashboard, AdminNotifications, AdminProducts, AdminOrders, AdminUsers, AdminFarmers, AdminInventory, AdminReports, AdminSettings, AdminAnalytics, AdminOffers |
-| `pages/shared/*.jsx` | Shared pages: Cart, Checkout, OrderConfirmation, OrderDetails, TrackOrder, Notifications |
-| `routes/AppRoutes.jsx` | Route definitions with role-based protection |
-| `socket/socketClient.js` | Socket.io client connection for real-time updates |
-| `hooks/*.js` | Custom hooks: useAuth, useDebounce, useGeolocation |
-| `config/notificationConfig.js` | Centralized notification type → icon mapping, colors, and category lists |
-| `utils/*.js` | Utilities: tokenStorage, roleAccess, authValidation, imageUrl, csv, constants |
-| `styles/index.css` | Global Tailwind CSS styles |
-| `data/demoCatalog.js` | Demo product catalog data |
-| `tests/` | Test utilities |
-
----
-
-## Features
+## Key Features
 
 ### Customer Features
 
-- **Account**: Register/login as a customer, manage profile and saved addresses
-- **Shopping**: Browse products with search, filter (category, price), and farm origin details; view product detail pages with reviews
-- **Home Page Offers**: "Special Offers & Discounts" section below the hero shows approved, active product offers with real prices, images, dates, live countdown timers (hours:minutes:seconds), and a **View All Offers** link. Offers scroll continuously right-to-left in an infinite horizontal marquee carousel that pauses on hover and supports touch swiping on mobile.
-- **Cart**: DB-persisted cart that survives across sessions/devices; quantity adjustment and removal
-- **Checkout**: Demo checkout with UPI / Card / Cash on Delivery payment options; delivery charge applied; offers revalidated and calculated by the backend using server time
-- **Offers**: Eligible, approved farmer promotions are priced by the server, shown in the shop/cart, and snapshotted on order items at checkout. Offers support scheduled start/end date and time; upcoming offers show a countdown until start, active offers show a countdown until expiry
-- **Featured Products**: Products with an eligible active offer show original price (strikethrough), discounted price, and a discount badge; products without offers keep their normal price. Featured products scroll continuously right-to-left in an infinite horizontal marquee carousel that pauses on hover.
-- **Customer Dashboard**: Recommended products and Offers & Discounts (Active and Coming Soon tabs) scroll continuously right-to-left in independent infinite horizontal marquee carousels that pause on hover/focus and support touch swiping on mobile.
-- **Order Tracking**: Live order status tracking (Order Placed → Packed → Out for Delivery → Delivered) with Socket.io updates and farmer delivery location
-- **Wishlist**: Save products to a wishlist; notified when a wishlisted product comes back in stock
-- **Reviews**: Review products only after receiving them
-- **Messaging**: Message farmers directly about products
-- **Notifications**: View notifications for order updates, offers, wishlist, messages, support, and account; mark-as-read/delete; category filters; loading/empty/error states
-- **AI Assistant**: Chat with the Google Gemini-powered shopping assistant for product recommendations
+- **Account:** Register/login as a customer; manage profile and saved addresses.
+- **Shopping:** Browse products with search and category/price filters; view product detail pages with images, price, reviews, and eligible offer countdown.
+- **Home Page Offers:** "Special Offers & Discounts" section below the hero displays approved, active offers with real prices, images, dates, discount badges, and live `HH:MM:SS` countdown timers in an infinite horizontal marquee carousel (pauses on hover/focus; supports touch swipe on mobile). Includes a **View All Offers** link.
+- **Cart:** DB-persisted cart that survives across sessions/devices; optimistic quantity updates with rollback on failure; stock validation.
+- **Checkout:** Demo checkout with UPI/Card/Cash on Delivery; delivery charge applied; offers revalidated and calculated server-side using server time; discounts snapshotted on order items at checkout.
+- **Featured Products:** Products with eligible active offers show original price (strikethrough), discounted price, and a discount badge; rendered in a continuous horizontal marquee carousel.
+- **Customer Dashboard:** Recommended products and Active/Coming Soon offers scroll in independent infinite marquee carousels.
+- **Order Tracking:** Live status flow (Order Placed → Packed → Out for Delivery → Delivered) with Socket.io updates and farmer delivery location.
+- **Wishlist:** Save products; notified when a wishlisted product comes back in stock.
+- **Reviews:** Review products only after receiving them.
+- **Messaging:** Message farmers directly about products.
+- **Notifications:** View notifications for orders, offers, wishlist, messages, support, and account; mark-as-read/delete; category filters; pagination; loading/empty/error states.
+- **AI Assistant:** Chat with the Google Gemini-powered shopping assistant for product recommendations.
+- **Newsletter:** Subscribe/unsubscribe to newsletters (no auth required, rate-limited).
 
 ### Farmer Features
 
-- **Account**: Register as a farmer; account requires admin approval before product actions (via `approvedFarmer` middleware)
-- **Product Management**: Full product CRUD (create, read, update, delete) with Multer image uploads; images are streamed to Cloudinary for storage/delivery
-- **Profile Photos**: Authenticated customer/farmer avatar and farmer farm-photo uploads stored via Multer + Cloudinary
-- **Inventory**: Track stock levels, receive low-stock alerts, manage inventory; notified when stock transitions to low or back in stock
-- **Orders**: View orders containing their products; update order status and delivery location
-- **My Offers**: Create, edit, view, and deactivate product offers with scheduled start/end date and time; new or materially edited offers require admin approval
-- **Offer performance**: Offer units and sales are attributed from delivered order-item snapshots, not current product prices
-- **Bundle offers**: Bundle discounts apply to the selected product once its minimum quantity is met; multi-product bundles are not supported. Minimum order amount is evaluated against the original cart subtotal before discounts.
-- **Earnings**: View earnings and stats dashboard
-- **Certification**: Maintain certification text (subject to admin verification/revocation); notified when certification is verified or rejected with reason
-- **Notifications**: Receive live new-order notifications via Socket.io; notifications persist in MongoDB and survive refresh/login; category filters, mark-as-read/delete, pagination
-
-### Crop Management
-
-- Create, list, view, update, and delete crops owned by the farmer
-- Each crop is tied to the registering farmer
-
-### Harvest Management
-
-- Create, list, view, update, and delete harvests owned by the farmer
-- Update harvest availability (quantity and sale status)
-
-### Inventory Adjustments
-
-- Record stock increases/decreases for products and harvests
-- View adjustment history per item and across all items
+- **Account:** Register as a farmer; requires admin approval before product actions (`approvedFarmer` middleware).
+- **Product Management:** Full product CRUD with Multer image uploads streamed to Cloudinary.
+- **Profile Photos:** Avatar and farm-photo uploads stored via Multer + Cloudinary.
+- **Inventory:** Track stock levels, low-stock alerts, inventory adjustments with history per item.
+- **Orders:** View orders containing their products; update order status and delivery location; notified of new orders via Socket.io.
+- **My Offers:** Create, edit, view, and deactivate product offers with scheduled start/end date/time; new or materially edited offers require admin approval.
+- **Offer Performance:** Offer units and sales attributed from delivered order-item snapshots.
+- **Bundle Offers:** Bundle discounts apply once minimum quantity is met; minimum order amount evaluated against the original cart subtotal.
+- **Earnings:** View earnings and stats dashboard.
+- **Certification:** Maintain certification text (subject to admin verification/revocation); notified when verified or rejected with reason.
+- **Notifications:** Live new-order notifications via Socket.io; persisted in MongoDB; category filters, mark-as-read/delete, pagination.
+- **Crop Management:** Create, list, view, update, and delete crops owned by the farmer.
+- **Harvest Management:** Create, list, view, update, and delete harvests; update availability (quantity and sale status).
+- **Inventory Adjustments:** Record stock increases/decreases for products and harvests; view adjustment history.
 
 ### Admin Features
 
-- **Dashboard**: View totals and charts (sales, orders, users, products)
-- **Notifications**: Admin Notifications page for orders, farmers, products, inventory, support, reviews, and security alerts; real-time Socket.io delivery; mark-as-read/delete
-- **User Management**: Manage all users; block/unblock and change roles (cannot modify self)
-- **Farmer Management**: View and manage all farmers; verify/revoke farmer certifications; notified of new farmer registrations
-- **Product Management**: Manage all products across all farmers; notified of new products, low-stock, out-of-stock
-- **Offer Approvals**: Filter, review, approve, reject, and deactivate farmer offers; rejection includes reason
-- **Admin Offer Management**: Independently create new offers (for any farmer's eligible product) and edit any farmer's offer; supports scheduled start/end date and time; admin-created/edited offers are approved directly without a separate approval step; notified farmers of changes
-- **Order Management**: View and manage all orders
-- **Certification**: Verify or revoke farmer certifications
-- **Inventory Alerts**: Monitor low-stock products across all farmers
-- **Reports**: Export reports as CSV
-- **Settings**: Configure delivery charge and product categories
-- **Live Feed**: Real-time new-order feed via Socket.io
-- **Sales Reports**: View farmer sales overview (revenue, orders, products sold, quantity)
-- **PDF Invoices**: Generate and download order invoices as PDF
-- **Contact Form**: Customers submit support requests; admins are notified
-- **Admin Audit Log**: Track admin actions for accountability
+- **Dashboard:** Totals and charts (sales, orders, users, products).
+- **Notifications:** Admin Notifications page for orders, farmers, products, inventory, support, reviews, and security alerts; real-time Socket.io delivery.
+- **User Management:** Manage all users; block/unblock and change roles (cannot modify self).
+- **Farmer Management:** View and manage all farmers; verify/revoke certifications; notified of new registrations.
+- **Product Management:** Manage all products across all farmers; notified of new products, low-stock, out-of-stock.
+- **Offer Approvals:** Filter, review, approve, reject (with reason), and deactivate farmer offers.
+- **Admin Offer Management:** Independently create new offers (for any farmer's eligible product) and edit any farmer's offer; supports scheduled start/end date/time; admin-created/edited offers approved directly after backend validation; farmers notified of changes.
+- **Order Management:** View and manage all orders.
+- **Certification:** Verify or revoke farmer certifications.
+- **Inventory Alerts:** Monitor low-stock products across all farmers.
+- **Reports:** Export reports as CSV.
+- **Settings:** Configure delivery charge and product categories.
+- **Live Feed:** Real-time new-order feed via Socket.io.
+- **Sales Reports:** View farmer sales overview (revenue, orders, products sold, quantity).
+- **PDF Invoices:** Generate and download order invoices as PDF.
+- **Contact Form:** Customers submit support requests; admins notified.
+- **Admin Audit Log:** Track admin actions for accountability.
+- **Newsletter Campaigns:** Create/edit campaigns with eligible-recipient count, upload banner images to ImageKit (JPG/PNG/WebP, max 5 MB), process campaigns (mock email mode), view campaign history, manage subscribers.
+
+### Shared Features
+
+- Real-time Socket.io notifications and live updates.
+- Role-based protected routes and permission enforcement.
+- Responsive UI with Tailwind CSS and Framer Motion carousels.
+- Secure JWT-based authentication with refresh tokens.
 
 ---
 
-## Features Workflow
-
-### Customer Purchase Flow
-
-1. **Browse** — Customer lands on Home, views Featured Products and Special Offers carousels, or browses Shop with category/price filters.
-2. **Product Detail** — Customer opens a product page, reviews images, price, reviews, and eligible offer countdown.
-3. **Cart** — Customer adds items to cart (DB-persisted, survives across sessions/devices). Offers are revalidated server-side using server time.
-4. **Checkout** — Customer selects delivery address, chooses payment (UPI / Card / Cash on Delivery), delivery charge applied, offer discounts calculated and snapshotted on order items.
-5. **Order Confirmation** — Order placed; status `Order Placed`. Customer and farmer notified via Socket.io + MongoDB persistence.
-6. **Tracking** — Customer tracks live status (`Order Placed → Packed → Out for Delivery → Delivered`) with farmer delivery location updates.
-7. **Post-purchase** — Customer can review the product after delivery and is notified if a wishlisted product comes back in stock.
-
-### Farmer Order & Offer Flow
-
-1. **Register** — Farmer registers; account requires admin approval before product actions (`approvedFarmer` middleware checks `farmerApproved` flag).
-2. **Product CRUD** — Farmer creates/updates/deletes products with Multer image uploads streamed to Cloudinary.
-3. **Inventory** — Farmer tracks stock, receives low-stock alerts, records inventory adjustments.
-4. **Offers** — Farmer creates/edits offers with scheduled start/end date/time; new or materially edited offers require admin approval.
-5. **Orders** — Farmer views orders containing their products, updates order status and delivery location; notified of new orders via Socket.io.
-6. **Earnings** — Farmer views earnings and stats dashboard; offer units/sales attributed from delivered order-item snapshots.
-7. **Certification** — Farmer maintains certification text; admin verifies/revokes with reason; farmer notified.
-
-### Admin Oversight Flow
-
-1. **Provisioning** — Admin created server-side only (`npm run seed:admin`); public registration supports customers and farmers only.
-2. **User/Farmer Management** — Admin views all users/farmers; blocks/unblocks, changes roles (cannot modify self); verifies/revokes farmer certifications.
-3. **Offer Approvals** — Admin reviews pending farmer offers, approves/rejects (with reason), or independently creates/edits offers for any farmer (approved directly after backend validation).
-4. **Product & Inventory** — Admin manages all products across farmers; notified of new products, low-stock, out-of-stock.
-5. **Orders & Reports** — Admin views all orders, exports CSV reports, configures delivery charge and product categories, generates PDF invoices.
-6. **Notifications** — Admin Notifications page shows orders, farmers, products, inventory, support, reviews, security alerts with real-time Socket.io delivery.
-7. **Audit** — Admin Audit Log tracks admin actions for accountability.
-
-### Newsletter Campaign Flow (Admin)
-
-1. **Subscribe** — Customer subscribes via Home page form (no auth required, rate-limited); stored in dedicated `newsletters` collection separate from user accounts.
-2. **Campaign** — Admin creates/edits campaign with eligible-recipient count, uploads banner image to ImageKit (JPG/PNG/WebP, max 5 MB), previews Desktop/Mobile.
-3. **Process** — Admin processes campaign (mock email mode; no SMTP required); campaign history tracks Processed/Sent/Cancelled/Duplicate actions.
-4. **Unsubscribe** — Customer unsubscribes; admin notified via in-app notification; no duplicate notifications on repeat unsubscribe.
-
----
-
-## Admin Offer Management
-
-Admin has complete offer management access across all farmers.
-
-### Permissions
-
-| Action | Permission |
-|---|---|
-| View all farmers' offers | Yes |
-| Create a new offer | Yes |
-| Edit any farmer's offer | Yes |
-| Approve new farmer-submitted offers | Yes |
-| Approve edited farmer-submitted offers | Yes |
-| Reject pending offers with a reason | Yes |
-| Deactivate any offer | Yes |
-| View rejected offers | Yes |
-| View inactive offers | Yes |
-| Search and filter all offers | Yes |
-
-Farmers retain their existing permissions: create/edit offers for their own eligible products, submit for admin approval, view approval status/rejection reasons, correct and resubmit rejected offers, deactivate their own offers. Farmers cannot approve, reject, or edit another farmer's offers.
-
-### Admin Create Offer
-
-Admin can create an offer via **Admin → Offer Management → Create Offer**. Fields: Offer Title, Description, Offer Type, Farmer, Product, Discount Type, Discount Value, Start Date, Start Time, End Date, End Time, Minimum Quantity, Minimum Order Amount, Maximum Discount.
-
-- Admin can select any registered and eligible farmer; after selecting a farmer, only that farmer's eligible products load (actual product name, image, price, stock from MongoDB).
-- Frontend validation plus full backend validation of discount values, dates, and minimum conditions.
-- Backend does not trust frontend-supplied farmer IDs, product prices, or stock values.
-- Admin-created offers are saved as `Approved` after successful server-side validation; creator and approver administrator IDs and timestamps are recorded.
-- The associated farmer is notified that Admin created an offer for their product.
-
-### Admin Edit Offer
-
-Admin can edit any offer regardless of which farmer created it, via the **Edit Offer** action on the offer details page and offer list. Editable fields: Offer Title, Description, Offer Type, Associated Farmer, Associated Product, Discount Type, Discount Value, Start Date, Start Time, End Date, End Time, Minimum Quantity, Minimum Order Amount, Maximum Discount.
-
-- Existing offer details load into the edit form; changing the farmer reloads that farmer's eligible products.
-- Product ownership and offer configuration are revalidated on the backend; frontend-supplied prices/stock are not trusted.
-- The administrator who edited the offer and the edit timestamp are recorded; previous information is preserved in audit history.
-- Admin edits are saved directly as `Approved` when validation succeeds and do not go into the farmer approval queue. A previously `Rejected` offer can be corrected and approved through the edit workflow.
-- The associated farmer is notified about the changes; invalid updates are rejected with a meaningful validation error.
-
----
-
-## Home Page Offers
-
-The Home page includes a **Special Offers & Discounts** section below the hero and before Featured Products. Both offers and featured products are displayed in continuous horizontal marquee carousel rows.
-
-### Continuous Carousel Behavior
-
-- Offer cards and product cards scroll continuously from right to left in an infinite marquee loop.
-- The card sequence is duplicated so the loop wraps seamlessly — no blank gaps or abrupt position resets.
-- Movement pauses on mouse hover and keyboard focus, and resumes when interaction ends.
-- On mobile, the carousel supports natural touch swiping; auto movement pauses while the user is actively touching/dragging and resumes after interaction ends.
-- Card widths are responsive (`clamp()`-based): roughly 1–2 cards on mobile (320–767px), 2–3 on tablets (768–1023px), and multiple cards on desktop (1024px+).
-- `overflow: hidden` is applied only to the carousel viewport — never to the entire page — so horizontal page overflow is prevented.
-- With `prefers-reduced-motion`, automatic movement is disabled and the row becomes a manually scrollable horizontal list.
-- All card interactions remain functional: product navigation, Add to Cart, Wishlist, and OfferCountdown timers are preserved.
-
-- Only offers that are `Approved`, active, not deactivated, within valid start/end dates/times, with an active available product belonging to the correct farmer, and valid discount configuration appear.
-- Pending, rejected, inactive, or expired offers never appear as active promotions.
-- Each offer card shows product image, product name, offer title, original price (strikethrough), discounted final price, discount badge (`20% OFF` / `₹30 OFF`), start/end dates and times, minimum quantity, live countdown timer, and a **Shop Now** action.
-- Discounts are calculated using actual database product prices, respecting maximum discount limits, minimum quantity, minimum order amount, and offer dates/times.
-- Upcoming offers show a countdown until start; active offers show a countdown until expiry.
-- Featured Products cards show original price (strikethrough), discounted price, and discount badge when a product has an eligible offer; products without offers keep their normal price.
-- **View All Offers** link navigates to the existing Offers page.
-- Empty state: "No active offers available right now. Check back soon!"
-
-## Continuous Horizontal Carousel Animations
-
-GreenMart implements five independent horizontal marquee carousel rows using Framer Motion (`^14.6.0`):
-
-| # | Section | Page | Content | Speed | Card Width (desktop) | Card Width (mobile min) |
-|---|---------|------|---------|-------|----------------------|-------------------------|
-| 1 | Offers & Discounts | Home | Active offers (`HomeOfferCard`) | 50 px/s | 260px | 170px |
-| 2 | Featured Products | Home | Products (`ProductCard`) | 40 px/s | 220px | 160px |
-| 3 | Offers & Discounts | Customer Dashboard | Active offers (`DashboardOfferCard`) | 50 px/s | 220px | 160px |
-| 4 | Offers & Discounts | Customer Dashboard | Coming Soon offers (`DashboardOfferCard`) | 40 px/s | 220px | 160px |
-| 5 | Recommended Products | Customer Dashboard | Recommended products (`ProductCard` compact) | 40 px/s | 200px | 150px |
-
-### Component
-
-`client/src/components/common/ContinuousMarquee.jsx` — a reusable horizontal marquee component.
-
-**Props:**
-- `children` — React nodes to scroll (card components)
-- `speed` — pixels per second (default 50)
-- `gap` — gap between cards in px (default 24)
-- `itemWidth` — desktop card width fallback in px (default 220)
-- `minItemWidth` — mobile minimum card width in px (default 160)
-- `pauseOnHover` — pause on mouse enter (default true)
-- `pauseOnFocus` — pause on keyboard focus (default true)
-- `showControls` — show Previous/Next arrow buttons (default true)
-- `infinite` — request triple-copy seamless loop (default true); effective infinite mode also requires the measured copy width to exceed the viewport width
-
-**Behavior:**
-- `scrollLeft` is the single source of truth for position — both auto-scroll and manual interaction update `scrollLeft` directly, so there is no conflict between translateX transforms and native scrolling
-- Auto-scroll uses `requestAnimationFrame` for smooth linear movement (zero React re-renders during animation)
-- Track width re-measured via `ResizeObserver` so it adapts to responsive card widths and window resizing
-- Viewport-aware infinite mode: if one full copy fits entirely inside the viewport, infinite mode is automatically disabled to prevent visible duplicate cards
-- Triple-copy seamless loop (`copy0 + copy1 + copy2`) when enough unique items exist — the loop wraps back to copy1 invisibly because copy1 and copy2 are identical
-- Finite mode renders unique items only once (no duplicates), disables auto-scroll, but keeps Previous/Next arrows, mouse drag, and touch swipe
-- Pauses on hover/focus; resumes on leave/blur; pauses during touch/drag
-- Previous/Next arrows scroll approximately one card width; disabled only when movement is genuinely unavailable
-- Mouse click-and-drag on desktop; finger swipe on mobile; trackpad horizontal scrolling works natively
-- Click-after-drag suppression prevents accidental card navigation after a drag
-- `prefers-reduced-motion`: no auto movement, manually scrollable row, no duplicated nodes (`aria-hidden` on duplicates otherwise)
-- Cleans up animation frame and ResizeObserver on unmount; no memory leaks
-
-### Data Deduplication
-
-Both `Home.jsx` and `CustomerDashboard.jsx` deduplicate products and offers by their stable `_id` before passing them to `ContinuousMarquee`. This prevents duplicate records from the API from being rendered as separate cards. Genuinely different products with similar names are preserved.
-
-### Infinite vs Finite Mode Decision
-
-1. Page component deduplicates items by `_id` and counts unique items
-2. Page component passes `infinite = (uniqueCount >= MIN_ITEMS_FOR_INFINITE)` where `MIN_ITEMS_FOR_INFINITE = 5`
-3. `ContinuousMarquee` starts with `effectiveInfinite = infinite`
-4. On mount, the component measures one copy width against the viewport width
-5. If one full copy fits entirely inside the viewport, `effectiveInfinite` is set to `false` (all cards fit; no duplicates needed)
-6. Auto-scroll effect runs only when `effectiveInfinite === true`
-7. Triple copies render only when `effectiveInfinite === true`
-
-**Behavior with N unique products:**
-| Unique Items | Narrow viewport | Wide viewport (copy fits in viewport) |
-|-------------|-----------------|--------------------------------------|
-| 4 | Finite (4 cards, no duplicates, no auto-scroll) | Finite (4 cards, no duplicates, no auto-scroll) |
-| 5 | Infinite (15 cards, triple copy, auto-scroll) | Finite (5 cards, no duplicates, no auto-scroll) |
-| 6+ | Infinite (3× count, triple copy, auto-scroll) | Infinite (3× count, triple copy, auto-scroll) |
-
-### Preserved Functionality
-
-No backend/API changes were made. The following are untouched:
-- Product API, Offer API, and backend logic
-- Active and Coming Soon offer filtering
-- Offer countdown calculations
-- Offer approval and scheduling
-- Product recommendation logic
-- Product prices, stock, and discount calculations
-- Add to Cart and Wishlist interactions
-- Authentication and role permissions
-- Existing responsive layouts outside the specified sections
-
-No fake or hardcoded offers/products are added.
-
-## Newsletter Subscription
-
-GreenMart includes a newsletter subscription feature on the Home Page ("Fresh from Our Farms" section).
-
-### Component
-
-`client/src/components/common/Newsletter.jsx` would be the reusable component (not yet extracted; subscription logic is inline in Home.jsx).
-
-### Backend API
-
-`server/src/models/Newsletter.js` — Mongoose model with `email` (unique, trimmed, lowercase), `subscribedAt`, and `isActive` fields.
-
-`server/src/controllers/newsletterController.js` — Controller with three endpoints:
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/newsletter/subscribe` | POST | None | Subscribes an email address. Normalizes (trim + lowercase), validates format, prevents duplicates. Returns 201 on new subscription, 200 on reactivation, 409 on duplicate active subscription. |
-| `/newsletter/unsubscribe` | POST | None | Deactivates an existing subscription. Returns 404 if email not found. |
-| `/newsletter/` | GET | Admin only | Lists all subscribers (with optional `isActive` query filter). |
-
-`server/src/routes/newsletterRoutes.js` — Route definitions mounted at `/api/newsletter`.
-
-### Frontend
-
-`client/src/api/newsletterApi.js` — API service with `subscribe(email)` and `unsubscribe(email)` methods.
-
-`client/src/pages/public/Home.jsx` — Home Page newsletter form (bottom of "Fresh from Our Farms" section):
-
-- Controlled email input with validation
-- Join button with loading state
-- Success/error messages displayed below the form
-- Email field cleared after successful subscription
-- Button disabled during submission
-- No navigation or page refresh on submit
-- No authentication required; no JWT or session involvement
-- Rate-limited by the global Express rate limiter (300 requests per 15 minutes in production)
-
-### Data Isolation
-
-Newsletter subscriptions are stored in a dedicated MongoDB collection (`newsletters`), completely separate from customer accounts, authentication tokens, and user profiles. Subscribing does not read, modify, or redirect any user account.
-
----
-
-## Time-Based Offers & Scheduling
-
-GreenMart offers support scheduled start and end date/time for precise discount windows. Both farmers and admins can create offers with `Start Date`, `Start Time`, `End Date`, and `End Time` fields.
-
-### Scheduling Fields
-
-| Field | Example | Description |
-|---|---|---|
-| Start Date | 10 November 2026 | Date the offer becomes eligible |
-| Start Time | 09:00 AM | Time the offer becomes eligible |
-| End Date | 12 November 2026 | Date the offer expires |
-| End Time | 09:00 PM | Time the offer expires |
-
-### Backend Scheduling
-
-- **`startAt` / `endAt`**: New UTC `Date` fields added to the `Offer` model alongside existing `startDate`/`endDate` for backward compatibility.
-- **Timezone handling**: Farmer/admin date+time inputs are interpreted in `Asia/Kolkata` (UTC+5:30) and converted to UTC before storage.
-- **Validation**: End datetime must be after start datetime; invalid dates/times are rejected; product prices and stock are verified from MongoDB (not trusted from frontend).
-- **Backward compatibility**: Existing offers with only `startDate`/`endDate` continue to work — end dates are treated as end-of-day UTC.
-
-### Automatic Offer Status
-
-Offer eligibility is calculated dynamically using server time (no cron job required):
-
-| Status | Condition | Discount Applies? | Countdown |
-|---|---|---|---|
-| Pending Approval | Waiting for admin approval | No | No |
-| Scheduled | Approved, start time in future | No | "Starts in HH:MM:SS" |
-| Active | Approved, within start/end window | Yes | "Offer ends in HH:MM:SS" |
-| Expired | End time passed | No | No |
-| Inactive | Manually deactivated | No | No |
-
-- Approval status and time-based availability are both checked — an approved offer can be `Scheduled` rather than `Active`.
-- Offers automatically activate at `startAt` and expire at `endAt`; no admin manual activation required.
-- Checkout independently revalidates offers from MongoDB using server time; expired/upcoming/pending/rejected/deactivated offers are rejected.
-
-### Live Countdown
-
-A reusable `OfferCountdown` component (`client/src/components/offers/OfferCountdown.jsx`) displays `HH:MM:SS` on customer-facing pages:
-
-- Updates every second
-- Shows "Starts in" for upcoming offers, "Offer ends in" for active offers
-- Stops at zero; does not continue showing old discounted prices
-- Handles browser tab visibility changes (recalculates on focus)
-- Clears intervals on unmount (no memory leaks)
-- Uses server-provided time offset for clock accuracy
-
-### Countdown on Customer Pages
-
-- **Home page**: Offer cards show countdown timers; upcoming offers display original price with "Starts in", active offers show discounted price with "Offer ends in"
-- **Customer Offers page**: Offer cards show countdown timers
-- **Product cards**: Products with eligible offers show countdown timers
-
----
-
-## Notification System
-
-GreenMart has a role-based notification system for Customer, Farmer, and Admin.
-
-### Architecture
-
-- **MongoDB model**: `Notification` with recipient user ID, role, type, category, title, message, safe icon identifier, priority, related entity type/ID, action URL, read status, read timestamp, creation timestamp, and event deduplication key.
-- **Backend**: JWT-authenticated APIs (`GET /notifications`, `GET /unread-count`, `PATCH /:id/read`, `PATCH /read-all`, `DELETE /:id`). Users access only their own notifications; IDs/filters/pagination are validated.
-- **Socket.IO**: JWT-authenticated connections; users join only their authorized notification rooms; notifications are saved in MongoDB before being emitted; unread counts update in real time; reconnection retrieves persisted notifications without duplication.
-- **Email**: `EMAIL_ENABLED=false` works; in-app notifications work without SMTP credentials; optional email failures never block business operations.
-
-### Notification Triggers
-
-Notifications are generated after successful database operations for: orders, order status changes, offers, farmer registration/activation/verification, certifications, products, inventory threshold changes, messages, reviews, support, and account security.
-
-- Multi-farmer orders: each farmer is notified only about their own products.
-- Farmer-created offers awaiting review notify Admin recipients.
-- Admin-created offers (immediately approved) do not generate unnecessary pending-review notifications.
-- Offer approval, rejection, and deactivation notify the associated farmer; rejection includes the actual saved reason.
-- Wishlist notifications go only to customers with the matching product in their wishlist.
-- Low-stock notifications are generated on threshold crossing, not on every inventory check.
-
-### Categories
-
-**Customer:** All, Orders, Offers, Payments, Wishlist, Messages, Support, Account
-**Farmer:** All, Orders, Offers, Products, Inventory, Certifications, Messages, Support, Account
-**Admin:** All, Orders, Farmers, Products, Offers, Inventory, Support, Security
-
-### Icons
-
-A centralized config (`client/src/config/notificationConfig.js`) maps every notification type to a safe, predefined `lucide-react` icon (ShoppingBag, Truck, BadgeCheck, CircleX, PackagePlus, AlertTriangle, Heart, ShieldAlert, LockKeyhole, Bell, etc.) with consistent colors and a fallback icon for unknown types. Arbitrary component names from database values are never rendered.
-
----
-
-## Roles & Permissions
+## Role-Based Access
 
 ### Role Definitions
 
 | Role | Description | Provisioning |
 |---|---|---|
-| `customer` | Buys products, manages own cart/orders/profile | Public registration |
-| `farmer` | Sells products, manages own inventory and fulfills orders | Public registration; requires admin approval before product actions |
+| `customer` | Buys products; manages own cart, orders, profile | Public registration |
+| `farmer` | Sells products; manages own inventory and fulfills orders | Public registration; requires admin approval before product actions |
 | `admin` | Oversees the entire platform | Created server-side only via `npm run seed:admin` |
 
-Public registration supports **customers and farmers only**. Setting an `admin` role in a registration request does **not** create an administrator. Admin accounts must be provisioned server-side.
+Public registration supports **customers and farmers only**. Setting an `admin` role in a registration request does not create an administrator.
 
 ### Permission Matrix
 
@@ -603,7 +112,7 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 | Manage users (block/unblock/role change) | no | no | yes |
 | New-order notification | no | yes | live feed |
 | View dashboard analytics | no | own earnings/stats | all totals/charts |
-| View notifications | own | own | all (Admin Notifications page) |
+| View notifications | own | own | all |
 | Export CSV reports | no | no | yes |
 | Manage crops | no | own only | all |
 | Manage harvests | no | own only | all |
@@ -616,10 +125,162 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 ### Important Security Notes
 
 - Authorization is enforced by **backend middleware** (`auth`, `role`, `approvedFarmer`) and protected routes — not by the frontend alone.
-- Farmers cannot perform product actions until their account is approved by an admin (`approvedFarmer` middleware checks the `farmerApproved` flag).
-- Admins cannot approve, reject, or edit another farmer's offers through the farmer workflow; farmers cannot use admin create/edit offer permissions.
+- Farmers cannot perform product actions until approved by an admin (`approvedFarmer` middleware checks the `farmerApproved` flag).
 - Offer approval status is set by the backend only; the frontend cannot decide whether an offer is approved.
 - Administrators cannot view user passwords. Passwords are hashed with bcryptjs and never stored or returned in plaintext.
+
+---
+
+## Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion |
+| Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
+| AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
+| Image Storage | Multer for local temp storage; Cloudinary for product/avatar/farm-photo delivery; ImageKit for newsletter campaign banner uploads |
+| Testing | Vitest (client), Jest (server), including Socket.io integration tests |
+
+---
+
+## Project Architecture
+
+GreenMart follows a client–server architecture with a REST API over HTTP and real-time events over Socket.IO.
+
+```
+Client (React + Vite)  <-->  Server (Node + Express)  <-->  MongoDB
+       |                              |                        |
+  Redux Toolkit                Controllers + Services       Mongoose ODM
+  React Router                 Middleware (auth/role)       Cloudinary / ImageKit
+  Axios + Socket.IO client     Socket.IO server             SMTP (optional)
+```
+
+### Request Flow
+
+1. Client sends an authenticated request (JWT in cookie/header) via Axios.
+2. Express middleware validates JWT (`auth` middleware) and role (`role` middleware).
+3. Controller delegates to a service layer for business logic.
+4. Service interacts with Mongoose models; images uploaded via Multer are streamed to Cloudinary/ImageKit.
+5. Response returned to client; relevant Socket.IO events emitted for real-time updates.
+6. Notifications are persisted in MongoDB before being emitted over Socket.IO.
+
+### Real-Time Architecture
+
+Socket.IO handles authenticated connections where users join only their authorized notification rooms. Notifications are saved to MongoDB before emission, so reconnection retrieves persisted notifications without duplication. Used for new orders, status updates, location updates, offer changes, and system alerts.
+
+---
+
+## Folder Structure
+
+```
+greenmart/
+├── client/                 # React + Vite frontend
+│   ├── public/
+│   ├── src/
+│   │   ├── animations/     # Framer Motion section reveal and dropdown variants
+│   │   ├── api/            # Axios API service modules per domain
+│   │   ├── app/            # Redux store configuration
+│   │   ├── components/     # Reusable UI components
+│   │   │   ├── admin/      # Admin-specific components
+│   │   │   ├── assistant/  # AI assistant components
+│   │   │   ├── cart/       # Cart table, order summary, etc.
+│   │   │   ├── checkout/   # Checkout form components
+│   │   │   ├── common/     # Shared components (Logo, BackButton, etc.)
+│   │   │   ├── dashboard/  # Dashboard widgets
+│   │   │   ├── layout/     # Header, navbar, footer layout components
+│   │   │   ├── map/        # Map and location picker components
+│   │   │   ├── messages/   # Customer-farmer messaging components
+│   │   │   ├── notifications/  # Notification list and badge
+│   │   │   ├── offers/     # Offer cards and countdown components
+│   │   │   ├── orders/     # Order details and history components
+│   │   │   ├── product/    # Product card, detail, form components
+│   │   │   └── routing/    # Protected route and role-based route components
+│   │   ├── config/         # Notification config, etc.
+│   │   ├── data/           # Demo catalog data
+│   │   ├── features/       # Redux slices
+│   │   │   ├── assistant/  # AI assistant slice
+│   │   │   ├── auth/       # Auth slice (login, logout, restore)
+│   │   │   ├── cart/       # Cart slice (guest sync, merge, persistence)
+│   │   │   ├── notifications/  # Notifications slice
+│   │   │   ├── orders/     # Orders slice
+│   │   │   ├── products/   # Products slice
+│   │   │   └── wishlist/   # Wishlist slice
+│   │   ├── hooks/          # Custom hooks (useAuth, useDebounce, useGeolocation)
+│   │   ├── layouts/        # Page layout wrappers
+│   │   ├── pages/          # Page components by role
+│   │   │   ├── admin/      # Admin pages
+│   │   │   ├── auth/       # Login, register, forgot/reset password pages
+│   │   │   ├── customer/   # Customer dashboard and pages
+│   │   │   ├── farmer/     # Farmer dashboard and pages
+│   │   │   ├── public/     # Public storefront pages
+│   │   │   └── shared/     # Shared pages (cart, etc.)
+│   │   ├── routes/         # Route definitions with role-based protection
+│   │   ├── socket/         # Socket.io client connection
+│   │   ├── styles/         # Global Tailwind CSS
+│   │   ├── tests/          # Test utilities
+│   │   └── utils/          # Utilities (tokenStorage, roleAccess, imageUrl, ...)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   └── postcss.config.js
+├── server/                 # Node + Express backend
+│   ├── src/
+│   │   ├── server.js       # Entry point: DB connection, defaults, HTTP + Socket.io server
+│   │   ├── app.js          # Express app setup (helmet, CORS, rate limiting, routes, error handling)
+│   │   ├── config/         # env, db, cloudinary, gemini, mailer, clientOrigins
+│   │   ├── constants/      # categories, orderStatus, roles
+│   │   ├── controllers/    # Request handlers per domain
+│   │   ├── middleware/     # auth, role, approvedFarmer, upload, validate, errorHandler
+│   │   ├── models/         # Mongoose schemas
+│   │   ├── routes/         # Express route definitions (+ index.js aggregator)
+│   │   ├── services/       # Business logic layer
+│   │   ├── sockets/        # Socket.io setup and emitters
+│   │   ├── bootstrap/      # ensureDefaults (seed categories/settings on startup)
+│   │   ├── seed/           # seed.js, createAdmin.js, sample images
+│   │   ├── scripts/        # Migration/backfill scripts
+│   │   └── utils/          # asyncHandler, authValidation, generateOrderNumber, haversine,
+│   │                     # tokens, invoice, invoiceNumbers, offerValidation
+│   ├── .env
+│   ├── .env.example
+│   └── package.json
+├── README.md
+└── .gitignore
+```
+
+---
+
+## Installation and Setup
+
+### Prerequisites
+
+- Node.js installed
+- MongoDB (Atlas cluster URI or local instance)
+
+### Backend Setup
+
+```bash
+cd server
+cp .env.example .env
+# Fill .env: MONGO_URI, JWT_SECRET, ADMIN_EMAIL, ADMIN_PASSWORD, SEED_PASSWORD, GEMINI_API_KEY
+npm install
+npm run seed:admin
+npm run dev      # http://127.0.0.1:5000
+```
+
+### Frontend Setup
+
+```bash
+cd client
+cp .env.example .env
+# VITE_API_URL=http://127.0.0.1:5000/api
+# VITE_SOCKET_URL=http://127.0.0.1:5000
+npm install
+npm run dev      # http://127.0.0.1:5173
+```
+
+> Copy `server/.env.example` → `server/.env` before starting the backend. Copy `client/.env.example` → `client/.env` and adjust `VITE_API_URL` / `VITE_SOCKET_URL` as needed.
+> If `localhost` refuses the connection, use `http://127.0.0.1:5173` for the frontend and `http://127.0.0.1:5000` for the backend.
 
 ---
 
@@ -629,304 +290,210 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 
 | Variable | Purpose | Required |
 |---|---|---|
-| `PORT` | Server port | No (default: 5000) |
-| `NODE_ENV` | Environment | No (default: development) |
+| `PORT` | HTTP server port | No (default: 5000) |
+| `NODE_ENV` | Application environment | No (default: development) |
 | `MONGO_URI` | MongoDB connection string | Yes |
-| `JWT_SECRET` | JWT signing secret | Yes |
-| `JWT_EXPIRES_IN` | Token expiry | No (default: 7d) |
-| `CLIENT_URL` | Frontend URL for CORS | No (default: http://localhost:5173) |
-| `DELIVERY_CHARGE` | Flat delivery charge | No (default: 30) |
+| `JWT_SECRET` | Access token signing secret | Yes |
+| `JWT_EXPIRES_IN` | Access token expiry | No (default: 15m) |
+| `JWT_REFRESH_SECRET` | Refresh token signing secret | No (falls back to `JWT_SECRET`) |
+| `JWT_REFRESH_EXPIRES_IN` | Refresh token expiry | No (default: 7d) |
+| `CLIENT_URL` | Allowed frontend origin(s) for CORS | No (default: http://localhost:5173) |
+| `DELIVERY_CHARGE` | Flat standard delivery charge | No (default: 30) |
 | `EMAIL_ENABLED` | Enable email delivery | No (default: false) |
-| `SMTP_HOST` | SMTP host | No (only if email enabled) |
+| `SMTP_HOST` | SMTP host | Conditional (required when `EMAIL_ENABLED=true`) |
 | `SMTP_PORT` | SMTP port | No (default: 587) |
-| `SMTP_USER` | SMTP username | No (only if email enabled) |
-| `SMTP_PASS` | SMTP app password | No (only if email enabled) |
-| `EMAIL_FROM` | Sender name/email | No (only if email enabled) |
-| `ADMIN_EMAIL` | First admin email | Yes (for seed:admin) |
-| `ADMIN_PASSWORD` | First admin password | Yes (for seed:admin) |
-| `GEMINI_API_KEY` | Google Gemini API key | No (only for AI assistant) |
-| `GEMINI_MODEL` | Gemini model | No (default: gemini-flash-lite-latest) |
-| `SEED_PASSWORD` | Demo seeder password | No (only for seed) |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | No (only for image uploads) |
-| `CLOUDINARY_API_KEY` | Cloudinary API key | No (only for image uploads) |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret | No (only for image uploads) |
-| `IMAGEKIT_PUBLIC_KEY` | ImageKit public key | No (only for newsletter banners) |
-| `IMAGEKIT_PRIVATE_KEY` | ImageKit private key (server-only) | No (only for newsletter banners) |
-| `IMAGEKIT_URL_ENDPOINT` | ImageKit URL endpoint | No (only for newsletter banners) |
+| `SMTP_USER` | SMTP username | Conditional (required when `EMAIL_ENABLED=true`) |
+| `SMTP_PASS` | SMTP app password | Conditional (required when `EMAIL_ENABLED=true`; server-only secret) |
+| `EMAIL_FROM` | Sender email address | Conditional (required when `EMAIL_ENABLED=true`) |
+| `ADMIN_EMAIL` | Admin email for `seed:admin` script | Conditional (required for `npm run seed:admin`) |
+| `ADMIN_PASSWORD` | Admin password for `seed:admin` script | Conditional (required for `npm run seed:admin`; server-only secret) |
+| `SEED_PASSWORD` | Demo seeder password | Conditional (required for `npm run seed` without `--categories`; server-only secret) |
+| `RESEND_API_KEY` | Resend API key for email delivery | Conditional (required for Resend/newsletter email) |
+| `NEWSLETTER_FROM_EMAIL` | Newsletter sender email address | Conditional (required for newsletter/resend email) |
+| `NEWSLETTER_FROM_NAME` | Newsletter sender display name | No (default: GreenMart) |
+| `NEWSLETTER_REPLY_TO` | Reply-to email header for newsletters | Conditional (optional for newsletters) |
+| `NEWSLETTER_UNSUBSCRIBE_SECRET` | Secret for unsubscribe link signatures | Conditional (optional for newsletters; server-only secret) |
+| `NEWSLETTER_EMAIL_MODE` | Newsletter email sending mode | No (default: mock) |
+| `GEMINI_API_KEY` | Google Gemini API key | Conditional (required for AI assistant; server-only secret) |
+| `GEMINI_MODEL` | Gemini AI model | No (default: gemini-flash-lite-latest) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name | Conditional (required for product/media uploads) |
+| `CLOUDINARY_API_KEY` | Cloudinary API key | Conditional (required for product/media uploads; server-only secret) |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret | Conditional (required for product/media uploads; server-only secret) |
+| `IMAGEKIT_PUBLIC_KEY` | ImageKit public key | Conditional (required for newsletter banner uploads) |
+| `IMAGEKIT_PRIVATE_KEY` | ImageKit private key | Conditional (required for newsletter banner uploads; server-only secret) |
+| `IMAGEKIT_URL_ENDPOINT` | ImageKit URL endpoint | Conditional (required for newsletter banner uploads) |
+| `OSRM_BASE_URL` | Delivery routing service URL | No (default: https://router.project-osrm.org) |
 
-> The root `server/.env.example` exists and contains all the above variables. Copy it to `.env` and fill in real values before starting the backend.
-> The client directory does **not** ship with a `.env.example` file. Create `client/.env` manually.
+> All variables above are server-side only. Never commit `.env` files (covered by `.gitignore`). Server-only secrets must never be exposed to the frontend.
+
+Seed-only variables (`SEED_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) are used by the `seed` and `seed:admin` scripts, not by normal server operation.
 
 ### Client (`client/.env`)
 
 | Variable | Purpose | Required |
 |---|---|---|
-| `VITE_API_URL` | Backend API base URL | No (default: http://127.0.0.1:5000/api) |
-| `VITE_SOCKET_URL` | Socket.io server URL | No (default: http://127.0.0.1:5000) |
+| `VITE_API_URL` | Backend API base URL | No (default: http://localhost:5000/api) |
+| `VITE_SOCKET_URL` | Socket.io server URL | No (default: http://localhost:5000) |
 
-### Variable Classification
+> Only variables prefixed with `VITE_` are exposed to the client build. No server secrets (JWT, MongoDB, SMTP, Gemini, Cloudinary, ImageKit) belong in the client environment.
 
-- **Required**: `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (backend)
-- **Optional but recommended**: `SMTP_*` (email), `GEMINI_API_KEY` (AI assistant), `CLOUDINARY_*` (image uploads)
-- **Never commit secrets**: `.env` files contain credentials and must not be committed to version control.
+## API Overview
 
----
+All API routes are mounted under `/api`. Routes are organized by domain and protected by authentication/role middleware where applicable.
 
-## Run Locally
+| Domain | Routes | Auth | Description |
+|---|---|---|---|
+| Auth | `/auth/*` | No | Register, login, logout, forgot/reset password, refresh token |
+| User | `/users/*` | Yes | Profile, addresses, account management |
+| Product | `/products/*` | Partial | Public storefront + admin/farmer product CRUD |
+| Order | `/orders/*` | Yes | Place, view, track orders; farmer status updates |
+| Cart | `/cart/*` | Yes | Cart CRUD persisted in DB |
+| Wishlist | `/wishlist/*` | Yes | Wishlist management |
+| Farmer | `/farmers/*` | Partial | Farmer profiles, products, dashboard |
+| Admin | `/admin/*` | Admin | User/farmer/product/order management, reports, settings |
+| Offer | `/offers/*` | Partial | Offer CRUD; customer offers; admin offer management |
+| Admin Offer | `/admin/offers/*` | Admin | Create/edit/approve/reject offers for any farmer |
+| Notification | `/notifications/*` | Yes | List, unread count, mark read/delete |
+| Contact | `/contact/*` | No | Support contact form |
+| Message | `/messages/*` | Yes | Customer–farmer messaging |
+| Review | `/reviews/*` | Yes | Product reviews (post-purchase) |
+| Category | `/categories/*` | Partial | Product categories |
+| Crop | `/crops/*` | Yes | Farmer crop management |
+| Harvest | `/harvests/*` | Yes | Farmer harvest management |
+| Inventory | `/inventory/*` | Yes | Stock tracking and adjustments |
+| Sales | `/sales/*` | Yes | Sales reports |
+| Location | `/location/*` | Partial | Farm locations, map |
+| Settings | `/settings/*` | Admin | Delivery charge, categories config |
+| Newsletter | `/newsletter/*` | Partial | Subscribe/unsubscribe; admin campaigns |
+| Assistant | `/assistant/*` | Yes | AI shopping assistant (Gemini) |
+| Delivery | `/delivery/*` | Yes | Delivery tracking/location updates |
 
-### Prerequisites
-- Node.js installed
-- MongoDB (Atlas cluster URI or local instance)
-
-### Backend
-
-```bash
-cd server
-cp .env.example .env
-# Set MONGO_URI and JWT_SECRET. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and EMAIL_FROM for email.
-# Set GEMINI_API_KEY (and optionally GEMINI_MODEL) to enable the server-side shopping assistant.
-# Configure CLOUDINARY_* for cloud image storage.
-npm install
-npm run seed:admin
-npm run dev      # http://127.0.0.1:5000
-```
-
-### Frontend
-
-```bash
-cd client
-cp .env.example .env
-# VITE_API_URL=http://localhost:5000/api
-# VITE_SOCKET_URL=http://localhost:5000
-npm install
-npm run dev
-```
-
-- **Frontend**: http://127.0.0.1:5173 (or alternate port if in use)
-- **Backend**: http://127.0.0.1:5000
-
-> If `localhost` refuses the connection, use `http://127.0.0.1:5173` for the frontend and `http://127.0.0.1:5000` for the backend. `localhost` may resolve to IPv6 (`::1`) while the servers listen on IPv4 (`0.0.0.0`).
+Key public endpoints:
+- `GET /products/storefront/offers` — active offers for home page
+- `GET /products/storefront/server-time` — server time for countdown accuracy
+- `POST /newsletter/subscribe` — newsletter subscription (no auth)
+- `POST /newsletter/unsubscribe` — unsubscribe (no auth)
 
 ---
 
-## Development Workflow
+## Database Models
 
-### Typical development loop
+GreenMart uses MongoDB with Mongoose. Schemas live in `server/src/models/`.
 
-1. **Start the backend** — from `server/`: `npm run dev` (uses `nodemon`, watches `src/`).
-2. **Start the frontend** — from `client/`: `npm run dev` (Vite dev server with hot reload).
-3. **Seed data** — `npm run seed:admin` creates the first admin; `npm run seed` seeds demo development data (requires `SEED_PASSWORD`, refused in production).
-4. **Run tests** — backend: `cd server && npm test` (Jest, `mongodb-memory-server`); frontend: `cd client && npm run test` (Vitest).
-5. **Build for production** — frontend: `cd client && npm run build` (outputs to `dist/`).
-6. **Verify responsive carousels** — open Home page and Customer Dashboard at breakpoints 375px, 430px, 768px, 1366px, and 1920px; confirm cards move continuously in infinite mode, render once without duplicates in finite mode, pause on hover/touch, swipe manually on mobile, and do not cause horizontal page overflow.
-7. **Lint/typecheck** — there is no separate lint script; run tests to verify behavior.
-
-### Seed commands (run from `server/`)
-
-| Command | Purpose |
+| Model | Purpose |
 |---|---|
-| `npm run seed:admin` | Create the first administrator (safe to rerun; does not overwrite existing admin) |
-| `npm run seed` | Seed development demo data (requires `SEED_PASSWORD`; refuses production) |
-| `npm run seed:reset` | Remove and replace demo data only (does not reset admin password) |
-
-### Environment workflow
-
-- Copy `server/.env.example` → `server/.env` and fill in `MONGO_URI`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
-- Copy `client/.env.example` → `client/.env` and set `VITE_API_URL`, `VITE_SOCKET_URL`.
-- Never commit `.env` files (covered by `.gitignore`).
-
----
-
-## Database and First Admin
-
-- Database: MongoDB (connection via `MONGO_URI`)
-- Mongoose is the ODM; schemas live in `server/src/models/`
-- Admin accounts are created **only** through the server-side setup command. Public registration supports customers and farmers only.
-
-1. In `server/.env`, set `MONGO_URI` and configure:
-   ```
-   ADMIN_EMAIL=your-admin@gmail.com
-   ADMIN_PASSWORD=use-a-unique-strong-password
-   ```
-   - `ADMIN_EMAIL` must be a valid lowercase email address.
-   - `ADMIN_PASSWORD` must be at least 8 characters and contain lowercase, uppercase, a number, and a special character.
-   - Keep `server/.env` private; do not commit it.
-2. Create the account:
-   ```bash
-   cd server
-   npm run seed:admin
-   ```
-   - Hashes the password with bcryptjs.
-   - Creates the account only if that email is unused.
-   - Safe to rerun; leaves an existing admin unchanged and refuses to promote a customer/farmer account.
-3. Start the server and client.
-4. Open `http://127.0.0.1:5173/admin/login` and sign in. Successful login opens `/admin/dashboard`.
-
-To reset an admin password, use **Forgot password?** on the login page with the admin email and complete the emailed reset link (configure SMTP first). The seed command does **not** reset or overwrite existing passwords.
+| `User` | Accounts (customer/farmer/admin), profile, addresses, roles, password hash |
+| `Product` | Product catalog (name, price, stock, category, farmer, images, offers) |
+| `Order` | Orders, items, status flow, payment, delivery, snapshots |
+| `Cart` | DB-persisted cart per user |
+| `Wishlist` | Wishlisted products per user |
+| `Category` | Product categories |
+| `Address` | Saved addresses |
+| `FarmerProfile` | Farmer details, certification, farm photos |
+| `Review` | Product reviews |
+| `Notification` | Role-based notifications with category, priority, read status |
+| `Message` | Customer–farmer messages |
+| `Setting` | Delivery charge, categories configuration |
+| `Offer` | Time-based product offers with start/end scheduling |
+| `Crop` | Farmer crops |
+| `Harvest` | Farmer harvests with availability |
+| `InventoryAdjustment` | Stock increase/decrease history |
+| `InvoiceCounter` | Invoice number sequencing |
+| `RefreshToken` | JWT refresh tokens |
+| `AdminAuditLog` | Admin action audit trail |
+| `Newsletter` | Newsletter subscriptions |
+| `NewsletterCampaign` | Admin newsletter campaigns |
+| `NewsletterPayment` | Newsletter payment records |
+| `NewsletterRecipient` | Campaign recipients |
+| `NewsletterSubscription` | Subscription management |
 
 ---
 
-## Seed Commands
+## Authentication and Authorization
 
-Run from `server/`:
+### Authentication
 
-| Command | Purpose |
-|---|---|
-| `npm run seed:admin` | Create the first administrator (safe to rerun; does not overwrite) |
-| `npm run seed` | Seed development demo data (requires `SEED_PASSWORD`; refuses production) |
-| `npm run seed:reset` | Remove and replace demo data only (does not reset admin password) |
+- JWT-based stateless authentication.
+- Passwords hashed with bcryptjs (never stored/returned in plaintext).
+- Access tokens and refresh tokens issued on login; refresh tokens stored in `RefreshToken` collection.
+- Password reset via email token (SMTP required for delivery).
+- Admin accounts are **not** created via public registration; they are provisioned server-side only via `npm run seed:admin`.
 
-Demo accounts are created by `npm run seed` using `SEED_PASSWORD`. Do **not** run the demo seeder in production or use demo accounts as production admin credentials.
+### Authorization
+
+- `auth` middleware — verifies JWT and attaches the user to the request.
+- `role(...roles)` middleware — restricts routes to specific roles (`customer`, `farmer`, `admin`).
+- `approvedFarmer` middleware — ensures a farmer account is admin-approved before product actions.
+- Backend enforces ownership: users access only their own data; farmers access only their own products/orders; admins access all.
+- Offer approval status is set by the backend only; frontend cannot decide approval.
+- Admin-created/edited offers are approved directly after backend validation and recorded with creator/approver IDs and timestamps.
 
 ---
 
 ## Testing
 
-- **Client (Vitest)**:
-  ```bash
-  cd client
-  npm run test
-  ```
-- **Server (Jest)**:
-  ```bash
-  cd server
-  npm test
-  ```
+### Client (Vitest)
+
+```bash
+cd client
+npm run test        # vitest run
+```
+
+### Server (Jest)
+
+```bash
+cd server
+npm test            # jest --runInBand --forceExit
+```
 
 Server tests run with `mongodb-memory-server` and include Socket.io integration tests for order status and location updates.
 
-**Latest test results** (all green):
-- Backend: 30 suites, ~300 tests passed (2 pre-existing environment failures unrelated to this change: mongodb-memory-server disk space, stock-alert notification)
-- Frontend: 46 suites, 326 tests passed
-- Production build (`npm run build`): succeeds
+### Latest Results
+
+- Backend: 41 test suites passed, 419 tests passed.
+- Frontend: 63 test files passed, 515 tests passed.
+- Frontend production build: Successful.
 
 ---
 
-## Troubleshooting
+## Deployment
 
-| Issue | Cause | Fix |
-|---|---|---|
-| `MongoDB connection or index initialization failed` | `MONGO_URI` is wrong, unreachable, or the Atlas cluster is paused | Verify `MONGO_URI` in `server/.env`. Ensure the Atlas cluster is running and your IP is whitelisted. For local MongoDB, use `mongodb://127.0.0.1:27017/greenmart` and install/run MongoDB locally. |
-| `localhost refused to connect` (ERR_CONNECTION_REFUSED) | `localhost` resolves to IPv6 (`::1`) while servers listen on IPv4 (`0.0.0.0`) | Use `http://127.0.0.1:5173` and `http://127.0.0.1:5000` instead of `http://localhost:...`. |
-| Port 5173 or 5000 already in use | Another process is bound to the port | Vite will auto-pick an alternate port (e.g. 5174). For the backend, change `PORT` in `server/.env` and restart. |
-| `Request failed with status code 429` | Rate limiter tripped from repeated `localhost` IPv6 retries | Switch to `http://127.0.0.1` URLs and restart the backend to reset the in-memory rate-limit store. |
-| Admin login fails / admin not found | `npm run seed:admin` was not run or `ADMIN_EMAIL`/`ADMIN_PASSWORD` not set | Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `server/.env`, then run `npm run seed:admin`. |
-| Image upload fails | Cloudinary credentials missing or invalid | Configure `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` in `server/.env`. Multer stores files locally first; Cloudinary upload requires valid credentials. |
-| `farmerApi is not defined` | Missing import in a public page | Ensure `farmerApi` is imported (fixed in `client/src/pages/public/FarmLocations.jsx`). |
-| Offer countdown not updating | Server time not fetched or component unmounted | The `OfferCountdown` component fetches server time via `GET /products/storefront/server-time`; ensure the backend is running. |
-| Offer not activating at start time | `startAt`/`endAt` stored in UTC; date/time inputs interpreted in Asia/Kolkata | Backend converts Asia/Kolkata local date+time to UTC before storage. Verify server timezone and input format (`YYYY-MM-DD` + `HH:MM`). |
+### Backend (Node + Express)
 
----
+1. Provision a MongoDB database (Atlas recommended) and obtain `MONGO_URI`.
+2. Set environment variables in `server/.env` (see Environment Variables section).
+3. Install dependencies: `npm install` (production dependencies only recommended).
+4. Create the admin: `npm run seed:admin`.
+5. Start the server: `npm start` (or `npm run dev` with nodemon in development).
+6. The server listens on `PORT` (default 5000).
 
-## License
+### Frontend (React + Vite)
 
-This project is private and intended for internal use. Do not distribute or publish without authorization.
+1. Set `VITE_API_URL` and `VITE_SOCKET_URL` in `client/.env` to point to your deployed backend.
+2. Install dependencies: `npm install`.
+3. Build for production: `npm run build` (outputs to `dist/`).
+4. Serve `dist/` via a static host (Nginx, Vercel, Netlify, etc.) or serve with a Node static server.
 
----
+### Production Checklist
 
-## Final Production Readiness Audit
-- Backend Jest: 30 suites pass (2 pre-existing environment failures unrelated to this change)
-- Frontend Vitest: 46 suites / 326 tests passed
-- Frontend production build: succeeded
-- Backend startup: MongoDB connected; no startup errors
-- No new bugs discovered; no secrets exposed; no commits/pushes performed
-
-- **Time-Based Product Offers & Countdown**: Added scheduled start/end date and time to offers (`startAt`/`endAt` UTC fields); automatic offer activation at start time and expiration at end time using server time; live `HH:MM:SS` countdown timers on Home page, Customer Offers page, and product cards; `OfferCountdown` reusable component; timezone handling (Asia/Kolkata → UTC); server-time API endpoint (`GET /products/storefront/server-time`); checkout revalidates offers using server time; 17 new backend test scenarios; 22 frontend test updates
-- **Admin Offer Management**: Admin can independently create and edit offers for any farmer; admin-created/edited offers are approved directly after backend validation; farmers are notified; full frontend + backend validation; 12 new test scenarios
-- **Home Page Offers**: New "Special Offers & Discounts" section below the hero showing approved, active offers with real prices, images, dates, and badges; Featured Products show discount strikethrough/badge when eligible; View All Offers link; empty/loading states
-- **Admin Add Farmer Certification Fields**: Added "Certification Name" and "Certificate Number" text inputs to the Add Farmer form; saved to FarmerProfile MongoDB record; does not auto-verify the farmer; displayed in the Farmer Verification table ("Not provided" when missing)
-- **Notification System Audit & Improvements**: Added `actionUrl`, `readAt`, `priority`, `icon`, `eventKey` fields to Notification model; category filter + pagination on notification list API; customer registration → admin notification; wishlist back-in-stock notification; centralized `notificationConfig.js` with type→lucide-icon mapping; updated shared and farmer notification pages with category filters, deletion, pagination; deduplication via event keys; 24 new tests
-- **Bug Fix**: Added missing `farmerApi` import in `client/src/pages/public/FarmLocations.jsx` (was causing a runtime `ReferenceError`)
-- Cart quantity: optimistic updates (instant UI feedback), smooth QuantityControl controls, per-item pending states, stock validation, rollback on API failure
-- Notifications: customer + farmer order-placed and status-change notifications via DB + Socket.io; admin notifications for orders, farmers, products, inventory, support, reviews, security
-- Admin Notifications page: summary cards, category filters, mark-as-read/delete, pagination, loading/empty/error states
-- Inventory: editable Current Stock and Minimum Stock per product; targeted product update (avoids full-document validation on stock-only changes); low-stock/out-of-stock status transitions
-- Product validation fix: stock-only updates no longer blocked by missing legacy product descriptions
-- UI consistency passes: base font 17px, shared layout components, container 1280px, responsive grids.
-- Customer mobile drawer (hamburger menu): shows public links (Home, Shop, Offers, About, Farmers, Contact) followed by customer links (Customer Dashboard, My Orders, Cart, Wishlist, Track Orders, Profile, Notifications, Settings) and Logout; customer login redirects to home page
+- `NODE_ENV=production`
+- Strong `JWT_SECRET`
+- Real `SMTP_*` credentials if email is enabled (`EMAIL_ENABLED=true`)
+- Valid `CLOUDINARY_*` / `IMAGEKIT_*` credentials for image uploads
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` set for first admin provisioning
+- `.env` files excluded from version control (`.gitignore`)
+- Rate limiting and Helmet enabled for security
 
 ---
 
-## Recent Bug Fixes (Latest Session)
+## Submission for the Atronz Innovation
 
-### Root Cause: Missing Products in Special Offers & Discounts (Home & Customer Dashboard)
+**GreenMart – Organic E-Commerce Platform**
 
-**Problem:** The Special Offers & Discounts sections on both the public Home page and Customer Dashboard were not displaying any products. Every offer API returned an empty list.
+GreenMart is an organic e-commerce platform developed to connect customers directly with local farmers. The main aim of GreenMart is to promote organic farming, support local farmers, and make fresh, quality organic products easily available to customers.
 
-**Root cause:** `server/src/models/Offer.js` did not declare an `isActive` field, but all three customer-facing offer queries filtered on `isActive: true`:
-- `productController.storefrontOffers` → `GET /api/products/storefront/offers` (public Home page)
-- `customerOfferController.list` → `GET /api/offers/customer` (Customer Dashboard)
-- `newsletterController.customerExclusiveOffers` → `GET /api/newsletter/customer/offers` (subscriber exclusives)
+Customers can browse and purchase products, farmers can manage their products and orders, and administrators can manage and monitor the overall platform.
 
-With Mongoose strict mode, `isActive` was never persisted on offer documents, so `isActive: true` matched zero documents and every customer offer API returned an empty list.
-
-### Files Modified
-
-| File | Change |
-|------|--------|
-| `server/src/models/Offer.js` | Added `isActive: { type: Boolean, default: true, index: true }` to the Offer schema |
-| `server/src/services/offerService.js` | `getEffectiveStatus` checks `offer.isActive === false` (not `!offer.isActive`); `getActiveOffers` uses `isActive: { $ne: false }` |
-| `server/src/controllers/customerOfferController.js` | `isActive: { $ne: false }` + excludes `isSubscriberExclusive: true` |
-| `server/src/controllers/productController.js` | `isActive: { $ne: false }` |
-| `server/src/controllers/newsletterController.js` | 3 query sites use `isActive: { $ne: false }` (backward-compatible with existing offers lacking the field) |
-| `client/src/pages/public/Home.jsx` | Added Retry button on offers error state, farmer name on offer cards, `fetchOffers()` with `useRef` cleanup |
-| `client/src/pages/admin/AdminNewsletter.jsx` | Fixed subscribers parsing (`subs.data?.items`); removed farmer/guest from type filter (customer-only) |
-| `client/src/pages/customer/CustomerDashboard.jsx` | `loadExclusiveOffers()` now triggers directly after `loadNewsletterPreferences()` completes |
-| `client/src/pages/customer/NewsletterDetail.jsx` | Fixed `discPct` → `discountPct` crash; unwrapped `{productId, snapshot}` / `{offerId, snapshot}` snapshots so featured product images, names, prices, and discounts render correctly; View Product links guarded against undefined IDs |
-
-### Backward Compatibility
-
-Existing offers in the database that lack the `isActive` field are treated as active (`isActive: { $ne: false }`), so older offers continue to work without migration. Only `isActive: false` explicitly deactivates an offer.
-
-### Verification
-
-- **Backend:** `customerOffers.test.js` 11/11 pass (was 6/11 before fix)
-- **Frontend:** 46 test files / 326 tests pass
-- **Production build:** `vite build` succeeds
-- **Live API:** Public offers return real populated data (product image, name, farmer name, price, discounted price, discount percent)
-- **Public vs subscriber-exclusive:** Remain separate; public offers are never hidden for unsubscribed customers; exclusive offers require an active newsletter subscription
-- **Bug Fix – Customer Farmer Explore blank page**: Fixed `client/src/pages/public/FarmerProfile.jsx` (missing `ErrorState` import, unreachable loading state, async useEffect returning a Promise that React tried to destroy on unmount, missing farmer name/category/description/certification status, and non-active products). Backend `GET /farmers/:id` now populates the farmer `name`, returns `category`/`description`/`certification.verifiedByAdmin`, and returns 404 for invalid or missing farmer IDs. The page now shows the selected farmer's actual details, location map, admin verification status, and only that farmer's approved and active products, with a route back to the farmers listing.
-- **Bug Fix – Customer Notification Centre**: `client/src/pages/shared/Notifications.jsx` now uses backend pagination (`category`/`page`/`limit`) with page reset on category change, displays each notification's category, and keeps mark-all-read, unread counts, empty/loading/error states and Socket.IO real-time updates. `notificationsSlice.fetchNotifications` accepts optional params and normalizes paginated responses. Backend order notifications (`orderConfirmation`, `statusUpdate`) are now tagged with `category: "orders"` so the Orders filter shows order placed/packed/out-for-delivery/delivered notifications; duplicates are still prevented by existing event-key/orderId dedup.
-- **Bug Fix – Farmer Notification Categories empty**: Farmer notifications were saved without a `category` field (e.g. `newOrderFarmer`, `newMessage`), so clicking Orders/Products/Inventory/Certifications/Messages/Support/Account showed "You're all caught up" even though records existed. Fixed by adding `category` to the missing `createNotification` calls (`server/src/controllers/orderController.js` newOrderFarmer → `orders`; `server/src/controllers/messageController.js` newMessage → `messages`), normalizing legacy null-category records by `type` at query time (`server/src/controllers/notificationController.js` `TYPE_CATEGORY_MAP` + `$or` matching), adding a one-time backfill migration script (`server/src/scripts/backfillNotificationCategories.js`), and rewriting `client/src/pages/farmer/FarmerNotifications.jsx` with accurate per-category counts, unread counts, loading/error/genuine-empty states, mark-read/delete, and pagination that resets to page 1 on category change. Frontend `client/src/config/notificationConfig.js` gained a shared `TYPE_TO_CATEGORY` map + `normalizeCategory()` helper.
-
-## Recent Changes
-
-- **Offer pricing consistency** (`server/src/services/offerService.js`, customer offer controllers, `client/src/pages/customer/CustomerDashboard.jsx`): subscriber-exclusive products can appear in the general current/upcoming offers feed at normal price, with the regular offer and Premium extra savings shown separately; the Premium payable price remains in the subscriber-only feed. Public product, cart, and checkout pricing exclude subscriber discounts. Premium pricing applies the configured regular discount followed by its additional subscriber discount. Effective whole-number percentages use conventional rounding with floating-point tolerance, so 57.5% displays as 58%.
-- **Admin newsletter unsubscribe notifications** (`server/src/controllers/newsletterController.js`): `unsubscribe` and `unsubscribeByToken` (public token page) now create a persisted admin in-app notification (`newsletter_unsubscribed_admin`, title "Newsletter Unsubscription", message `email has unsubscribed...`) via the existing `createNotification` + Socket.IO `emitToAdmins` infra after a successful MongoDB `isActive = false` update; early-return when already unsubscribed (no duplicate notifications) and skip notification when the unsubscribe fails. `customerUnsubscribe` additionally notifies admins that a customer unsubscribed. `NEWSLETTER_EMAIL_MODE=mock` preserved; no SMTP/email service configured.
-- **Carousel Previous/Back button fix** (`client/src/components/common/ContinuousMarquee.jsx`): `canScrollLeft`/`canScrollRight` now read from a `scrollPosition` state that re-renders on every scroll/drag/arrow click (previously read from a stale `ref`, so buttons stayed disabled after scrolling); `scrollPosRef` is clamped to `[0, maxScroll]` so buttons stay accurate after reaching the end. Covers Home Special Offers, Home Featured, CustomerDashboard Offers, and CustomerDashboard Recommended carousels.
-- **Admin Newsletter Management page redesign** (`client/src/pages/admin/AdminNewsletter.jsx`): rebuilt with GreenMart design tokens (cards `#FFFFFF`/`border-[#E2E6DF]`, green palette `#245C3A`/`#477A4E`/`#EAF2E7`, Poppins heading font, `gm-card`/`gm-input`/`gm-btn` styles). Compact stat cards (Total/Active/Unsubscribed/Campaigns Processed (Mock)) from `newsletterApi.stats()`. Create Campaign + Live Preview side-by-side on desktop (stacked mobile) with all form fields, eligible-recipient count, and dynamic preview with Desktop/Mobile toggles. Campaign History with View/Test/Process/Cancel/Duplicate actions (`sent` renders as `Processed (Mock)`). Subscriber Management with email search, All/Active/Unsubscribed filter, green Active / neutral-red Unsubscribed badges, and pagination. Sidebar, header, other admin pages, and backend APIs untouched.
-- **Carousel bug fixes** (`ContinuousMarquee.jsx`): viewport-aware infinite mode (auto-disables infinite when one copy fits in viewport), fixed Next arrow reset-on-click bug (arrow delta now uses `itemWidth` instead of full copy width), added finite-mode initialization effect (arrows now appear and work in finite mode), fixed arrow disabled states using live `scrollWidth`/`clientWidth` bounds
-- **Carousel regression tests** (`ContinuousMarquee.test.jsx`): 12 new tests covering 4/5/6 unique items, finite vs infinite mode, arrow visibility in finite mode, duplicate children handling, cleanup on unmount
-- **Carousel threshold fix**: `MIN_ITEMS_FOR_INFINITE = 5` with viewport-width re-check after layout measurement; 5 items on wide screens now correctly falls back to finite mode when one copy fits in the viewport
-- All 314 frontend tests pass (46 suites); production build succeeds
-- Product detail page now displays full image gallery with legacy image fallback.
-- Admin Add Farmer supports certificate and farm photo uploads to Cloudinary.
-- SweetAlert2 alert utility expanded (showInfo, showDeleteConfirm, showLoading, closeAlert).
-- Refresh-token auth, notification system, time-based offers maintained.
+GreenMart aims to make organic shopping simple, convenient, and reliable while supporting local farming communities.
 
 ---
-
-## ImageKit Newsletter Banner Uploads
-
-GreenMart uses **ImageKit.io** for newsletter campaign banner images (separate from Cloudinary product images).
-
-### Admin flow
-1. Admin Dashboard ? Newsletter ? Create/Edit Campaign.
-2. Use **Upload Banner Image** (JPG/PNG/WebP, max 5 MB) or paste a public URL.
-3. Uploaded image is sent to backend POST /api/newsletter/admin/newsletter-banner/upload (admin-only, Multer-validated), which uploads to ImageKit folder /greenmart/newsletters/banners/ with a unique filename and returns { url, fileId }.
-4. The returned URL is saved as annerImage/annerImageUrl on the campaign; annerImageFileId supports replacement/cleanup.
-
-### Customer flow
-- Customer Dashboard ? My Newsletters ? campaign detail renders the banner image prominently above the heading/content, with graceful fallback when missing or broken.
-
-### Environment variables (server/.env)
-- IMAGEKIT_PUBLIC_KEY
-- IMAGEKIT_PRIVATE_KEY
-- IMAGEKIT_URL_ENDPOINT
-
-Configure these from the ImageKit dashboard (Developer options ? API keys). If missing, uploads return a clear 503 configuration error.
-
-### Security
-- Private key stays server-side only.
-- Only authenticated admins can upload/replace/remove banners.
-- File type and size validated on both frontend and backend.

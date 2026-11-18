@@ -6,4 +6,5 @@ export default {
   update: (id, d) => api.put(`/cart/items/${id}`, d),
   remove: (id) => api.delete(`/cart/items/${id}`),
   clear: () => api.delete("/cart"),
+  merge: (items, idempotencyKey) => api.post("/cart/merge", { items, idempotencyKey }),
 };

@@ -9,7 +9,8 @@ import { ArrowLeft, ShoppingBag } from "lucide-react";
 import toast from "react-hot-toast";
 import CartTable from "../../components/cart/CartTable.jsx";
 import OrderSummary from "../../components/cart/OrderSummary.jsx";
-import { fetchCart, updateQuantity, removeItem, clearItemError } from "../../features/cart/cartSlice.js";
+import { fetchCart, updateQuantity, removeItem, clearItemError, retryGuestSync } from "../../features/cart/cartSlice.js";
+import { loadGuestCartItems } from "../../features/cart/cartSlice.js";
 import ErrorState from "../../components/common/ErrorState.jsx";
 import { calculateCartTotals } from "../../utils/cartTotals.js";
 import addressApi from "../../api/addressApi";
@@ -22,6 +23,7 @@ export default function Cart() {
   const dispatch = useDispatch();
   const cart = useSelector((state) => state.cart);
   const { items, loading, error, deliveryCharge: cartDeliveryCharge } = cart;
+  const guestSyncStatus = cart.guestSyncStatus;
   const itemPending = cart.itemPending || {};
   const { user, token } = useSelector((state) => state.auth);
   const hasCustomerMobileNavigation = user?.role === "customer";
@@ -39,9 +41,9 @@ export default function Cart() {
   const [allServiceable, setAllServiceable] = useState(true);
   const quoteRequestId = useRef(0);
 
-  useEffect(() => {
-    if (user?.role === "customer" && token && token !== "demo-token" && !cart.loaded) dispatch(fetchCart());
-  }, [dispatch, user?.role, token, cart.loaded]);
+  const dispatchRetrySync = useCallback(() => {
+    dispatch(retryGuestSync());
+  }, [dispatch]);
 
   const loadAddresses = async () => {
     setAddressLoading(true);
@@ -160,6 +162,23 @@ export default function Cart() {
 
   if (loading && !cart.loaded) return <div className="gm-container py-6 text-sm text-gray-500">Loading your cart...</div>;
   if (error && !cart.loaded) return <div className="gm-container py-6"><ErrorState message={error} onRetry={() => dispatch(fetchCart())} /></div>;
+  const hasPendingGuestItems = loadGuestCartItems().length > 0;
+  if (guestSyncStatus === "failed" && cart.loaded && hasPendingGuestItems) {
+    return (
+      <div className="gm-container py-6 text-center">
+        <div className="rounded-xl border border-gray-100 bg-white p-10 text-center">
+          <p className="text-sm text-gray-500 mb-3">Your guest cart could not be synchronized.</p>
+          <p className="text-xs text-muted mb-4">Your items are saved locally and will be retried.</p>
+          <button
+            onClick={dispatchRetrySync}
+            className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover"
+          >
+            Retry Sync
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`gm-container w-full max-w-none min-w-0 py-4 sm:py-6 ${hasCustomerMobileNavigation ? "pb-24 lg:pb-16" : "pb-16"}`}>

@@ -9,3 +9,4 @@ exports.addItem = asyncHandler(async (req,res) => res.json(await cartService.add
 exports.updateItem = asyncHandler(async (req,res) => res.json(await cartService.updateItem(req.user._id, req.params.productId, req.body.quantity)));
 exports.removeItem = asyncHandler(async (req,res) => res.json(await cartService.removeItem(req.user._id, req.params.productId)));
 exports.clear = asyncHandler(async (req,res) => { await cartService.clearCart(req.user._id); res.json({ message: "cleared" }); });
+exports.mergeItems = asyncHandler(async (req,res) => res.json(await cartService.mergeItems(req.user._id, req.body.items || [], req.body.idempotencyKey)));

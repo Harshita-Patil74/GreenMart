@@ -18,6 +18,42 @@ const unwrapCart = (data) => ({
 
 const itemId = (item) => item.product?._id || item.product?.id || item.product || item.id;
 
+const GUEST_CART_KEY = "greenmart_guest_cart";
+const GUEST_SYNC_KEY = "greenmart_guest_sync_key";
+
+const saveGuestCart = (items) => {
+  try { localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items || [])); } catch {}
+};
+
+const clearGuestCart = () => {
+  try { localStorage.removeItem(GUEST_CART_KEY); } catch {}
+};
+
+const loadGuestCartItems = () => {
+  try {
+    const raw = localStorage.getItem(GUEST_CART_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+};
+
+export { loadGuestCartItems };
+
+const saveGuestSyncKey = (key) => {  try { localStorage.setItem(GUEST_SYNC_KEY, key); } catch {}
+};
+
+const clearGuestSyncKey = () => {
+  try { localStorage.removeItem(GUEST_SYNC_KEY); } catch {}
+};
+
+const loadGuestSyncKey = () => {
+  try {
+    const raw = localStorage.getItem(GUEST_SYNC_KEY);
+    return raw || null;
+  } catch { return null; }
+};
+
 const snapshotItems = (items) => (items || []).map((item) => ({
   ...item,
   offer: item.offer ? { ...item.offer } : item.offer,
@@ -50,9 +86,92 @@ export const fetchDeliveryCharge = createAsyncThunk("cart/fetchDeliveryCharge", 
   condition: (_, { getState }) => !getState().cart.loading && (!getState().cart.loaded || Boolean(getState().cart.error)),
 });
 
+export const syncGuestCart = createAsyncThunk(
+  "cart/syncGuestCart",
+  async (_, { getState, rejectWithValue, dispatch }) => {
+    const state = getState();
+    const { user, token } = state.auth;
+    if (user?.role !== "customer" || !token || token === "demo-token") {
+      return rejectWithValue({ message: "Guest cart sync is only available for customer accounts." });
+    }
+    if (state.cart.guestCartSynced) {
+      return { synced: false, skipped: "already-synced" };
+    }
+    const guestItems = loadGuestCartItems();
+    if (!guestItems.length) {
+      return { synced: false, skipped: "empty" };
+    }
+    let syncKey = state.cart.guestSyncKey || loadGuestSyncKey();
+    if (!syncKey) {
+      syncKey = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      saveGuestSyncKey(syncKey);
+      dispatch({ type: "cart/setGuestSyncKey", payload: syncKey });
+    }
+    try {
+      const { data } = await cartApi.merge(guestItems, syncKey);
+      clearGuestCart();
+      clearGuestSyncKey();
+      return { synced: true, merged: data, skipped: data.skipped || [] };
+    } catch (error) {
+      return rejectWithValue(error);
+    }
+  },
+);
+
+export const retryGuestSync = createAsyncThunk(
+  "cart/retryGuestSync",
+  async (_, { getState, rejectWithValue, dispatch }) => {
+    const state = getState();
+    const { user, token } = state.auth;
+    if (user?.role !== "customer" || !token || token === "demo-token") {
+      return rejectWithValue({ message: "Guest cart sync is only available for customer accounts." });
+    }
+    if (state.cart.guestCartSynced) {
+      return { synced: false, skipped: "already-synced" };
+    }
+    const guestItems = loadGuestCartItems();
+    if (!guestItems.length) {
+      return { synced: false, skipped: "empty" };
+    }
+    // Reuse the persisted idempotency key so retries never duplicate quantities.
+    let syncKey = state.cart.guestSyncKey || loadGuestSyncKey();
+    if (!syncKey) {
+      syncKey = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      saveGuestSyncKey(syncKey);
+      dispatch({ type: "cart/setGuestSyncKey", payload: syncKey });
+    }
+    try {
+      const { data } = await cartApi.merge(guestItems, syncKey);
+      clearGuestCart();
+      clearGuestSyncKey();
+      return { synced: true, merged: data, skipped: data.skipped || [] };
+    } catch (error) {
+      return rejectWithValue(error);
+    }
+  },
+);
+
 export const addItem = createAsyncThunk("cart/addItem", async (product, { getState, rejectWithValue }) => {
   const token = getState().auth?.token;
-  if (!token || token === "demo-token") return { product, guest: true };
+  if (!token || token === "demo-token") {
+    const id = product._id || product.id;
+    const existing = getState().cart.items.find((i) => itemId(i) === id);
+    const currentQty = existing ? (existing.quantity || 0) : 0;
+    const newQty = currentQty + 1;
+    const stock = product.stock != null ? Number(product.stock) : null;
+    if (stock != null && stock <= 0) return rejectWithValue({ message: "This product is out of stock." });
+    if (stock != null && newQty > stock) return rejectWithValue({ message: `Only ${stock} unit${stock > 1 ? "s" : ""} available.` });
+    const currentItems = getState().cart.items;
+    const updatedItems = existing
+      ? currentItems.map((i) => (itemId(i) === id ? { ...i, quantity: newQty } : i))
+      : [...currentItems, { product, quantity: 1, price: product.price }];
+    saveGuestCart(updatedItems);
+    return { product, guest: true };
+  }
   try {
     const { data } = await cartApi.add({ productId: product._id || product.id, quantity: 1 });
     return { ...unwrapCart(data), guest: false };
@@ -71,6 +190,16 @@ export const updateQuantity = createAsyncThunk("cart/updateQuantity", async ({ p
   const previousItems = snapshotItems(state.cart.items);
 
   if (!token || token === "demo-token") {
+    const item = state.cart.items.find((i) => itemId(i) === productId);
+    const stock = item?.product?.stock != null ? Number(item.product.stock) : null;
+    if (stock != null && normalizedQuantity > stock) {
+      return rejectWithValue({ message: `Only ${stock} unit${stock > 1 ? "s" : ""} available.` });
+    }
+    const currentItems = state.cart.items;
+    const updatedItems = currentItems.map((i) =>
+      itemId(i) === productId ? { ...i, quantity: normalizedQuantity } : i
+    );
+    saveGuestCart(updatedItems);
     dispatch(optimisticUpdateQuantity({ productId, quantity: normalizedQuantity }));
     return { productId, quantity: normalizedQuantity, guest: true };
   }
@@ -93,7 +222,12 @@ export const updateQuantity = createAsyncThunk("cart/updateQuantity", async ({ p
 
 export const removeItem = createAsyncThunk("cart/removeItem", async (productId, { getState, rejectWithValue }) => {
   const token = getState().auth?.token;
-  if (!token || token === "demo-token") return { productId, guest: true };
+  if (!token || token === "demo-token") {
+    const currentItems = getState().cart.items;
+    const updatedItems = currentItems.filter((item) => itemId(item) !== productId);
+    saveGuestCart(updatedItems);
+    return { productId, guest: true };
+  }
   try {
     const { data } = await cartApi.remove(productId);
     return { ...unwrapCart(data), guest: false };
@@ -104,7 +238,7 @@ export const removeItem = createAsyncThunk("cart/removeItem", async (productId, 
 
 const slice = createSlice({
   name: "cart",
-  initialState: { items: [], deliveryCharge: null, totals: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false },
+  initialState: { items: [], deliveryCharge: null, totals: null, loading: false, itemPending: {}, updateSequence: {}, error: null, loaded: false, guestCartSynced: false, guestSyncKey: null, guestSyncStatus: "idle", cartInitialized: false, cartInitRequestId: 0 },
   reducers: {
     setCart: (state, action) => {
       const cart = unwrapCart(action.payload);
@@ -143,12 +277,52 @@ const slice = createSlice({
       if (item) item.quantity = quantity;
       if (state.itemPending) delete state.itemPending[productId];
     },
+    loadGuestCart: (state) => {
+      const items = loadGuestCartItems();
+      if (items.length) {
+        state.items = items;
+        state.totals = null;
+        state.loaded = true;
+        state.error = null;
+      }
+    },
+    mergeGuestCart: (state, action) => {
+      const { guestItems } = action.payload;
+      for (const guestItem of guestItems || []) {
+        const id = itemId(guestItem);
+        const stock = guestItem.product?.stock != null ? Number(guestItem.product.stock) : null;
+        if (stock != null && stock <= 0) continue;
+        const existing = state.items.find((i) => itemId(i) === id);
+        if (existing) {
+          const combined = (existing.quantity || 0) + (guestItem.quantity || 1);
+          existing.quantity = stock != null ? Math.min(combined, stock) : combined;
+        } else {
+          const qty = stock != null ? Math.min(guestItem.quantity || 1, stock) : (guestItem.quantity || 1);
+          state.items.push({ ...guestItem, quantity: qty });
+        }
+      }
+      state.totals = null;
+      state.loaded = true;
+      state.error = null;
+    },
     clearItemError: (state) => { state.error = null; },
+    setGuestSyncKey: (state, action) => { state.guestSyncKey = action.payload; },
+    setCartInitialized: (state, action) => {
+      state.cartInitialized = action.payload.initialized;
+    },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(fetchCart.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(fetchCart.pending, (state, action) => {
+        state.loading = true;
+        state.error = null;
+        state.cartInitRequestId = action.meta.requestId;
+        state.cartInitialized = true;
+      })
       .addCase(fetchCart.fulfilled, (state, action) => {
+        // Ignore stale responses from superseded requests (only when a request
+        // has actually been dispatched; initial state has cartInitRequestId === 0).
+        if (state.cartInitRequestId !== 0 && action.meta.requestId !== state.cartInitRequestId) return;
         state.loading = false;
         state.loaded = true;
         state.items = action.payload.items;
@@ -166,6 +340,54 @@ const slice = createSlice({
       })
       .addCase(fetchDeliveryCharge.rejected, (state, action) => {
         state.error = action.payload?.message || "Couldn't fetch delivery charge.";
+      })
+      .addCase(syncGuestCart.pending, (state) => { state.loading = true; state.error = null; state.guestSyncStatus = "syncing"; state.cartInitialized = true; })
+      .addCase(syncGuestCart.fulfilled, (state, action) => {
+        state.loading = false;
+        state.loaded = true;
+        state.guestCartSynced = true;
+        state.guestSyncStatus = "succeeded";
+        state.cartInitialized = true;
+        state.cartInitRequestId = action.meta.requestId; // Invalidate any older in-flight fetchCart response
+        state.error = null;
+        if (action.payload.synced && action.payload.merged) {
+          const cart = unwrapCart(action.payload.merged);
+          state.items = cart.items;
+          if (cart.deliveryCharge !== null) state.deliveryCharge = cart.deliveryCharge;
+          state.totals = cart.totals;
+        }
+      })
+      .addCase(syncGuestCart.rejected, (state, action) => {
+        state.loading = false;
+        state.loaded = true;
+        state.guestCartSynced = false;
+        state.guestSyncStatus = "failed";
+        state.cartInitialized = true;
+        state.error = action.payload?.message || "Guest cart sync failed. Your items are saved locally and will retry on next login.";
+      })
+      .addCase(retryGuestSync.pending, (state) => { state.loading = true; state.error = null; state.guestSyncStatus = "syncing"; state.cartInitialized = true; })
+      .addCase(retryGuestSync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.loaded = true;
+        state.guestCartSynced = true;
+        state.guestSyncStatus = "succeeded";
+        state.cartInitialized = true;
+        state.cartInitRequestId = action.meta.requestId; // Invalidate any older in-flight fetchCart response
+        state.error = null;
+        if (action.payload.synced && action.payload.merged) {
+          const cart = unwrapCart(action.payload.merged);
+          state.items = cart.items;
+          if (cart.deliveryCharge !== null) state.deliveryCharge = cart.deliveryCharge;
+          state.totals = cart.totals;
+        }
+      })
+      .addCase(retryGuestSync.rejected, (state, action) => {
+        state.loading = false;
+        state.loaded = true;
+        state.guestCartSynced = false;
+        state.guestSyncStatus = "failed";
+        state.cartInitialized = true;
+        state.error = action.payload?.message || "Guest cart sync failed. Your items are saved locally and will retry on next login.";
       })
       .addCase(addItem.pending, (state) => { ensurePending(state); state.itemPending.addItem = true; state.error = null; })
       .addCase(addItem.fulfilled, (state, action) => {
@@ -195,6 +417,9 @@ const slice = createSlice({
           state.totals = action.payload.totals;
         }
         if (state.itemPending) delete state.itemPending[action.payload.productId];
+        if (action.payload.guest) {
+          // Guest cart persistence is handled in the thunk; keep reducer pure.
+        }
       })
       .addCase(updateQuantity.rejected, (state, action) => {
         const quantity = Number(action.meta.arg.quantity);
@@ -222,9 +447,14 @@ const slice = createSlice({
         state.totals = null;
         state.error = null;
         state.loaded = false;
+        state.guestCartSynced = false;
+        state.guestSyncKey = null;
+        state.guestSyncStatus = "idle";
+        state.cartInitialized = false;
+        state.cartInitRequestId = 0;
       });
   },
 });
 
-export const { setCart, clearCart, optimisticUpdateQuantity, revertCartItems, revertQuantity, clearItemError } = slice.actions;
+export const { setCart, clearCart, loadGuestCart, mergeGuestCart, optimisticUpdateQuantity, revertCartItems, revertQuantity, clearItemError, setGuestSyncKey, setCartInitialized } = slice.actions;
 export default slice.reducer;

@@ -90,8 +90,12 @@ async function createNotification({
       else emitToUser(userId, "notification:new", n);
     }
 
-    // email must never block order creation/status updates
-    if (user && user.emailNotifications) {
+    // email must never block order creation/status updates.
+    // Only attempt email when a template exists for this notification type;
+    // otherwise skip silently (no EMAIL_TEMPLATE_UNSUPPORTED for types that
+    // are not email templates). EMAIL_DISABLED is still surfaced for supported
+    // templates when email is intentionally disabled in tests.
+    if (user && user.emailNotifications && emailService.templates[type]) {
       try {
         await emailService.sendEmail(type, user.email, {
           ...n.toObject(),

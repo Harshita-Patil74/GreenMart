@@ -13,6 +13,4 @@ newsletterSchema.index({ isActive: 1 });
 newsletterSchema.index({ subscriberType: 1 });
 newsletterSchema.index({ email: 1, subscriberType: 1 });
 
-newsletterSchema.index({ isActive: 1 });
-
 module.exports = mongoose.model("Newsletter", newsletterSchema);

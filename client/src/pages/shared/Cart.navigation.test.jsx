@@ -30,4 +30,21 @@ describe("Cart navigation", () => {
     fireEvent.click(btn);
     expect(await screen.findByText("Checkout Page")).toBeInTheDocument();
   });
+
+  it("redirects guest to login when Proceed to Checkout is clicked", async () => {
+    const store = configureStore({ reducer: { auth: authReducer, cart: cartReducer }, preloadedState: { auth: { token: null, user: null }, cart: { items: [{ product: { _id: "p1", name: "P", price: 10 }, quantity: 1 }], subtotal: 10, deliveryCharge: 0, loaded: true, loading: false } } });
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={["/cart"]}>
+          <Routes>
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/login" element={<div>Login Page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>
+    );
+    const btn = await screen.findByText(/Proceed to Checkout/i);
+    fireEvent.click(btn);
+    expect(await screen.findByText("Login Page")).toBeInTheDocument();
+  });
 });

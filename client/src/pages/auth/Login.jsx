@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
 import { motion } from "framer-motion";
@@ -8,6 +8,7 @@ import { sectionReveal } from "../../animations/variants.js";
 import Logo from "../../components/common/Logo.jsx";
 import { login, logout } from "../../features/auth/authSlice.js";
 import { dashboardPathForRole } from "../../utils/roleAccess.js";
+import { loadGuestCartItems, syncGuestCart } from "../../features/cart/cartSlice.js";
 import {
   isLegacyDemoEmail,
   isLoginEmailValid,
@@ -18,12 +19,16 @@ import {
 export default function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [validationError, setValidationError] = useState("");
+
+  // Preserve the intended return destination (e.g. /cart) through login.
+  const returnUrl = location.state?.returnUrl || new URLSearchParams(location.search).get("returnUrl") || null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,13 +50,26 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await dispatch(login({ email: normalizedEmail, password, remember })).unwrap();
-      const destination = dashboardPathForRole(res.user?.role);
-      if (destination === "/login") {
+      const defaultDestination = dashboardPathForRole(res.user?.role);
+      if (defaultDestination === "/login") {
         dispatch(logout());
         setValidationError("This account type cannot sign in.");
         return;
       }
-      toast.success("Welcome back!");
+      const isCustomer = res.user?.role === "customer";
+      const guestItems = loadGuestCartItems();
+      if (isCustomer && guestItems.length) {
+        try {
+          await dispatch(syncGuestCart()).unwrap();
+          toast.success("Welcome back! Your cart has been synced.");
+        } catch (syncErr) {
+          toast.error("Your cart was saved locally and will sync on next visit.");
+        }
+      } else {
+        toast.success("Welcome back!");
+      }
+      // Preserve the intended return destination (e.g. /cart) after login.
+      const destination = returnUrl || defaultDestination;
       navigate(destination, { replace: true });
     } catch (e) {
       const message = e?.response?.data?.message || e?.message || "Invalid email or password.";

@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import toast from "react-hot-toast";
 import { ShoppingCart, Heart, Search, User, ChevronDown, LogOut, LayoutDashboard, Truck, MapPin, Bell, Menu, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { dropdownVariants } from "../../animations/variants.js";
 import Logo from "../common/Logo.jsx";
 import { logout } from "../../features/auth/authSlice.js";
-import { fetchCart } from "../../features/cart/cartSlice.js";
 import PublicNavigation from "./PublicNavigation.jsx";
 import RoleNavigation from "./RoleNavigation.jsx";
 import MobileNavigationDrawer from "./MobileNavigationDrawer.jsx";
@@ -25,13 +25,24 @@ export default function Navbar() {
 
   const drawerRef = useRef(null);
 
-  useEffect(() => {
-    if (user && token && token !== "demo-token") dispatch(fetchCart());
-  }, [dispatch, token, user?.role]);
-
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     navigate(search.trim() ? `/shop?search=${encodeURIComponent(search.trim())}` : "/shop");
+  };
+
+  const isAuthenticated = Boolean(user && token && token !== "demo-token");
+
+  const handleCartClick = (e) => {
+    // Let middle-click / modifier-click open the cart URL natively
+    if (e.button !== 0 || e.ctrlKey || e.metaKey) return;
+    if (!isAuthenticated) {
+      e.preventDefault();
+      toast.error("Sign in to view your cart.");
+      navigate("/login", { state: { returnUrl: "/cart" } });
+      return;
+    }
+    e.preventDefault();
+    navigate("/cart");
   };
 
   const closeDrawer = () => setDrawerOpen(false);
@@ -73,16 +84,21 @@ export default function Navbar() {
             >
               {drawerOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <Link to="/customer/wishlist" className="hidden sm:inline-flex p-2 text-[#4B5563] hover:text-primary rounded-full" title="Wishlist">
-              <Heart className="w-[20px] h-[20px]" />
+            <Link to="/customer/wishlist" aria-label="Wishlist" className="inline-flex p-2 text-[#4B5563] hover:text-primary rounded-full" title="Wishlist">
+              <Heart className="w-[20px] h-[20px]" aria-hidden="true" />
             </Link>
             {user?.role === "customer" && <Link to="/notifications" className="p-2 text-[#4B5563] hover:text-primary rounded-full" title="Notifications"><Bell className="h-5 w-5" /></Link>}
-            <Link to="/cart" className="p-2 text-[#4B5563] hover:text-primary rounded-full relative" title="Cart">
+            <a
+              href="/cart"
+              aria-label="Cart"
+              onClick={handleCartClick}
+              className="p-2 text-[#4B5563] hover:text-primary rounded-full relative" title="Cart"
+            >
               <ShoppingCart className="w-[20px] h-[20px]" />
               <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-[10px] font-bold rounded-full w-[18px] h-[18px] flex items-center justify-center">
                 {cartCount}
               </span>
-            </Link>
+            </a>
 
             <div className="relative ml-1">
               <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center gap-1.5 p-1 rounded-full hover:bg-gray-50">

@@ -7,13 +7,17 @@ function extractIndexInfo(error) {
   if (error.keyValue) info.keyValue = error.keyValue;
   if (error.index) info.index = error.index;
   if (error.collection) info.collection = error.collection;
-  if (error.errmsg) info.errmsg = error.errmsg;
+  if (error.errmsg) info.errmsg = sanitizeString(error.errmsg);
   return info;
 }
 
+function sanitizeString(value) {
+  if (typeof value !== "string") return value;
+  return value.replace(/(:\/\/)[^@]+(@)/g, "$1****$2");
+}
+
 function sanitizeUri(uri) {
-  if (!uri || typeof uri !== "string") return uri;
-  return uri.replace(/:([^:@]+)@/, ":****@");
+  return sanitizeString(uri);
 }
 
 /**
@@ -72,7 +76,7 @@ async function migrateProductTextIndex() {
   } catch (error) {
     console.error("Failed to migrate product text index:");
     console.error("  name:", error.name);
-    console.error("  message:", error.message);
+    console.error("  message:", sanitizeString(error.message));
     if (error.code !== undefined) console.error("  code:", error.code);
     if (error.codeName) console.error("  codeName:", error.codeName);
     throw new Error(
@@ -100,18 +104,18 @@ async function connectDB(uri = env.mongoUri) {
     const indexInfo = extractIndexInfo(error);
     console.error("MongoDB startup error details:");
     console.error("  name:", error.name);
-    console.error("  message:", error.message);
+    console.error("  message:", sanitizeString(error.message));
     if (error.code !== undefined) console.error("  code:", error.code);
     if (error.codeName) console.error("  codeName:", error.codeName);
-    if (error.stack) console.error("  stack:", error.stack);
+    if (error.stack) console.error("  stack:", sanitizeString(error.stack));
     if (Object.keys(indexInfo).length > 0) console.error("  indexInfo:", JSON.stringify(indexInfo, null, 2));
     console.error("  MONGO_URI (sanitized):", sanitizeUri(uri));
     throw new Error(
-      `MongoDB connection or index initialization failed (${error.name}: ${error.message}). ` +
+      `MongoDB connection or index initialization failed (${error.name}: ${sanitizeString(error.message)}). ` +
       `Check MONGO_URI, database access, and schema index conflicts.`
     );
   }
   console.log("MongoDB connected");
 }
 
-module.exports = { connectDB, migrateProductTextIndex };
+module.exports = { connectDB, migrateProductTextIndex, sanitizeString, sanitizeUri };
