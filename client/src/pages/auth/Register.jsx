@@ -70,7 +70,7 @@ export default function Register() {
   };
 
   return (
-    <div className="w-[420px] max-w-full bg-white rounded-[16px] p-8 shadow-card-lg">
+    <div className="max-w-[420px] w-full bg-white rounded-[16px] p-8 sm:p-10 shadow-card-lg">
       <BackButton fallback="/login" />
       <motion.div
         variants={sectionReveal}

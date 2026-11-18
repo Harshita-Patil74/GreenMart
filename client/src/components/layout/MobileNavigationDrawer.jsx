@@ -5,84 +5,13 @@ import { motion } from "framer-motion";
 import { fadeVariants } from "../../animations/variants.js";
 import { logout } from "../../features/auth/authSlice.js";
 import {
-  BarChart3,
-  Bell,
-  Boxes,
-  Heart,
-  LayoutDashboard,
   LogOut,
   LogIn,
-  Mail,
-  MessageCircle,
-  Package,
-  Settings,
-  ShoppingBag,
-  ShoppingCart,
-  Store,
-  Tag,
-  Tractor,
   User,
-  Users,
   X,
 } from "lucide-react";
 import getImageUrl from "../../utils/imageUrl.js";
-
-const navigationByRole = {
-  guest: [
-    { label: "Home", path: "/", icon: Store },
-    { label: "Shop", path: "/shop", icon: ShoppingBag },
-    { label: "Offers", path: "/shop?offers=true", icon: Tag },
-    { label: "Farmers", path: "/farmers", icon: Tractor },
-    { label: "About", path: "/about", icon: MessageCircle },
-    { label: "Contact", path: "/contact", icon: MessageCircle },
-  ],
-  customer: [
-    { label: "Customer Dashboard", path: "/customer/dashboard", icon: LayoutDashboard },
-    { label: "Home", path: "/", icon: Store },
-    { label: "Shop", path: "/shop", icon: ShoppingBag },
-    { label: "Categories", path: "/shop", icon: Store },
-    { label: "Offers", path: "/customer/offers", icon: Tag },
-    { label: "Cart", path: "/cart", icon: ShoppingCart },
-    { label: "Wishlist", path: "/customer/wishlist", icon: Heart },
-    { label: "My Orders", path: "/customer/orders", icon: Package },
-    { label: "Notifications", path: "/notifications", icon: Bell },
-    { label: "My Profile", path: "/customer/profile", icon: User },
-    { label: "My Newsletters", path: "/customer/newsletters", icon: Mail },
-  ],
-  farmer: [
-    { label: "Farmer Dashboard", path: "/farmer/dashboard", icon: LayoutDashboard },
-    { label: "My Products", path: "/farmer/products", icon: Package },
-    { label: "Add Product", path: "/farmer/products/new", icon: Package },
-    { label: "Orders", path: "/farmer/orders", icon: ShoppingBag },
-    { label: "Inventory", path: "/farmer/inventory-management", icon: Boxes },
-    { label: "Offers", path: "/farmer/offers", icon: Tag },
-    { label: "Notifications", path: "/farmer/notifications", icon: Bell },
-    { label: "Profile", path: "/farmer/profile", icon: User },
-  ],
-  admin: [
-    { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "Products", path: "/admin/products", icon: Package },
-    { label: "Users", path: "/admin/users", icon: Users },
-    { label: "Farmers", path: "/admin/farmers", icon: Tractor },
-    { label: "Orders", path: "/admin/orders", icon: ShoppingBag },
-    { label: "Inventory", path: "/admin/inventory", icon: Boxes },
-    { label: "Reports", path: "/admin/reports", icon: BarChart3 },
-    { label: "Offers", path: "/admin/offers", icon: Tag },
-    { label: "Newsletter / Premium Subscriptions", path: "/admin/newsletter", icon: Mail },
-    { label: "Notifications", path: "/admin/notifications", icon: Bell },
-    { label: "Settings", path: "/admin/settings", icon: Settings },
-  ],
-};
-
-function isCurrentPath(pathname, search, path) {
-  const [targetPath, targetSearch] = path.split("?");
-  const isOffersFilter = new URLSearchParams(search).get("offers") === "true";
-  if (targetSearch && !isOffersFilter) return false;
-  if (targetPath === "/shop" && !targetSearch && isOffersFilter) return false;
-  return targetPath === "/"
-    ? pathname === "/"
-    : pathname === targetPath || pathname.startsWith(`${targetPath}/`);
-}
+import { navigationByRole, isCurrentPath, roleLabels } from "./navigationConfig.js";
 
 export default function MobileNavigationDrawer({
   open,
@@ -266,10 +195,3 @@ export default function MobileNavigationDrawer({
     </>
   );
 }
-
-const roleLabels = {
-  customer: "Customer",
-  farmer: "Farmer",
-  admin: "Administrator",
-  guest: "Guest",
-};

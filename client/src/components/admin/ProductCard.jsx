@@ -1,10 +1,10 @@
 import React from "react";
-import { Edit2, Trash2, RotateCcw } from "lucide-react";
+import { Edit2, Trash2, RotateCcw, Pause, Play } from "lucide-react";
 import ImageWithFallback from "../common/ImageWithFallback.jsx";
 import { getImageUrl } from "../../utils/imageUrl.js";
 import ProductIdentifier from "../product/ProductIdentifier.jsx";
 
-export default function ProductCard({ product, onEdit, onDelete, onRestore, isLoading }) {
+export default function ProductCard({ product, onEdit, onDelete, onRestore, onToggleStatus, isLoading }) {
   return (
     <tr key={product._id} className="hover:bg-gray-50/60 border-b border-gray-100 last:border-0">
       <td className="px-3 py-2">
@@ -26,6 +26,16 @@ export default function ProductCard({ product, onEdit, onDelete, onRestore, isLo
       </td>
       <td className="px-3 py-2 text-right">
         <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => onToggleStatus(product)}
+            disabled={isLoading || product.isDeleted}
+            aria-label={`Mark ${product.name} as ${product.status === "Inactive" ? "Active" : "Inactive"}`}
+            className={`rounded p-1.5 text-xs ${product.status === "Inactive" ? "text-[#07814E] hover:text-[#066B42]" : "text-[#dc2626] hover:text-[#b91c1c]"}${isLoading || product.isDeleted ? " opacity-50" : ""}`}
+            title={product.status === "Inactive" ? "Activate" : "Set Inactive"}
+          >
+            {product.status === "Inactive" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+          </button>
           <button
             type="button"
             onClick={() => onEdit(product)}

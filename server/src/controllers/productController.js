@@ -82,7 +82,7 @@ function buildSearchFilter(search) {
 }
 
 async function listProducts(req, res, activeOnly) {
-  const { search, category, minPrice, maxPrice, inStock, sort, showDeleted } = req.query;
+  const { search, category, minPrice, maxPrice, inStock, sort, showDeleted, status } = req.query;
   const pageNum = Number.isInteger(Number(req.query.page)) && Number(req.query.page) >= 1 ? Number(req.query.page) : 1;
   let limitNum = Number.isInteger(Number(req.query.limit)) && Number(req.query.limit) >= 1 ? Number(req.query.limit) : 10;
   if (limitNum > 100) limitNum = 100;
@@ -97,6 +97,12 @@ async function listProducts(req, res, activeOnly) {
     and.push({ isDeleted: true });
   } else {
     and.push({ $or: [{ isDeleted: false }, { isDeleted: { $exists: false } }] });
+    if (status && status !== "All Status") {
+      if (status === "Active") and.push({ status: "Active" });
+      else if (status === "Inactive") and.push({ status: "Inactive" });
+      else if (status === "Out of stock") and.push({ stock: { $lte: 0 } });
+      else if (status === "Low stock") and.push({ $expr: { $and: [{ $gt: ["$stock", 0] }, { $lte: ["$stock", "$lowStockThreshold"] }] } });
+    }
   }
   const searchFilter = buildSearchFilter(search);
   if (searchFilter) and.push(searchFilter);

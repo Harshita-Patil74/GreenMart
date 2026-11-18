@@ -233,6 +233,7 @@ export default function AdminProducts() {
             onEdit={openDialog}
             onDelete={remove}
             onRestore={restoreProduct}
+            onToggleStatus={toggleStatus}
             isLoading={savingForm}
           />
       </div>

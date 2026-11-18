@@ -1,7 +1,7 @@
 import React from "react";
 import ProductList from "./ProductList.jsx";
 
-export default function ProductManagementSection({ products, onEdit, onDelete, onRestore, isLoading }) {
+export default function ProductManagementSection({ products, onEdit, onDelete, onRestore, onToggleStatus, isLoading }) {
   return (
     <section className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
       <div className="overflow-x-auto">
@@ -19,7 +19,7 @@ export default function ProductManagementSection({ products, onEdit, onDelete, o
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            <ProductList products={products} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} isLoading={isLoading} />
+            <ProductList products={products} onEdit={onEdit} onDelete={onDelete} onRestore={onRestore} onToggleStatus={onToggleStatus} isLoading={isLoading} />
           </tbody>
         </table>
       </div>

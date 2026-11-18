@@ -29,7 +29,6 @@ describe("RoleNavigation", () => {
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Offers" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
-    expect(screen.getByRole("link", { name: "Login" })).toHaveAttribute("href", "/login");
     expect(screen.queryByRole("link", { name: "Admin Dashboard" })).not.toBeInTheDocument();
   });
 

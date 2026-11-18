@@ -81,7 +81,7 @@ export default function Login() {
   };
 
   return (
-    <div className="w-[400px] max-w-full bg-white rounded-[18px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
+    <div className="max-w-[400px] w-full bg-white rounded-[18px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.18)]">
       <motion.div
         variants={sectionReveal}
         initial="hidden"

@@ -1,7 +1,7 @@
 import React from "react";
 import ProductCard from "./ProductCard.jsx";
 
-export default function ProductList({ products, onEdit, onDelete, onRestore, isLoading }) {
+export default function ProductList({ products, onEdit, onDelete, onRestore, onToggleStatus, isLoading }) {
   if (!products || products.length === 0) {
     return (
       <tr>
@@ -16,6 +16,7 @@ export default function ProductList({ products, onEdit, onDelete, onRestore, isL
       onEdit={onEdit}
       onDelete={onDelete}
       onRestore={onRestore}
+      onToggleStatus={onToggleStatus}
       isLoading={isLoading}
     />
   ));
