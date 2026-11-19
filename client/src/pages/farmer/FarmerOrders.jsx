@@ -12,6 +12,7 @@ import SearchBar from "../../components/common/SearchBar.jsx";
 import { showConfirm, showSuccess, showError } from "../../utils/alertUtils";
 import Pagination from "../../components/common/Pagination.jsx";
 import ProductIdentifier from "../../components/product/ProductIdentifier.jsx";
+import FarmerTrackingControls from "../../components/farmer/FarmerTrackingControls.jsx";
 
 const filters = ["All Orders", "Pending", "Packed", "Shipped", "Delivered", "Delivery Failed", "Cancelled"];
 const nextActions = {
@@ -233,7 +234,36 @@ export default function FarmerOrders() {
                             {items.map((item) => <li key={item._id || item.product}>
                               {item.name || item.product?.name || "Product"} · {item.quantity || 0} × {formatCurrency(item.price)}
                               <ProductIdentifier productId={item.productId || item.product} className="ml-2" />
-                              {item.offerSnapshot && <span className="ml-1 text-emerald-700">({item.offerSnapshot.offerTitle} · charged {formatCurrency(item.offerSnapshot.finalLineTotal)})</span>}
+                              {item.offerSnapshot && (
+                                <span className="ml-1 text-emerald-700">
+                                  {item.offerSnapshot.offerTitle} ·
+                                  charged{" "}
+                                  {(() => {
+                                    const gross = Number(item.price || 0) * Number(item.quantity || 0);
+                                    const finalLineTotal = item.offerSnapshot?.finalLineTotal;
+                                    const appliedDiscount = item.offerSnapshot?.appliedDiscount;
+                                    if (
+                                      finalLineTotal != null &&
+                                      Number.isFinite(Number(finalLineTotal)) &&
+                                      Number(finalLineTotal) > 0 &&
+                                      Number(finalLineTotal) <= gross
+                                    ) {
+                                      return formatCurrency(Number(finalLineTotal));
+                                    }
+                                    if (
+                                      finalLineTotal === 0 &&
+                                      Number.isFinite(Number(appliedDiscount)) &&
+                                      Number(appliedDiscount) >= gross
+                                    ) {
+                                      return formatCurrency(0);
+                                    }
+                                    const safeDiscount = Number.isFinite(Number(appliedDiscount))
+                                      ? Math.max(0, Math.min(Number(appliedDiscount), gross))
+                                      : 0;
+                                    return formatCurrency(Math.max(0, gross - safeDiscount));
+                                  })()}
+                                </span>
+                              )}
                               <span className="ml-2 font-semibold">{item.fulfillmentStatus || order.status}</span>
                               {item.deliveryFailureReason && <span className="ml-1 text-red-700">— {item.deliveryFailureReason}</span>}
                             </li>)}
@@ -313,6 +343,7 @@ export default function FarmerOrders() {
                               <p className="text-[10px] text-[#71817D]">Delivery information unavailable for this order.</p>
                             </div>
                           )}
+                          <FarmerTrackingControls order={order} farmerId={farmerId} />
                         </td>
                       </tr>
                     )}

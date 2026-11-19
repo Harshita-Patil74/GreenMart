@@ -96,3 +96,101 @@ describe("order pricing snapshots", () => {
     });
   });
 });
+
+describe("order item charged amount regression", () => {
+  it("shows full price for an item with no discount snapshot", () => {
+    const item = { price: 160, quantity: 1 };
+    expect(orderItemGross(item)).toBe(160);
+    expect(orderItemDiscount(item)).toBe(0);
+    expect(orderItemTotal(item)).toBe(160);
+  });
+
+  it("shows full price when finalLineTotal is 0 but no real discount exists", () => {
+    const item = {
+      price: 160,
+      quantity: 1,
+      offerSnapshot: { appliedDiscount: 0, premiumDiscount: 0, finalLineTotal: 0 },
+    };
+    expect(orderItemTotal(item)).toBe(160);
+    expect(orderItemDiscount(item)).toBe(0);
+  });
+
+  it("shows zero only when a legitimate full discount exists", () => {
+    const item = {
+      price: 160,
+      quantity: 1,
+      offerSnapshot: { appliedDiscount: 160, premiumDiscount: 0, finalLineTotal: 0 },
+    };
+    expect(orderItemTotal(item)).toBe(0);
+    expect(orderItemDiscount(item)).toBe(160);
+  });
+
+  it("shows discounted charged amount when finalLineTotal is a valid partial discount", () => {
+    const item = {
+      price: 180,
+      quantity: 1,
+      offerSnapshot: { appliedDiscount: 34.65, premiumDiscount: 0, finalLineTotal: 145.35 },
+    };
+    expect(orderItemTotal(item)).toBe(145.35);
+    expect(orderItemDiscount(item)).toBe(34.65);
+  });
+
+  it("handles quantity greater than one with a discount", () => {
+    const item = {
+      price: 100,
+      quantity: 3,
+      offerSnapshot: { appliedDiscount: 30, premiumDiscount: 0, finalLineTotal: 270 },
+    };
+    expect(orderItemGross(item)).toBe(300);
+    expect(orderItemTotal(item)).toBe(270);
+    expect(orderItemDiscount(item)).toBe(30);
+  });
+
+  it("reconciles item subtotal and order total with mixed discounted and non-discounted items", () => {
+    const items = [
+      { price: 180, quantity: 1, offerSnapshot: { appliedDiscount: 34.65, premiumDiscount: 0, finalLineTotal: 145.35 } },
+      { price: 160, quantity: 1 },
+    ];
+    const grossSum = items.reduce((s, i) => s + orderItemGross(i), 0);
+    const chargedSum = items.reduce((s, i) => s + orderItemTotal(i), 0);
+    const discountSum = items.reduce((s, i) => s + orderItemDiscount(i), 0);
+
+    expect(grossSum).toBe(340);
+    expect(chargedSum).toBe(305.35);
+    expect(discountSum).toBe(34.65);
+    expect(chargedSum + discountSum).toBe(grossSum);
+  });
+
+  it("applies order-level discount without changing item charged amounts", () => {
+    const items = [
+      { price: 100, quantity: 1 },
+      { price: 200, quantity: 1 },
+    ];
+    const order = { items, subtotal: 300, discount: 30, deliveryCharge: 0, total: 270 };
+    const result = orderTotals(order);
+    expect(result.total).toBe(270);
+    expect(orderItemTotal(items[0])).toBe(100);
+    expect(orderItemTotal(items[1])).toBe(200);
+  });
+
+  it("handles multiple discounted products", () => {
+    const items = [
+      { price: 100, quantity: 1, offerSnapshot: { appliedDiscount: 10, premiumDiscount: 0, finalLineTotal: 90 } },
+      { price: 200, quantity: 1, offerSnapshot: { appliedDiscount: 40, premiumDiscount: 0, finalLineTotal: 160 } },
+    ];
+    expect(orderItemTotal(items[0])).toBe(90);
+    expect(orderItemTotal(items[1])).toBe(160);
+    expect(orderItemDiscount(items[0])).toBe(10);
+    expect(orderItemDiscount(items[1])).toBe(40);
+  });
+
+  it("zero discount returns full price even with a snapshot present", () => {
+    const item = {
+      price: 250,
+      quantity: 2,
+      offerSnapshot: { appliedDiscount: 0, premiumDiscount: 0, finalLineTotal: 500 },
+    };
+    expect(orderItemTotal(item)).toBe(500);
+    expect(orderItemDiscount(item)).toBe(0);
+  });
+});

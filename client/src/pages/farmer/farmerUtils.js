@@ -8,9 +8,18 @@ export const getOwnedItems = (order, farmerId) =>
 
 export const getOrderAmount = (order, farmerId) =>
   getOwnedItems(order, farmerId).reduce(
-    (total, item) => total + Number(
-      item.offerSnapshot?.finalLineTotal ?? Number(item.price || 0) * Number(item.quantity || 0)
-    ),
+    (total, item) => {
+      const gross = Number(item.price || 0) * Number(item.quantity || 0);
+      const finalLineTotal = item.offerSnapshot?.finalLineTotal;
+      const appliedDiscount = item.offerSnapshot?.appliedDiscount;
+      if (finalLineTotal != null && Number.isFinite(Number(finalLineTotal)) && Number(finalLineTotal) > 0 && Number(finalLineTotal) <= gross) {
+        return total + Number(finalLineTotal);
+      }
+      if (finalLineTotal === 0 && Number.isFinite(Number(appliedDiscount)) && Number(appliedDiscount) >= gross) {
+        return total;
+      }
+      return total + gross;
+    },
     0
   );
 

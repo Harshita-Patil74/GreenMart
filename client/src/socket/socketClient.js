@@ -1,11 +1,15 @@
 import { io } from "socket.io-client";
 import { tokenStorage } from "../utils/tokenStorage";
-import { useDispatch, useSelector } from "react-redux";
 import { addNotification, setUnread } from "../features/notifications/notificationsSlice.js";
 import { fetchNotifications, fetchUnreadCount } from "../features/notifications/notificationsSlice.js";
 
 let socket = null;
 const orderStatusListeners = new Set();
+const orderLocationListeners = new Set();
+
+function isValidLocation(location) {
+  return location && Number.isFinite(location.lat) && Number.isFinite(location.lng);
+}
 
 export function connectSocket(dispatch) {
   const token = tokenStorage.get();
@@ -18,7 +22,17 @@ export function connectSocket(dispatch) {
   socket.on("order:statusUpdated", (order) => {
     orderStatusListeners.forEach((listener) => listener(order));
   });
-  socket.on("order:locationUpdated", () => {});
+  socket.on("order:locationUpdated", (data) => {
+    if (!data || !data._id || !isValidLocation(data.currentLocation)) return;
+    orderLocationListeners.forEach((listener) => listener({
+      orderId: String(data._id),
+      location: {
+        lat: Number(data.currentLocation.lat),
+        lng: Number(data.currentLocation.lng),
+      },
+      updatedAt: data.currentLocation.updatedAt,
+    }));
+  });
   socket.on("stock:low", () => {});
   socket.on("message:new", () => {});
   socket.on("disconnect", () => {});
@@ -36,5 +50,9 @@ export function subscribeOrderStatus(listener) {
   orderStatusListeners.add(listener);
   return () => orderStatusListeners.delete(listener);
 }
+export function subscribeOrderLocation(listener) {
+  orderLocationListeners.add(listener);
+  return () => orderLocationListeners.delete(listener);
+}
 export { socket };
-export default { connectSocket, disconnectSocket, subscribeOrderStatus };
+export default { connectSocket, disconnectSocket, subscribeOrderStatus, subscribeOrderLocation };

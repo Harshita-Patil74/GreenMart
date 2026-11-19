@@ -10,11 +10,25 @@ export function orderItemGross(item) {
 export function orderItemTotal(item) {
   const gross = orderItemGross(item);
   const snapshotTotal = item?.offerSnapshot?.finalLineTotal;
-  if (snapshotTotal != null && Number.isFinite(Number(snapshotTotal)) && Number(snapshotTotal) >= 0) {
-    return money(Math.min(Number(snapshotTotal), gross));
+  const snapshotDiscount = item?.offerSnapshot?.appliedDiscount;
+
+  // Use finalLineTotal only when it represents a genuine charge.
+  // finalLineTotal = 0 is ambiguous: it could mean a legitimate free product
+  // (100% discount) or a data inconsistency. Only treat as free when
+  // appliedDiscount matches or exceeds the gross amount.
+  if (snapshotTotal != null && Number.isFinite(Number(snapshotTotal))) {
+    const total = Number(snapshotTotal);
+    const discount = Number.isFinite(Number(snapshotDiscount)) ? Number(snapshotDiscount) : 0;
+    if (total > 0 && total <= gross) {
+      return money(total);
+    }
+    if (total === 0 && discount >= gross) {
+      return money(0);
+    }
   }
-  const discount = Number(item?.offerSnapshot?.appliedDiscount);
-  const safeDiscount = Number.isFinite(discount) ? Math.max(0, Math.min(discount, gross)) : 0;
+
+  // Fall back to discount-based calculation
+  const safeDiscount = Number.isFinite(Number(snapshotDiscount)) ? Math.max(0, Math.min(Number(snapshotDiscount), gross)) : 0;
   return money(Math.max(0, gross - safeDiscount));
 }
 
