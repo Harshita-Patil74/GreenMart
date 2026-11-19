@@ -98,6 +98,42 @@ GreenMart provides real-time delivery tracking from farm to doorstep:
 
 ---
 
+## OSRM Routing — Troubleshooting
+
+GreenMart uses OSRM (Open Source Routing Machine) for road-route visualization in live delivery tracking. The routing service is configured via `VITE_ROUTING_API_URL` (defaults to `https://router.project-osrm.org`).
+
+### OSRM Error Codes
+
+The routing service handles the following OSRM error codes with actionable messages:
+
+| OSRM Error | Meaning | Resolution |
+|---|---|---|
+| `InvalidUrl` | Malformed URL | Verify `VITE_ROUTING_API_URL` includes a valid protocol (e.g., `https://router.project-osrm.org`). Do not include path segments. |
+| `InvalidQuery` | Malformed query string | Verify coordinates use longitude,latitude order and that `VITE_ROUTING_API_URL` is a valid base URL with protocol. |
+| `NoRoute` | No route found | OSRM could not find a drivable route between the coordinates. The last valid route is preserved if available. |
+
+### Valid Test URL
+
+A valid OSRM request resembles:
+
+```
+https://router.project-osrm.org/route/v1/driving/77.59,12.97;77.6,12.98?overview=full&geometries=geojson&steps=true
+```
+
+Coordinates must be in **longitude,latitude** order. The public demo server at `router.project-osrm.org` is for development/testing only; self-hosted OSRM is recommended for production.
+
+### Production Configuration
+
+Set `VITE_ROUTING_API_URL` in your Vercel project settings:
+
+```
+VITE_ROUTING_API_URL=https://router.project-osrm.org
+```
+
+> Do not include path segments after the host (e.g., `https://router.project-osrm.org/route` is incorrect). The routing service appends `/route/v1/driving/...` automatically. The backend server also exposes an `OSRM_BASE_URL` variable (server-side only) for any server-side routing needs.
+
+---
+
 ## Role-Based Access
 
 ### Role Definitions
