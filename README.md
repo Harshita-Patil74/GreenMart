@@ -10,7 +10,7 @@ GreenMart connects customers with local farmers to buy organic produce. Customer
 
 GreenMart is a full-stack organic e-commerce platform that bridges local farmers and customers. It enables farmers to sell produce directly to consumers while giving customers a modern shopping experience with live order tracking, time-based offers, real-time notifications, and an AI shopping assistant.
 
-Customers can browse organic products, search/filter by category and price, view detailed product pages with reviews, maintain a DB-persisted cart, checkout with demo payment options (UPI/Card/Cash on Delivery), track orders live with farmer delivery location, save wishlists, message farmers, and chat with a Google Gemini-powered assistant.
+Customers can browse organic products, search/filter by category and price, view detailed product pages with reviews, maintain a DB-persisted cart, checkout with demo payment options (UPI/Card/Cash on Delivery), track orders live with farmer delivery location and road route visualization, save wishlists, message farmers, and chat with a Google Gemini-powered assistant.
 
 Farmers can register (pending admin approval), manage product CRUD with Cloudinary image uploads, track inventory with low-stock alerts, create scheduled time-based offers (subject to admin approval), view and update orders for their products, monitor earnings, and maintain certification records.
 
@@ -53,6 +53,7 @@ Admins are provisioned server-side only and can manage users and farmers, verify
 - **Crop Management:** Create, list, view, update, and delete crops owned by the farmer.
 - **Harvest Management:** Create, list, view, update, and delete harvests; update availability (quantity and sale status).
 - **Inventory Adjustments:** Record stock increases/decreases for products and harvests; view adjustment history.
+- **Live Delivery Tracking:** Start/stop sharing live GPS location during active deliveries; customers see the farmer's real-time position and road route on the Track Order map.
 
 ### Admin Features
 
@@ -81,6 +82,19 @@ Admins are provisioned server-side only and can manage users and farmers, verify
 - Role-based protected routes and permission enforcement.
 - Responsive UI with Tailwind CSS and Framer Motion carousels.
 - Secure JWT-based authentication with refresh tokens.
+
+---
+
+## Live Delivery Tracking
+
+GreenMart provides real-time delivery tracking from farm to doorstep:
+
+- **Farmer side:** Approved farmers can start/stop live GPS tracking for eligible "Out for Delivery" orders from the My Orders page. GPS permission is requested only on explicit start; location updates are throttled by time (30s) and movement (50m) to avoid excessive requests.
+- **Customer side:** Customers view the farmer's live position and delivery destination on an interactive map (Track Order page). The map shows distinct farmer (green truck) and customer (dark pin) markers with popups.
+- **Road routing:** Actual road routes are calculated via OSRM (Open Source Routing Machine) using GeoJSON geometry, rendered as a Leaflet polyline. Route distance, estimated duration, and calculation time are displayed. No fabricated straight-line routes are drawn.
+- **Real-time updates:** Farmer location updates flow via Socket.IO `order:locationUpdated` to the customer's tracking page. The farmer marker moves and the route recalculates on meaningful movement without page refresh.
+- **Configuration:** Routing URL is configurable via `VITE_ROUTING_API_URL` (defaults to the public OSRM demo server for development; self-hosted OSRM recommended for production).
+- **Security:** Location updates are scoped to the order. Farmers can update locations for orders containing their products; authorized admins are also permitted by the existing backend route. Customers access only their own orders. Client-side coordinate validation is performed; backend latitude/longitude range validation has not been confirmed.
 
 ---
 
@@ -136,7 +150,7 @@ Public registration supports **customers and farmers only**. Setting an `admin` 
 
 | Layer | Technologies |
 |---|---|
-| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion |
+| Frontend | React 18, Vite, Tailwind CSS 3.4, Redux Toolkit, React Router, Axios, Leaflet / React Leaflet, Chart.js / react-chartjs-2, Lucide React, Socket.IO Client, React Hot Toast, React Toastify, SweetAlert2, Framer Motion, OSRM (road routing) |
 | Backend | Node.js, Express, MongoDB (Mongoose), JWT, bcryptjs, Zod, Multer, Socket.IO, Nodemailer, Helmet, Express Rate Limit, cookie-parser, dotenv, pdfkit, pdf-poppler |
 | AI | Google Gemini (`@google/genai` SDK, `GoogleGenAI` client) |
 | Image Storage | Multer for local temp storage; Cloudinary for product/avatar/farm-photo delivery; ImageKit for newsletter campaign banner uploads |
@@ -189,6 +203,8 @@ greenmart/
 │   │   │   ├── common/     # Shared components (Logo, BackButton, etc.)
 │   │   │   ├── dashboard/  # Dashboard widgets
 │   │   │   ├── layout/     # Header, navbar, footer layout components
+│   │   │   ├── farmer/     # Farmer-specific components
+│   │   │   │   └── FarmerTrackingControls.jsx   # Farmer live delivery location start/stop controls
 │   │   │   ├── map/        # Map and location picker components
 │   │   │   ├── messages/   # Customer-farmer messaging components
 │   │   │   ├── notifications/  # Notification list and badge
@@ -219,7 +235,7 @@ greenmart/
 │   │   ├── socket/         # Socket.io client connection
 │   │   ├── styles/         # Global Tailwind CSS
 │   │   ├── tests/          # Test utilities
-│   │   └── utils/          # Utilities (tokenStorage, roleAccess, imageUrl, ...)
+│   │   └── utils/          # Utilities (tokenStorage, roleAccess, imageUrl, routingService, ...)
 │   ├── index.html
 │   ├── package.json
 │   ├── vite.config.js
@@ -333,6 +349,7 @@ Seed-only variables (`SEED_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) are used 
 |---|---|---|
 | `VITE_API_URL` | Backend API base URL | No (default: http://localhost:5000/api) |
 | `VITE_SOCKET_URL` | Socket.io server URL | No (default: http://localhost:5000) |
+| `VITE_ROUTING_API_URL` | OSRM road routing service URL | No (default: https://router.project-osrm.org) |
 
 > Only variables prefixed with `VITE_` are exposed to the client build. No server secrets (JWT, MongoDB, SMTP, Gemini, Cloudinary, ImageKit) belong in the client environment.
 
@@ -455,9 +472,9 @@ Server tests run with `mongodb-memory-server` and include Socket.io integration 
 
 ### Latest Results
 
-- Backend: 42 test suites passed, 472 tests passed. Full test suite runs without `--forceExit`; no Jest open-handle warning in the reported successful run.
-- Frontend: 63 test files passed, 527 tests passed.
-- Frontend production build: Successful. Vite 5.4.21; 2,294 modules transformed; build completed in 10.47 seconds.
+- Backend: 43 test suites passed, 479 tests passed. Full test suite runs without `--forceExit`.
+- Frontend: 69 test files passed, 606 tests passed.
+- Frontend production build: Successful. Vite 5.4.21; 2,297 modules transformed; build completed in 14.60 seconds.
 
 ---
 
