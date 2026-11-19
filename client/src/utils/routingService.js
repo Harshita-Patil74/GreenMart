@@ -37,7 +37,32 @@ export class RoutingService {
     }
 
     const requestId = ++this.lastRequestId;
-    const url = `${this.baseUrl}/route/v1/driving/${farmerLocation.lng},${farmerLocation.lat};${customerLocation.lng},${customerLocation.lat}?overview=full&geometries=geojson&steps=true`;
+
+    // Build URL using the URL constructor for robust parsing and validation.
+    // This prevents malformed URLs from an improperly configured base URL
+    // (e.g., missing protocol, trailing path segments) which cause OSRM
+    // "InvalidQuery" / "InvalidUrl" errors.
+    let baseUrl;
+    try {
+      const parsed = new URL(this.baseUrl);
+      if (!parsed.protocol || !["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error("Invalid routing API URL: missing or invalid protocol");
+      }
+      baseUrl = parsed;
+    } catch (err) {
+      return Promise.reject(
+        new Error(`Invalid routing API URL: ${err.message || this.baseUrl}`)
+      );
+    }
+
+    // OSRM expects coordinates in longitude,latitude order in the path:
+    // /route/v1/driving/{lon},{lat};{lon},{lat}
+    baseUrl.pathname = `/route/v1/driving/${farmerLocation.lng},${farmerLocation.lat};${customerLocation.lng},${customerLocation.lat}`;
+    baseUrl.searchParams.set("overview", "full");
+    baseUrl.searchParams.set("geometries", "geojson");
+    baseUrl.searchParams.set("steps", "true");
+
+    const url = baseUrl.toString();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -52,6 +77,18 @@ export class RoutingService {
       })
       .then((data) => {
         if (requestId !== this.lastRequestId) return null; // outdated response
+
+        // Handle OSRM-specific error codes with actionable messages.
+        if (data && data.code === "InvalidQuery") {
+          throw new Error(
+            "OSRM InvalidQuery: malformed request URL. Verify coordinates use longitude,latitude order and VITE_ROUTING_API_URL is a valid base URL (no path segments)."
+          );
+        }
+        if (data && data.code === "InvalidUrl") {
+          throw new Error(
+            "OSRM InvalidUrl: malformed URL. Verify VITE_ROUTING_API_URL includes a valid protocol (https://)."
+          );
+        }
         if (!data || data.code !== "Ok" || !data.routes || data.routes.length === 0) {
           throw new Error("No route found");
         }

@@ -1,6 +1,7 @@
 import { vi, beforeEach, afterEach, describe, it, expect } from "vitest";
 import {
   routingService,
+  RoutingService,
   calculateRouteWithDebounce,
   formatDistance,
   formatDuration,
@@ -254,5 +255,119 @@ describe("formatDuration", () => {
   });
   it("returns dash for invalid", () => {
     expect(formatDuration(null)).toBe("–");
+  });
+});
+
+describe("OSRM URL construction", () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    routingService.clearRoute();
+    routingService.cancelPending();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("constructs URL with longitude,latitude ordering in path", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: "Ok", routes: [{ distance: 1000, duration: 60, geometry: { type: "LineString", coordinates: [[77.59, 12.97], [77.6, 12.98]] } }] }), { status: 200 })),
+    );
+    global.fetch = fetchMock;
+
+    await routingService.calculateRoute(
+      { lat: 12.97, lng: 77.59 },
+      { lat: 12.98, lng: 77.6 },
+    );
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    const url = new URL(calledUrl);
+    // Path should be /route/v1/driving/{lng},{lat};{lng},{lat}
+    expect(url.pathname).toBe("/route/v1/driving/77.59,12.97;77.6,12.98");
+    // Host should be the OSRM router
+    expect(url.hostname).toBe("router.project-osrm.org");
+    // Protocol should be https
+    expect(url.protocol).toBe("https:");
+  });
+
+  it("includes correct query parameters", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: "Ok", routes: [{ distance: 1000, duration: 60, geometry: { type: "LineString", coordinates: [[77.59, 12.97], [77.6, 12.98]] } }] }), { status: 200 })),
+    );
+    global.fetch = fetchMock;
+
+    await routingService.calculateRoute(
+      { lat: 12.97, lng: 77.59 },
+      { lat: 12.98, lng: 77.6 },
+    );
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    const url = new URL(calledUrl);
+    expect(url.searchParams.get("overview")).toBe("full");
+    expect(url.searchParams.get("geometries")).toBe("geojson");
+    expect(url.searchParams.get("steps")).toBe("true");
+  });
+
+  it("uses https protocol when base URL has https", async () => {
+    const secureService = new RoutingService("https://router.project-osrm.org");
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: "Ok", routes: [{ distance: 1000, duration: 60, geometry: { type: "LineString", coordinates: [[77.59, 12.97], [77.6, 12.98]] } }] }), { status: 200 })),
+    );
+    global.fetch = fetchMock;
+
+    await secureService.calculateRoute(
+      { lat: 12.97, lng: 77.59 },
+      { lat: 12.98, lng: 77.6 },
+    );
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    expect(calledUrl).toContain("https://");
+  });
+
+  it("rejects with error when base URL has no valid protocol", async () => {
+    const badService = new RoutingService("router.project-osrm.org");
+    await expect(
+      badService.calculateRoute({ lat: 12.97, lng: 77.59 }, { lat: 12.98, lng: 77.6 }),
+    ).rejects.toThrow(/Invalid routing API URL/);
+  });
+
+  it("rejects with error when base URL has ftp protocol", async () => {
+    const badService = new RoutingService("ftp://router.project-osrm.org");
+    await expect(
+      badService.calculateRoute({ lat: 12.97, lng: 77.59 }, { lat: 12.98, lng: 77.6 }),
+    ).rejects.toThrow(/Invalid routing API URL/);
+  });
+
+  it("handles OSRM InvalidQuery error with actionable message", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: "InvalidQuery", message: "Query string malformed close to position 64" }), { status: 200 })),
+    );
+    global.fetch = fetchMock;
+
+    await expect(
+      routingService.calculateRoute({ lat: 12.97, lng: 77.59 }, { lat: 12.98, lng: 77.6 }),
+    ).rejects.toThrow(/OSRM InvalidQuery/);
+  });
+
+  it("handles OSRM InvalidUrl error with actionable message", async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(JSON.stringify({ code: "InvalidUrl", message: "URL string malformed close to position 1: \"/\"" }), { status: 200 })),
+    );
+    global.fetch = fetchMock;
+
+    await expect(
+      routingService.calculateRoute({ lat: 12.97, lng: 77.59 }, { lat: 12.98, lng: 77.6 }),
+    ).rejects.toThrow(/OSRM InvalidUrl/);
+  });
+
+  it("handles empty base URL gracefully", async () => {
+    const emptyService = new RoutingService("");
+    await expect(
+      emptyService.calculateRoute({ lat: 12.97, lng: 77.59 }, { lat: 12.98, lng: 77.6 }),
+    ).rejects.toThrow(/Invalid routing API URL/);
   });
 });
